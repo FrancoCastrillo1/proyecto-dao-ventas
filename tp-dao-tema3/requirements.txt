@@ -1,0 +1,2 @@
+# Acá van las dependencias del proyecto (una por línea, con versión).
+# Por ahora está vacío: lo vamos llenando a medida que elijamos librerías.
