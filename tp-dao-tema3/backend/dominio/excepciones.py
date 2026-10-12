@@ -12,3 +12,6 @@ class EntidadDuplicada(ErrorDeNegocio):
 
 class DatoInvalido(ErrorDeNegocio):
     pass
+
+class TransicionDeEstadoInvalida(ErrorDeNegocio):
+    pass
