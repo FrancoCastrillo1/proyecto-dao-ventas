@@ -4,7 +4,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from backend.servicios.maestros_service import CategoriaService, ProductoService, ProveedorService
+from backend.servicios.maestros_service import CategoriaService, ProductoService, ProveedorService, UbicacionService
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 service = CategoriaService()
@@ -205,3 +205,74 @@ def quitar_producto_del_proveedor(id: int, producto_id: int):
 @router_productos.get("/{id}/proveedores", response_model=list[ProveedorSalida])
 def listar_proveedores_del_producto(id: int):
     return [proveedor_a_salida(p) for p in proveedor_service.listar_proveedores_de_producto(id)]
+
+
+# ------------------------------------------------- Ubicaciones (Sucursal y CD)
+router_ubicaciones = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
+ubicacion_service = UbicacionService()
+
+
+class UbicacionModificacion(BaseModel):
+    nombre: str
+    direccion: str
+
+
+# Al crear se agrega el tipo ("SUCURSAL" o "CD"), que después no se puede modificar
+class UbicacionEntrada(UbicacionModificacion):
+    tipo: str
+
+
+class UbicacionSalida(BaseModel):
+    id: int
+    tipo: str
+    nombre: str
+    direccion: str
+    activo: bool
+    # Para que el frontend sepa qué acciones mostrar sin conocer las reglas
+    puede_vender: bool
+    puede_despachar: bool
+    puede_recibir: bool
+
+
+def ubicacion_a_salida(ubicacion):
+    return UbicacionSalida(
+        id=ubicacion.id,
+        tipo=ubicacion.tipo,
+        nombre=ubicacion.nombre,
+        direccion=ubicacion.direccion,
+        activo=ubicacion.activo,
+        puede_vender=ubicacion.puede_vender(),
+        puede_despachar=ubicacion.puede_despachar(),
+        puede_recibir=ubicacion.puede_recibir(),
+    )
+
+
+@router_ubicaciones.get("", response_model=list[UbicacionSalida])
+def listar_ubicaciones(tipo: str | None = None):
+    return [ubicacion_a_salida(u) for u in ubicacion_service.listar(tipo)]
+
+
+# Tiene que ir antes que "/{id}": si no, FastAPI intenta leer "cd" como un id
+@router_ubicaciones.get("/cd", response_model=UbicacionSalida)
+def obtener_centro_distribucion():
+    return ubicacion_a_salida(ubicacion_service.obtener_cd())
+
+
+@router_ubicaciones.get("/{id}", response_model=UbicacionSalida)
+def obtener_ubicacion(id: int):
+    return ubicacion_a_salida(ubicacion_service.obtener(id))
+
+
+@router_ubicaciones.post("", response_model=UbicacionSalida, status_code=201)
+def crear_ubicacion(datos: UbicacionEntrada):
+    return ubicacion_a_salida(ubicacion_service.crear(datos.tipo, datos.nombre, datos.direccion))
+
+
+@router_ubicaciones.put("/{id}", response_model=UbicacionSalida)
+def modificar_ubicacion(id: int, datos: UbicacionModificacion):
+    return ubicacion_a_salida(ubicacion_service.modificar(id, datos.nombre, datos.direccion))
+
+
+@router_ubicaciones.delete("/{id}", status_code=204)
+def dar_de_baja_ubicacion(id: int):
+    ubicacion_service.dar_de_baja(id)

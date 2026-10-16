@@ -2,7 +2,7 @@
 # Proveedor, Ubicacion, Sucursal y CentroDistribucion contra la base.
 # Acá NO se valida el negocio, solo se lee y escribe en SQLite.
 from backend.config import DB_PATH
-from backend.dominio.maestros import Categoria, Producto, Proveedor
+from backend.dominio.maestros import Categoria, Producto, Proveedor, crear_ubicacion
 from backend.persistencia.conexion import get_conexion
 
 class CategoriaDAO:
@@ -211,3 +211,63 @@ class ProveedorDAO:
                 "DELETE FROM producto_proveedor WHERE proveedor_id = ? AND producto_id = ?",
                 (proveedor_id, producto_id),
             )
+
+
+class UbicacionDAO:
+    def __init__(self, db_path=DB_PATH):
+        self.db_path = db_path
+
+    def _conn(self):
+        return get_conexion(self.db_path)
+
+    # La columna "tipo" decide la clase (Sucursal o CentroDistribucion)
+    def _a_objeto(self, fila):
+        return crear_ubicacion(
+            fila["tipo"], fila["nombre"], fila["direccion"], id=fila["id"], activo=bool(fila["activo"]),
+        )
+
+    def crear(self, ubicacion):
+        with self._conn() as cx:
+            cur = cx.execute(
+                "INSERT INTO ubicaciones (tipo, nombre, direccion, activo) VALUES (?, ?, ?, ?)",
+                (ubicacion.tipo, ubicacion.nombre, ubicacion.direccion, int(ubicacion.activo)),
+            )
+            ubicacion.id = cur.lastrowid
+        return ubicacion
+
+    def obtener_por_id(self, id):
+        with self._conn() as cx:
+            fila = cx.execute("SELECT * FROM ubicaciones WHERE id = ?", (id,)).fetchone()
+        return self._a_objeto(fila) if fila else None
+
+    def obtener_por_nombre(self, nombre):
+        with self._conn() as cx:
+            fila = cx.execute("SELECT * FROM ubicaciones WHERE nombre = ?", (nombre,)).fetchone()
+        return self._a_objeto(fila) if fila else None
+
+    def obtener_cd_activo(self):
+        with self._conn() as cx:
+            fila = cx.execute("SELECT * FROM ubicaciones WHERE tipo = 'CD' AND activo = 1").fetchone()
+        return self._a_objeto(fila) if fila else None
+
+    def listar(self, solo_activas=True, tipo=None):
+        sql = "SELECT * FROM ubicaciones WHERE 1 = 1"
+        parametros = []
+        if solo_activas:
+            sql += " AND activo = 1"
+        if tipo is not None:
+            sql += " AND tipo = ?"
+            parametros.append(tipo)
+        sql += " ORDER BY tipo, nombre"
+        with self._conn() as cx:
+            filas = cx.execute(sql, parametros).fetchall()
+        return [self._a_objeto(f) for f in filas]
+
+    # El tipo no se actualiza: una ubicación no cambia de clase
+    def actualizar(self, ubicacion):
+        with self._conn() as cx:
+            cx.execute(
+                "UPDATE ubicaciones SET nombre = ?, direccion = ?, activo = ? WHERE id = ?",
+                (ubicacion.nombre, ubicacion.direccion, int(ubicacion.activo), ubicacion.id),
+            )
+        return ubicacion

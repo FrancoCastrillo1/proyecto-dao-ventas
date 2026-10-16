@@ -37,3 +37,18 @@ producto_id INTEGER NOT NULL REFERENCES productos(id),
 proveedor_id INTEGER NOT NULL REFERENCES proveedores(id),
 PRIMARY KEY (producto_id, proveedor_id)
 );
+
+-- Sucursales y Centro de Distribución en una sola tabla (Single Table
+-- Inheritance): "tipo" indica qué clase del dominio se arma al leer.
+-- Stock, remitos y ventas apuntan a esta tabla.
+CREATE TABLE IF NOT EXISTS ubicaciones (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+tipo TEXT NOT NULL CHECK (tipo IN ('CD', 'SUCURSAL')),
+nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
+direccion TEXT NOT NULL,
+activo INTEGER NOT NULL DEFAULT 1
+);
+
+-- Red de seguridad: un solo CD activo (los dados de baja no cuentan)
+CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo
+ON ubicaciones (tipo) WHERE tipo = 'CD' AND activo = 1;

@@ -2,8 +2,10 @@
 # proveedores, ubicaciones, sucursales y el CD.
 # Acá NO va SQL (usa dao_maestros) ni nada de endpoints (eso está en api).
 from backend.dominio.excepciones import DatoInvalido, EntidadDuplicada, NoEncontrado
-from backend.dominio.maestros import Categoria, Producto, Proveedor
-from backend.persistencia.dao_maestros import CategoriaDAO, ProductoDAO, ProveedorDAO
+from backend.dominio.maestros import (
+    TIPOS_UBICACION, Categoria, CentroDistribucion, Producto, Proveedor, crear_ubicacion,
+)
+from backend.persistencia.dao_maestros import CategoriaDAO, ProductoDAO, ProveedorDAO, UbicacionDAO
 
 class CategoriaService:
     def __init__(self, dao=None):
@@ -154,3 +156,54 @@ class ProveedorService:
         if self.producto_dao.obtener_por_id(producto_id) is None:
             raise NoEncontrado(f"No se encontro el producto {producto_id}")
         return self.dao.listar_por_producto(producto_id)
+
+
+class UbicacionService:
+    def __init__(self, dao=None):
+        self.dao = dao or UbicacionDAO()
+
+    def validar_nombre_libre(self, nombre, id_propio=None):
+        otra = self.dao.obtener_por_nombre(nombre)
+        if otra and otra.id != id_propio:
+            raise EntidadDuplicada(f"Ya existe una ubicación llamada '{nombre}'")
+
+    def crear(self, tipo, nombre, direccion):
+        ubicacion = crear_ubicacion(tipo, nombre, direccion)
+        self.validar_nombre_libre(ubicacion.nombre)
+        # La consigna describe un único CD central. Se valida por lo que la
+        # ubicación ES (isinstance), no por lo que puede hacer.
+        if isinstance(ubicacion, CentroDistribucion) and self.dao.obtener_cd_activo():
+            raise EntidadDuplicada("Ya existe un Centro de Distribución activo")
+        return self.dao.crear(ubicacion)
+
+    def obtener(self, id):
+        ubicacion = self.dao.obtener_por_id(id)
+        if ubicacion is None:
+            raise NoEncontrado(f"No se encontro la ubicación {id}")
+        return ubicacion
+
+    def listar(self, tipo=None):
+        if tipo is not None:
+            tipo = tipo.strip().upper()
+            if tipo not in TIPOS_UBICACION:
+                raise DatoInvalido(f"Tipo de ubicación '{tipo}' inválido. Opciones: {', '.join(TIPOS_UBICACION)}")
+        return self.dao.listar(tipo=tipo)
+
+    def obtener_cd(self):
+        cd = self.dao.obtener_cd_activo()
+        if cd is None:
+            raise NoEncontrado("No hay un Centro de Distribución activo")
+        return cd
+
+    # El tipo no se recibe: una ubicación no cambia de clase
+    def modificar(self, id, nombre, direccion):
+        ubicacion = self.obtener(id)
+        ubicacion.nombre = nombre
+        ubicacion.direccion = direccion
+        self.validar_nombre_libre(ubicacion.nombre, id_propio=id)
+        return self.dao.actualizar(ubicacion)
+
+    def dar_de_baja(self, id):
+        ubicacion = self.obtener(id)
+        ubicacion.dar_de_baja()
+        self.dao.actualizar(ubicacion)

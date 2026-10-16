@@ -2,6 +2,7 @@
 # Ubicacion, Sucursal y CentroDistribucion, con sus validaciones básicas.
 # Acá NO va el stock ni los movimientos (eso está en stock.py) ni nada de base de datos.
 import re
+from abc import ABC, abstractmethod
 
 from backend.dominio.excepciones import DatoInvalido
 
@@ -234,3 +235,99 @@ class Proveedor:
 
     def __str__(self):
         return f"Proveedor: ({self.id}, {self.cuit_formateado}, {self.razon_social})"
+
+
+class Ubicacion(ABC):
+    # Lugar que tiene stock: una Sucursal o el Centro de Distribución.
+    # Comparten los datos y se diferencian en lo que pueden hacer: cada hija
+    # redefine solo las capacidades que tiene (por defecto ninguna).
+    def __init__(self, nombre, direccion, id=None, activo=True):
+        self.id = id
+        self.nombre = nombre
+        self.direccion = direccion
+        self.activo = activo
+
+    # Lo único obligatorio para cada hija: el texto que se guarda en la base.
+    # No tiene setter: una ubicación no cambia de tipo.
+    @property
+    @abstractmethod
+    def tipo(self):
+        pass
+
+    @property
+    def nombre(self):
+        return self._nombre
+
+    @nombre.setter
+    def nombre(self, valor):
+        valor = (valor or "").strip()
+        if not valor:
+            raise DatoInvalido("El nombre de la ubicación no puede estar vacío")
+        if len(valor) > 50:
+            raise DatoInvalido("El nombre de la ubicación no puede tener más de 50 caracteres")
+        self._nombre = valor
+
+    @property
+    def direccion(self):
+        return self._direccion
+
+    @direccion.setter
+    def direccion(self, valor):
+        valor = (valor or "").strip()
+        if not valor:
+            raise DatoInvalido("La dirección no puede estar vacía")
+        if len(valor) > 150:
+            raise DatoInvalido("La dirección no puede tener más de 150 caracteres")
+        self._direccion = valor
+
+    # Capacidades: las reglas de ventas, remitos y reposición preguntan acá en
+    # vez de comparar el tipo con un if.
+    def puede_vender(self):
+        return False
+
+    def puede_despachar(self):
+        return False
+
+    def puede_recibir(self):
+        return False
+
+    def dar_de_baja(self):
+        self.activo = False
+
+    def __str__(self):
+        return f"{self.tipo}: ({self.id}, {self.nombre})"
+
+
+class Sucursal(Ubicacion):
+    # Local de venta al público: vende y recibe los bultos que manda el CD
+    @property
+    def tipo(self):
+        return "SUCURSAL"
+
+    def puede_vender(self):
+        return True
+
+    def puede_recibir(self):
+        return True
+
+
+class CentroDistribucion(Ubicacion):
+    # Abastece a las sucursales: arma y despacha bultos, no vende
+    @property
+    def tipo(self):
+        return "CD"
+
+    def puede_despachar(self):
+        return True
+
+
+# Fábrica simple: el único lugar que sabe qué clase corresponde a cada tipo.
+# La usan el DAO (al leer de la base) y el service (al crear desde la api).
+TIPOS_UBICACION = {"SUCURSAL": Sucursal, "CD": CentroDistribucion}
+
+
+def crear_ubicacion(tipo, nombre, direccion, id=None, activo=True):
+    clase = TIPOS_UBICACION.get((tipo or "").strip().upper())
+    if clase is None:
+        raise DatoInvalido(f"Tipo de ubicación '{tipo}' inválido. Opciones: {', '.join(TIPOS_UBICACION)}")
+    return clase(nombre, direccion, id, activo)
