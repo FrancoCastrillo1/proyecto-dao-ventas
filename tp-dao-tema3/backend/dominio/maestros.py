@@ -1,6 +1,8 @@
 # Las clases "maestras" que casi no cambian: Producto, Categoria, Proveedor,
 # Ubicacion, Sucursal y CentroDistribucion, con sus validaciones básicas.
 # Acá NO va el stock ni los movimientos (eso está en stock.py) ni nada de base de datos.
+import re
+
 from backend.dominio.excepciones import DatoInvalido
 
 class Categoria:
@@ -144,3 +146,91 @@ class Producto:
 
     def __str__(self):
         return f"Producto: ({self.id}, {self.codigo}, {self.nombre}, ${self.precio_venta})"
+
+
+# Algoritmo "módulo 11" del CUIT: el último dígito se calcula a partir de los
+# otros 10. Detecta la mayoría de los errores de tipeo.
+def cuit_es_valido(cuit):
+    if len(cuit) != 11 or not cuit.isdigit():
+        return False
+    pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+    suma = sum(int(digito) * peso for digito, peso in zip(cuit[:10], pesos))
+    verificador = 11 - suma % 11
+    if verificador == 11:
+        verificador = 0
+    if verificador == 10:
+        return False
+    return verificador == int(cuit[10])
+
+
+FORMATO_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class Proveedor:
+    # El CUIT identifica al proveedor y no se modifica después de crearlo.
+    # Que no esté repetido lo valida el service, porque necesita consultar la base.
+    def __init__(self, cuit, razon_social, telefono=None, email=None, id=None, activo=True):
+        self.id = id
+        self.cuit = cuit
+        self.razon_social = razon_social
+        self.telefono = telefono
+        self.email = email
+        self.activo = activo
+
+    @property
+    def cuit(self):
+        return self._cuit
+
+    @cuit.setter
+    def cuit(self, valor):
+        # Se guarda solo con los dígitos: "20-12345678-6" y "20123456789" son el mismo CUIT
+        solo_digitos = re.sub(r"[\s-]", "", str(valor or ""))
+        if not cuit_es_valido(solo_digitos):
+            raise DatoInvalido(f"El CUIT '{valor}' no es válido")
+        self._cuit = solo_digitos
+
+    @property
+    def cuit_formateado(self):
+        return f"{self.cuit[:2]}-{self.cuit[2:10]}-{self.cuit[10]}"
+
+    @property
+    def razon_social(self):
+        return self._razon_social
+
+    @razon_social.setter
+    def razon_social(self, valor):
+        valor = (valor or "").strip()
+        if not valor:
+            raise DatoInvalido("La razón social del proveedor no puede estar vacía")
+        if len(valor) > 100:
+            raise DatoInvalido("La razón social no puede tener más de 100 caracteres")
+        self._razon_social = valor
+
+    # Teléfono y email son opcionales: vacío se guarda como None
+    @property
+    def telefono(self):
+        return self._telefono
+
+    @telefono.setter
+    def telefono(self, valor):
+        valor = (valor or "").strip()
+        if len(valor) > 30:
+            raise DatoInvalido("El teléfono no puede tener más de 30 caracteres")
+        self._telefono = valor or None
+
+    @property
+    def email(self):
+        return self._email
+
+    @email.setter
+    def email(self, valor):
+        valor = (valor or "").strip().lower()
+        if valor and not FORMATO_EMAIL.match(valor):
+            raise DatoInvalido(f"El email '{valor}' no es válido")
+        self._email = valor or None
+
+    def dar_de_baja(self):
+        self.activo = False
+
+    def __str__(self):
+        return f"Proveedor: ({self.id}, {self.cuit_formateado}, {self.razon_social})"

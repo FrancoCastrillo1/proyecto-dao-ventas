@@ -19,3 +19,21 @@ costo REAL NOT NULL CHECK (costo >= 0),
 stock_minimo INTEGER NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- El CUIT es el identificador del proveedor: se guarda solo con los 11 dígitos.
+CREATE TABLE IF NOT EXISTS proveedores (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+cuit TEXT NOT NULL UNIQUE CHECK (length(cuit) = 11),
+razon_social TEXT NOT NULL,
+telefono TEXT,
+email TEXT,
+activo INTEGER NOT NULL DEFAULT 1
+);
+
+-- Relación muchos a muchos: un producto se le compra a varios proveedores
+-- y un proveedor vende muchos productos. La clave compuesta evita duplicados.
+CREATE TABLE IF NOT EXISTS producto_proveedor (
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+proveedor_id INTEGER NOT NULL REFERENCES proveedores(id),
+PRIMARY KEY (producto_id, proveedor_id)
+);

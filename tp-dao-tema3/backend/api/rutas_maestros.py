@@ -4,7 +4,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from backend.servicios.maestros_service import CategoriaService, ProductoService
+from backend.servicios.maestros_service import CategoriaService, ProductoService, ProveedorService
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 service = CategoriaService()
@@ -123,3 +123,85 @@ def modificar_producto(id: int, datos: ProductoModificacion):
 @router_productos.delete("/{id}", status_code=204)
 def dar_de_baja_producto(id: int):
     producto_service.dar_de_baja(id)
+
+
+# -------------------------------------------------------------- Proveedores
+router_proveedores = APIRouter(prefix="/proveedores", tags=["Proveedores"])
+proveedor_service = ProveedorService()
+
+
+class ProveedorModificacion(BaseModel):
+    razon_social: str
+    telefono: str | None = None
+    email: str | None = None
+
+
+# Al crear se agrega el CUIT, que después no se puede modificar
+class ProveedorEntrada(ProveedorModificacion):
+    cuit: str
+
+
+class ProveedorSalida(BaseModel):
+    id: int
+    cuit: str
+    razon_social: str
+    telefono: str | None
+    email: str | None
+    activo: bool
+
+
+def proveedor_a_salida(proveedor):
+    return ProveedorSalida(
+        id=proveedor.id,
+        cuit=proveedor.cuit_formateado,
+        razon_social=proveedor.razon_social,
+        telefono=proveedor.telefono,
+        email=proveedor.email,
+        activo=proveedor.activo,
+    )
+
+
+@router_proveedores.get("", response_model=list[ProveedorSalida])
+def listar_proveedores():
+    return [proveedor_a_salida(p) for p in proveedor_service.listar()]
+
+
+@router_proveedores.get("/{id}", response_model=ProveedorSalida)
+def obtener_proveedor(id: int):
+    return proveedor_a_salida(proveedor_service.obtener(id))
+
+
+@router_proveedores.post("", response_model=ProveedorSalida, status_code=201)
+def crear_proveedor(datos: ProveedorEntrada):
+    return proveedor_a_salida(proveedor_service.crear(datos.cuit, datos.razon_social, datos.telefono, datos.email))
+
+
+@router_proveedores.put("/{id}", response_model=ProveedorSalida)
+def modificar_proveedor(id: int, datos: ProveedorModificacion):
+    return proveedor_a_salida(proveedor_service.modificar(id, datos.razon_social, datos.telefono, datos.email))
+
+
+@router_proveedores.delete("/{id}", status_code=204)
+def dar_de_baja_proveedor(id: int):
+    proveedor_service.dar_de_baja(id)
+
+
+# Relación con productos: rutas anidadas, cada operación toca un solo vínculo
+@router_proveedores.get("/{id}/productos", response_model=list[ProductoSalida])
+def listar_productos_del_proveedor(id: int):
+    return [producto_a_salida(p) for p in proveedor_service.listar_productos(id)]
+
+
+@router_proveedores.post("/{id}/productos/{producto_id}", status_code=204)
+def asignar_producto_al_proveedor(id: int, producto_id: int):
+    proveedor_service.asignar_producto(id, producto_id)
+
+
+@router_proveedores.delete("/{id}/productos/{producto_id}", status_code=204)
+def quitar_producto_del_proveedor(id: int, producto_id: int):
+    proveedor_service.quitar_producto(id, producto_id)
+
+
+@router_productos.get("/{id}/proveedores", response_model=list[ProveedorSalida])
+def listar_proveedores_del_producto(id: int):
+    return [proveedor_a_salida(p) for p in proveedor_service.listar_proveedores_de_producto(id)]
