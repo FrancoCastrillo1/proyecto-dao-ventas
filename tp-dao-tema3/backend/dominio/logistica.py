@@ -25,7 +25,7 @@ class Bulto():
         self.items = []  # Lista de items en el bulto
         self.nro_precinto = None
         self.estado_actual = Preparado()  # Empieza Siempre en PREPARADO
-        self._historial = []  # Trazabilidad: solo se agrega, nunca se edita ni se borra
+        self.registros_historial = []  # Trazabilidad: solo se agrega, nunca se edita ni se borra
 
     def __str__(self):
         return f"Bulto {self.id_bulto} - Estado: {self.estado}, Precinto: {self.nro_precinto}, Items: {len(self.items)}"
@@ -41,7 +41,7 @@ class Bulto():
 
     def cambiar_estado(self, nuevo_estado, observacion=""):
         # Único lugar donde cambia el estado: siempre deja un registro en el historial
-        self._historial.append(
+        self.registros_historial.append(
             CambioEstadoBulto(datetime.now(), self.estado, nuevo_estado.nombre, observacion)
         )
         self.estado_actual = nuevo_estado
@@ -61,7 +61,7 @@ class Bulto():
     @property
     def historial(self):
         # Se devuelve como tupla para que desde afuera no se pueda modificar
-        return tuple(self._historial)
+        return tuple(self.registros_historial)
 
     @property
     def estado(self):
