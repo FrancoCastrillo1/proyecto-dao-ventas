@@ -1,7 +1,7 @@
 # Tests del patrón State del bulto: que las transiciones válidas anden y que las
 # inválidas tiren la excepción que corresponde.
 # Acá NO se prueba la base de datos ni la api.
-
+#
 # QUÉ QUEDÓ AFUERA Y POR QUÉ
 #
 # 1) Todavía no existe en el código (está en Modelo_Tema_3_DAO pero falta
@@ -13,7 +13,6 @@
 #      caso no se puede probar. Cuando cambie la firma, hay que actualizar
 #      también los tests de verificación de este archivo.
 #    - quitar_item() en el estado Preparado.
-#    - habilita_venta(): que solo un bulto Verificado habilite la venta.
 #
 # 2) Depende de partes que todavía están vacías:
 #    - Guardar y leer el bulto en la base (dao_logistica.py), incluida la
@@ -36,7 +35,6 @@
 #    afectan a los servicios y no al bulto: si un bulto rechazado bloquea el
 #    remito completo, y si la mercadería rechazada vuelve al CD o se da de baja
 #    como merma.
-
 import pytest
 
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
@@ -171,6 +169,42 @@ def test_verificar_sin_precinto_pasa_a_rechazado(precinto_leido):
     bulto = bulto_recibido()
     bulto.verificar(precinto_leido)
     assert bulto.estado == "RECHAZADO"
+
+
+# ---------- habilita_venta: solo VERIFICADO permite vender ----------
+
+ESTADOS = [
+    (bulto_preparado, "PREPARADO", False),
+    (bulto_precintado, "PRECINTADO", False),
+    (bulto_en_transito, "EN_TRANSITO", False),
+    (bulto_recibido, "RECIBIDO", False),
+    (bulto_verificado, "VERIFICADO", True),
+    (bulto_rechazado, "RECHAZADO", False),
+]
+
+
+@pytest.mark.parametrize(
+    "armar, estado, habilita",
+    [pytest.param(armar, estado, habilita, id=estado) for armar, estado, habilita in ESTADOS],
+)
+def test_solo_un_bulto_verificado_habilita_la_venta(armar, estado, habilita):
+    bulto = armar()
+    assert bulto.estado == estado
+    assert bulto.habilita_venta() is habilita
+
+
+def test_la_venta_se_habilita_recien_al_verificar():
+    bulto = bulto_preparado()
+    bulto.agregar_item("item-1")
+    assert not bulto.habilita_venta()
+    bulto.precintar(PRECINTO)
+    assert not bulto.habilita_venta()
+    bulto.despachar()
+    assert not bulto.habilita_venta()
+    bulto.recibir()
+    assert not bulto.habilita_venta()  # recibido todavía no es vendible
+    bulto.verificar(PRECINTO)
+    assert bulto.habilita_venta()
 
 
 # ---------- transiciones inválidas ----------

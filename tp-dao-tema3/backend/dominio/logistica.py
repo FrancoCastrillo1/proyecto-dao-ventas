@@ -34,6 +34,9 @@ class Bulto():
     def verificar(self, precinto_leido):
         self.estado_actual.verificar(self, precinto_leido)
 
+    def habilita_venta(self):
+        return self.estado_actual.habilita_venta()
+
     @property
     def estado(self):
         return self.estado_actual.nombre

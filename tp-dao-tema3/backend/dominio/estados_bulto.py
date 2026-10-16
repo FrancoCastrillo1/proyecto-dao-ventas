@@ -30,6 +30,11 @@ class EstadoBulto(ABC):
     def verificar(self, bulto, precinto_leido):
         raise TransicionDeEstadoInvalida(f"No se puede verificar un bulto en estado {self.nombre}")
 
+    # Por defecto un estado NO habilita la venta. Solo Verificado la habilita:
+    # el servicio de recepción suma stock al local únicamente si esto da True.
+    def habilita_venta(self):
+        return False
+
 class Preparado(EstadoBulto):
     @property
     def nombre(self):
@@ -87,6 +92,9 @@ class Verificado(EstadoBulto):
     @property
     def nombre(self):
         return "VERIFICADO"
+
+    def habilita_venta(self):
+        return True
 
 class Rechazado(EstadoBulto):
     @property
