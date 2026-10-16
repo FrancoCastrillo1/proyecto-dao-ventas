@@ -18,6 +18,9 @@ class EstadoBulto(ABC):
     def agregar_item(self, bulto, item):
         raise TransicionDeEstadoInvalida(f"No se pueden agregar items a un bulto en estado {self.nombre}")
 
+    def quitar_item(self, bulto, item):
+        raise TransicionDeEstadoInvalida(f"No se pueden quitar items de un bulto en estado {self.nombre}")
+
     def precintar(self, bulto, nro_precinto):
         raise TransicionDeEstadoInvalida(f"No se puede precintar un bulto en estado {self.nombre}")
 
@@ -27,17 +30,27 @@ class EstadoBulto(ABC):
     def recibir(self, bulto):
         raise TransicionDeEstadoInvalida(f"No se puede recibir un bulto en estado {self.nombre}")
 
-    def verificar(self, bulto, precinto_leido):
+    def verificar(self, bulto, nro_leido, intacto):
         raise TransicionDeEstadoInvalida(f"No se puede verificar un bulto en estado {self.nombre}")
+
+    # Por defecto un estado NO habilita la venta. Solo Verificado lo habilita:
+    # el servicio de recepción suma stock al local únicamente si esto da True.
+    def habilita_venta(self):
+        return False
 
 class Preparado(EstadoBulto):
     @property
     def nombre(self):
         return "PREPARADO"
-    
+
     def agregar_item(self, bulto, item):
         bulto.items.append(item)
-        
+
+    def quitar_item(self, bulto, item):
+        if item not in bulto.items:
+            raise DatoInvalido("El item no está en el bulto")
+        bulto.items.remove(item)
+
     def precintar(self, bulto, nro_precinto):
         # Primero se valida todo, después se modifica el bulto
         if not bulto.items:
@@ -52,7 +65,7 @@ class Precintado(EstadoBulto):
     @property
     def nombre(self):
         return "PRECINTADO"
-    
+
     def despachar(self, bulto):
         bulto.cambiar_estado(EnTransito())
 
@@ -62,7 +75,7 @@ class EnTransito(EstadoBulto):
     @property
     def nombre(self):
         return "EN_TRANSITO"
-    
+
     def recibir(self, bulto):
         bulto.cambiar_estado(Recibido())
 
@@ -71,22 +84,28 @@ class Recibido(EstadoBulto):
     @property
     def nombre(self):
         return "RECIBIDO"
-    
-    def verificar(self, bulto, precinto_leido):
-        # Valida que llegó un precinto y que es el mismo que se puso en el CD:
-        # el bulto no fue abierto en el camino, su stock puede pasar a disponible
-        if precinto_leido and precinto_leido.strip() == bulto.nro_precinto:
+
+    def verificar(self, bulto, nro_leido, intacto):
+        # Para aprobar tienen que cumplirse las dos cosas: el precinto llegó
+        # intacto (lo informa quien recibe) y el número leído es el mismo que
+        # se puso en el CD. Con eso el bulto no fue abierto en el camino y su
+        # stock puede pasar a disponible.
+        coincide = bool(nro_leido) and nro_leido.strip() == bulto.nro_precinto
+        if intacto and coincide:
             bulto.cambiar_estado(Verificado())
-        # Llegó sin precinto o con uno distinto: el precinto fue violado,
-        # rechazo logístico y la mercadería NO habilita venta
+        # Precinto roto, ausente o con otro número: rechazo logístico y la
+        # mercadería NO habilita venta
         else:
-            bulto.cambiar_estado(Rechazado())
+            bulto.cambiar_estado(Rechazado(), "Precinto violado o no coincide")
 
 
 class Verificado(EstadoBulto):
     @property
     def nombre(self):
         return "VERIFICADO"
+
+    def habilita_venta(self):
+        return True
 
 class Rechazado(EstadoBulto):
     @property
