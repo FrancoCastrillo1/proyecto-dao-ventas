@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
+import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
 export default function Categorias() {
   const [categorias, setCategorias] = useState([]);
   const [nombre, setNombre] = useState("");
   const [editandoId, setEditandoId] = useState(null);
+  const [verBajas, setVerBajas] = useState(false);
   const { aviso, ejecutar, limpiar } = useAviso();
   const parecidos = useParecidos();
 
-  const cargar = () => ejecutar(async () => setCategorias(await api.listar("/categorias")));
-  useEffect(() => { cargar(); }, []);
+  const cargar = () => ejecutar(async () => setCategorias(await api.listar(`/categorias?incluir_bajas=${verBajas}`)));
+  useEffect(() => { cargar(); }, [verBajas]);
 
   function cancelar() {
     parecidos.descartar();
@@ -38,6 +40,10 @@ export default function Categorias() {
     if (await ejecutar(() => api.borrar(`/categorias/${categoria.id}`), `"${categoria.nombre}" dada de baja`)) cargar();
   }
 
+  async function reactivar(categoria) {
+    if (await ejecutar(() => api.accion(`/categorias/${categoria.id}/reactivar`), `"${categoria.nombre}" reactivada`)) cargar();
+  }
+
   return (
     <section>
       <h2>Categorías</h2>
@@ -53,16 +59,20 @@ export default function Categorias() {
         </div>
       </form>
 
+      <div className="barra-filtro"><CheckBajas valor={verBajas} alCambiar={setVerBajas} /></div>
+
       <table>
         <thead><tr><th>Id</th><th>Nombre</th><th></th></tr></thead>
         <tbody>
           {categorias.map((c) => (
-            <tr key={c.id}>
+            <tr key={c.id} className={c.activo ? "" : "fila-baja"}>
               <td>{c.id}</td>
-              <td>{c.nombre}</td>
+              <td>{c.nombre}{!c.activo && <EtiquetaBaja />}</td>
               <td className="botones-fila">
-                <button className="secundario" onClick={() => { setEditandoId(c.id); setNombre(c.nombre); }}>Editar</button>
-                <button className="peligro" onClick={() => darDeBaja(c)}>Dar de baja</button>
+                {c.activo ? (<>
+                  <button className="secundario" onClick={() => { setEditandoId(c.id); setNombre(c.nombre); }}>Editar</button>
+                  <button className="peligro" onClick={() => darDeBaja(c)}>Dar de baja</button>
+                </>) : <button onClick={() => reactivar(c)}>Reactivar</button>}
               </td>
             </tr>
           ))}

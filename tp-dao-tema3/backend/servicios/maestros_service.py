@@ -7,14 +7,29 @@ from backend.dominio.maestros import (
 )
 from backend.persistencia.dao_maestros import CategoriaDAO, ProductoDAO, ProveedorDAO, UbicacionDAO
 
+
+# La baja es lógica: el registro sigue existiendo y su nombre/código/CUIT sigue
+# ocupado. Si el que choca está dado de baja, se avisa cómo recuperarlo en vez
+# de dejar crear un duplicado.
+def mensaje_duplicado(texto, existente):
+    if existente.activo:
+        return texto
+    return f"{texto} (se dio de baja): se puede reactivar desde \"Mostrar dados de baja\""
+
+
+def validar_que_este_de_baja(entidad, descripcion):
+    if entidad.activo:
+        raise DatoInvalido(f"No hace falta reactivar {descripcion}: no se dio de baja")
+
 class CategoriaService:
     def __init__(self, dao=None):
         self.dao = dao or CategoriaDAO()
 
     def crear(self, nombre):
         categoria = Categoria(nombre)
-        if self.dao.obtener_por_nombre(categoria.nombre):
-            raise EntidadDuplicada(f"Ya existe la categoría '{categoria.nombre}'")
+        existente = self.dao.obtener_por_nombre(categoria.nombre)
+        if existente:
+            raise EntidadDuplicada(mensaje_duplicado(f"Ya existe la categoría '{existente.nombre}'", existente))
         return self.dao.crear(categoria)
 
     def obtener(self, id):
@@ -23,8 +38,8 @@ class CategoriaService:
             raise NoEncontrado(f"No se encontro la categoria {id}")
         return categoria
 
-    def listar(self):
-        return self.dao.listar()
+    def listar(self, incluir_bajas=False):
+        return self.dao.listar(solo_activas=not incluir_bajas)
 
     def modificar(self, id, nombre):
         categoria = self.obtener(id)
@@ -32,13 +47,19 @@ class CategoriaService:
         otra = self.dao.obtener_por_nombre(nombre)
 
         if otra and otra.id != id:
-            raise EntidadDuplicada(f"Ya existe la categoría '{categoria.nombre}'")
+            raise EntidadDuplicada(mensaje_duplicado(f"Ya existe la categoría '{otra.nombre}'", otra))
         return self.dao.actualizar(categoria)
 
     def dar_de_baja(self, id):
         categoria = self.obtener(id)
         categoria.dar_de_baja()
         self.dao.actualizar(categoria)
+
+    def reactivar(self, id):
+        categoria = self.obtener(id)
+        validar_que_este_de_baja(categoria, f"la categoría '{categoria.nombre}'")
+        categoria.reactivar()
+        return self.dao.actualizar(categoria)
 
     # Ayuda para el front ("¿crear igual?"), no una regla. Los idénticos no se
     # incluyen: el nombre es único y el alta ya los rechaza con un 409.
@@ -61,8 +82,9 @@ class ProductoService:
     def crear(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0):
         # Primero el dominio valida el formato, después lo que necesita la base
         producto = Producto(codigo, nombre, categoria_id, precio_venta, costo, stock_minimo)
-        if self.dao.obtener_por_codigo(producto.codigo):
-            raise EntidadDuplicada(f"Ya existe un producto con el código '{producto.codigo}'")
+        existente = self.dao.obtener_por_codigo(producto.codigo)
+        if existente:
+            raise EntidadDuplicada(mensaje_duplicado(f"Ya existe un producto con el código '{producto.codigo}'", existente))
         self.validar_categoria(producto.categoria_id)
         return self.dao.crear(producto)
 
@@ -72,8 +94,8 @@ class ProductoService:
             raise NoEncontrado(f"No se encontro el producto {id}")
         return producto
 
-    def listar(self, categoria_id=None):
-        return self.dao.listar(categoria_id=categoria_id)
+    def listar(self, categoria_id=None, incluir_bajas=False):
+        return self.dao.listar(solo_activos=not incluir_bajas, categoria_id=categoria_id)
 
     # El código no se recibe: es la identidad del producto y no se modifica
     def modificar(self, id, nombre, categoria_id, precio_venta, costo, stock_minimo):
@@ -91,6 +113,14 @@ class ProductoService:
         producto.dar_de_baja()
         self.dao.actualizar(producto)
 
+    # No se reactiva un producto cuya categoría sigue dada de baja
+    def reactivar(self, id):
+        producto = self.obtener(id)
+        validar_que_este_de_baja(producto, f"el producto '{producto.nombre}'")
+        self.validar_categoria(producto.categoria_id)
+        producto.reactivar()
+        return self.dao.actualizar(producto)
+
     # El nombre de un producto puede repetirse (lo identifica el código), así
     # que acá los idénticos también se avisan
     def parecidos(self, nombre, excluir_id=None):
@@ -104,8 +134,11 @@ class ProveedorService:
 
     def crear(self, cuit, razon_social, telefono=None, email=None):
         proveedor = Proveedor(cuit, razon_social, telefono, email)
-        if self.dao.obtener_por_cuit(proveedor.cuit):
-            raise EntidadDuplicada(f"Ya existe un proveedor con el CUIT {proveedor.cuit_formateado}")
+        existente = self.dao.obtener_por_cuit(proveedor.cuit)
+        if existente:
+            raise EntidadDuplicada(mensaje_duplicado(
+                f"Ya existe el proveedor '{existente.razon_social}' con el CUIT {proveedor.cuit_formateado}", existente,
+            ))
         return self.dao.crear(proveedor)
 
     def obtener(self, id):
@@ -114,8 +147,8 @@ class ProveedorService:
             raise NoEncontrado(f"No se encontro el proveedor {id}")
         return proveedor
 
-    def listar(self):
-        return self.dao.listar()
+    def listar(self, incluir_bajas=False):
+        return self.dao.listar(solo_activos=not incluir_bajas)
 
     # El CUIT no se recibe: es la identidad del proveedor y no se modifica
     def modificar(self, id, razon_social, telefono=None, email=None):
@@ -129,6 +162,12 @@ class ProveedorService:
         proveedor = self.obtener(id)
         proveedor.dar_de_baja()
         self.dao.actualizar(proveedor)
+
+    def reactivar(self, id):
+        proveedor = self.obtener(id)
+        validar_que_este_de_baja(proveedor, f"el proveedor '{proveedor.razon_social}'")
+        proveedor.reactivar()
+        return self.dao.actualizar(proveedor)
 
     # La razón social puede repetirse (lo identifica el CUIT): los idénticos también se avisan
     def parecidos(self, razon_social, excluir_id=None):
@@ -179,7 +218,7 @@ class UbicacionService:
     def validar_nombre_libre(self, nombre, id_propio=None):
         otra = self.dao.obtener_por_nombre(nombre)
         if otra and otra.id != id_propio:
-            raise EntidadDuplicada(f"Ya existe una ubicación llamada '{nombre}'")
+            raise EntidadDuplicada(mensaje_duplicado(f"Ya existe una ubicación llamada '{otra.nombre}'", otra))
 
     def crear(self, tipo, nombre, direccion):
         ubicacion = crear_ubicacion(tipo, nombre, direccion)
@@ -196,12 +235,12 @@ class UbicacionService:
             raise NoEncontrado(f"No se encontro la ubicación {id}")
         return ubicacion
 
-    def listar(self, tipo=None):
+    def listar(self, tipo=None, incluir_bajas=False):
         if tipo is not None:
             tipo = tipo.strip().upper()
             if tipo not in TIPOS_UBICACION:
                 raise DatoInvalido(f"Tipo de ubicación '{tipo}' inválido. Opciones: {', '.join(TIPOS_UBICACION)}")
-        return self.dao.listar(tipo=tipo)
+        return self.dao.listar(solo_activas=not incluir_bajas, tipo=tipo)
 
     def obtener_cd(self):
         cd = self.dao.obtener_cd_activo()
@@ -221,6 +260,15 @@ class UbicacionService:
         ubicacion = self.obtener(id)
         ubicacion.dar_de_baja()
         self.dao.actualizar(ubicacion)
+
+    # Reactivar un CD respeta la misma regla que crearlo: un solo CD activo
+    def reactivar(self, id):
+        ubicacion = self.obtener(id)
+        validar_que_este_de_baja(ubicacion, f"la ubicación '{ubicacion.nombre}'")
+        if isinstance(ubicacion, CentroDistribucion) and self.dao.obtener_cd_activo():
+            raise EntidadDuplicada("Ya existe un Centro de Distribución activo: dalo de baja antes de reactivar este")
+        ubicacion.reactivar()
+        return self.dao.actualizar(ubicacion)
 
     # El nombre es único: los idénticos no se incluyen, el alta los rechaza con un 409
     def parecidos(self, nombre, excluir_id=None):

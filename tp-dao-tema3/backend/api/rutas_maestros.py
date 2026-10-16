@@ -34,8 +34,8 @@ def a_salida(categoria):
 
 
 @router.get("", response_model=list[CategoriaSalida])
-def listar_categorias():
-    return [a_salida(c) for c in service.listar()]
+def listar_categorias(incluir_bajas: bool = False):
+    return [a_salida(c) for c in service.listar(incluir_bajas)]
 
 
 # Las rutas /parecidos van antes que "/{id}": si no, FastAPI intenta leer "parecidos" como un id
@@ -62,6 +62,11 @@ def modificar_categoria(id: int, datos: CategoriaEntrada):
 @router.delete("/{id}", status_code=204)
 def dar_de_baja_categoria(id: int):
     service.dar_de_baja(id)
+
+
+@router.post("/{id}/reactivar", response_model=CategoriaSalida)
+def reactivar_categoria(id: int):
+    return a_salida(service.reactivar(id))
 
 
 # ---------------------------------------------------------------- Productos
@@ -110,8 +115,8 @@ def producto_a_salida(producto):
 
 
 @router_productos.get("", response_model=list[ProductoSalida])
-def listar_productos(categoria_id: int | None = None):
-    return [producto_a_salida(p) for p in producto_service.listar(categoria_id)]
+def listar_productos(categoria_id: int | None = None, incluir_bajas: bool = False):
+    return [producto_a_salida(p) for p in producto_service.listar(categoria_id, incluir_bajas)]
 
 
 @router_productos.get("/parecidos", response_model=list[Parecido])
@@ -141,6 +146,11 @@ def modificar_producto(id: int, datos: ProductoModificacion):
 @router_productos.delete("/{id}", status_code=204)
 def dar_de_baja_producto(id: int):
     producto_service.dar_de_baja(id)
+
+
+@router_productos.post("/{id}/reactivar", response_model=ProductoSalida)
+def reactivar_producto(id: int):
+    return producto_a_salida(producto_service.reactivar(id))
 
 
 # -------------------------------------------------------------- Proveedores
@@ -180,8 +190,8 @@ def proveedor_a_salida(proveedor):
 
 
 @router_proveedores.get("", response_model=list[ProveedorSalida])
-def listar_proveedores():
-    return [proveedor_a_salida(p) for p in proveedor_service.listar()]
+def listar_proveedores(incluir_bajas: bool = False):
+    return [proveedor_a_salida(p) for p in proveedor_service.listar(incluir_bajas)]
 
 
 @router_proveedores.get("/parecidos", response_model=list[Parecido])
@@ -210,6 +220,11 @@ def modificar_proveedor(id: int, datos: ProveedorModificacion):
 @router_proveedores.delete("/{id}", status_code=204)
 def dar_de_baja_proveedor(id: int):
     proveedor_service.dar_de_baja(id)
+
+
+@router_proveedores.post("/{id}/reactivar", response_model=ProveedorSalida)
+def reactivar_proveedor(id: int):
+    return proveedor_a_salida(proveedor_service.reactivar(id))
 
 
 # Relación con productos: rutas anidadas, cada operación toca un solo vínculo
@@ -274,8 +289,8 @@ def ubicacion_a_salida(ubicacion):
 
 
 @router_ubicaciones.get("", response_model=list[UbicacionSalida])
-def listar_ubicaciones(tipo: str | None = None):
-    return [ubicacion_a_salida(u) for u in ubicacion_service.listar(tipo)]
+def listar_ubicaciones(tipo: str | None = None, incluir_bajas: bool = False):
+    return [ubicacion_a_salida(u) for u in ubicacion_service.listar(tipo, incluir_bajas)]
 
 
 # Tiene que ir antes que "/{id}": si no, FastAPI intenta leer "cd" como un id
@@ -307,3 +322,8 @@ def modificar_ubicacion(id: int, datos: UbicacionModificacion):
 @router_ubicaciones.delete("/{id}", status_code=204)
 def dar_de_baja_ubicacion(id: int):
     ubicacion_service.dar_de_baja(id)
+
+
+@router_ubicaciones.post("/{id}/reactivar", response_model=UbicacionSalida)
+def reactivar_ubicacion(id: int):
+    return ubicacion_a_salida(ubicacion_service.reactivar(id))

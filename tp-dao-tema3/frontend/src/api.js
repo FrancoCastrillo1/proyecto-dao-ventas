@@ -75,4 +75,5 @@ export const api = {
   modificar: (ruta, datos) => pedir("PUT", ruta, datos),
   borrar: (ruta) => pedir("DELETE", ruta),
   asociar: (ruta) => pedir("POST", ruta),
+  accion: (ruta) => pedir("POST", ruta), // acciones sin datos, ej: /categorias/3/reactivar
 };

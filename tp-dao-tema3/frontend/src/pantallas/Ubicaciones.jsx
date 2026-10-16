@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
+import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
 const VACIO = { tipo: "SUCURSAL", nombre: "", direccion: "" };
 const NOMBRE_TIPO = { SUCURSAL: "Sucursal", CD: "Centro de Distribución" };
@@ -20,13 +21,16 @@ export default function Ubicaciones() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [form, setForm] = useState(VACIO);
   const [editandoId, setEditandoId] = useState(null);
+  const [verBajas, setVerBajas] = useState(false);
   const { aviso, ejecutar, limpiar } = useAviso();
   const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => {
-    setUbicaciones(await api.listar(`/ubicaciones${filtroTipo ? `?tipo=${filtroTipo}` : ""}`));
+    const parametros = new URLSearchParams({ incluir_bajas: verBajas });
+    if (filtroTipo) parametros.set("tipo", filtroTipo);
+    setUbicaciones(await api.listar(`/ubicaciones?${parametros}`));
   });
-  useEffect(() => { cargar(); }, [filtroTipo]);
+  useEffect(() => { cargar(); }, [filtroTipo, verBajas]);
 
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
@@ -60,6 +64,10 @@ export default function Ubicaciones() {
     if (await ejecutar(() => api.borrar(`/ubicaciones/${u.id}`), `"${u.nombre}" dada de baja`)) cargar();
   }
 
+  async function reactivar(u) {
+    if (await ejecutar(() => api.accion(`/ubicaciones/${u.id}/reactivar`), `"${u.nombre}" reactivada`)) cargar();
+  }
+
   return (
     <section>
       <h2>Sucursales y Centro de Distribución</h2>
@@ -86,6 +94,7 @@ export default function Ubicaciones() {
       </form>
 
       <div className="barra-filtro">
+        <CheckBajas valor={verBajas} alCambiar={setVerBajas} />
         <label>Filtrar por tipo
           <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
             <option value="">Todas</option>
@@ -103,16 +112,18 @@ export default function Ubicaciones() {
           </thead>
           <tbody>
             {ubicaciones.map((u) => (
-              <tr key={u.id}>
+              <tr key={u.id} className={u.activo ? "" : "fila-baja"}>
                 <td><span className={`etiqueta etiqueta-${u.tipo.toLowerCase()}`}>{NOMBRE_TIPO[u.tipo]}</span></td>
-                <td>{u.nombre}</td>
+                <td>{u.nombre}{!u.activo && <EtiquetaBaja />}</td>
                 <td>{u.direccion}</td>
                 <td className="centro"><Capacidad si={u.puede_vender} /></td>
                 <td className="centro"><Capacidad si={u.puede_despachar} /></td>
                 <td className="centro"><Capacidad si={u.puede_recibir} /></td>
                 <td className="botones-fila">
-                  <button className="secundario" onClick={() => editar(u)}>Editar</button>
-                  <button className="peligro" onClick={() => darDeBaja(u)}>Dar de baja</button>
+                  {u.activo ? (<>
+                    <button className="secundario" onClick={() => editar(u)}>Editar</button>
+                    <button className="peligro" onClick={() => darDeBaja(u)}>Dar de baja</button>
+                  </>) : <button onClick={() => reactivar(u)}>Reactivar</button>}
                 </td>
               </tr>
             ))}

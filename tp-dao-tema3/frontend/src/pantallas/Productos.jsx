@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
+import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
 const VACIO = { codigo: "", nombre: "", categoria_id: "", precio_venta: "", costo: "", stock_minimo: "0" };
 
@@ -15,16 +16,18 @@ export default function Productos() {
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [form, setForm] = useState(VACIO);
   const [editandoId, setEditandoId] = useState(null);
+  const [verBajas, setVerBajas] = useState(false);
   const [proveedoresDe, setProveedoresDe] = useState(null); // { producto, proveedores }
   const { aviso, ejecutar, limpiar } = useAviso();
   const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => {
-    const filtro = filtroCategoria ? `?categoria_id=${filtroCategoria}` : "";
-    setProductos(await api.listar(`/productos${filtro}`));
+    const parametros = new URLSearchParams({ incluir_bajas: verBajas });
+    if (filtroCategoria) parametros.set("categoria_id", filtroCategoria);
+    setProductos(await api.listar(`/productos?${parametros}`));
     setCategorias(await api.listar("/categorias"));
   });
-  useEffect(() => { cargar(); }, [filtroCategoria]);
+  useEffect(() => { cargar(); }, [filtroCategoria, verBajas]);
 
   const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? `#${id} (dada de baja)`;
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
@@ -60,6 +63,10 @@ export default function Productos() {
 
   async function darDeBaja(p) {
     if (await ejecutar(() => api.borrar(`/productos/${p.id}`), `"${p.nombre}" dado de baja`)) cargar();
+  }
+
+  async function reactivar(p) {
+    if (await ejecutar(() => api.accion(`/productos/${p.id}/reactivar`), `"${p.nombre}" reactivado`)) cargar();
   }
 
   async function verProveedores(p) {
@@ -102,6 +109,7 @@ export default function Productos() {
       </form>
 
       <div className="barra-filtro">
+        <CheckBajas valor={verBajas} alCambiar={setVerBajas} />
         <label>Filtrar por categoría
           <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
             <option value="">Todas</option>
@@ -118,18 +126,20 @@ export default function Productos() {
           </thead>
           <tbody>
             {productos.map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} className={p.activo ? "" : "fila-baja"}>
                 <td><code>{p.codigo}</code></td>
-                <td>{p.nombre}</td>
+                <td>{p.nombre}{!p.activo && <EtiquetaBaja />}</td>
                 <td>{nombreCategoria(p.categoria_id)}</td>
                 <td className="num">${p.precio_venta.toFixed(2)}</td>
                 <td className="num">${p.costo.toFixed(2)}</td>
                 <td className={`num ${p.margen_unitario < 0 ? "negativo" : ""}`}>${p.margen_unitario.toFixed(2)}</td>
                 <td className="num">{p.stock_minimo}</td>
                 <td className="botones-fila">
-                  <button className="secundario" onClick={() => verProveedores(p)}>Proveedores</button>
-                  <button className="secundario" onClick={() => editar(p)}>Editar</button>
-                  <button className="peligro" onClick={() => darDeBaja(p)}>Dar de baja</button>
+                  {p.activo ? (<>
+                    <button className="secundario" onClick={() => verProveedores(p)}>Proveedores</button>
+                    <button className="secundario" onClick={() => editar(p)}>Editar</button>
+                    <button className="peligro" onClick={() => darDeBaja(p)}>Dar de baja</button>
+                  </>) : <button onClick={() => reactivar(p)}>Reactivar</button>}
                 </td>
               </tr>
             ))}

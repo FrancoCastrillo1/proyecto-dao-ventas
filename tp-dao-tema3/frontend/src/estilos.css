@@ -77,6 +77,9 @@ td.centro, th.centro { text-align: center; }
 .vacio { color: var(--texto-suave); text-align: center; font-style: italic; }
 .negativo { color: var(--peligro); font-weight: 600; }
 .fila-seleccionada td { background: #eef2fb; }
+.fila-baja td { color: var(--texto-suave); background: #f7f7f8; }
+.etiqueta-baja { background: #eceff3; color: var(--texto-suave); margin-left: 8px; }
+.check-bajas { flex-direction: row; align-items: center; gap: 6px; color: var(--texto); min-width: 0 !important; }
 code { font-size: 0.9em; }
 
 .si { color: var(--exito-texto); font-weight: 700; }

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
+import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
 const VACIO = { cuit: "", razon_social: "", telefono: "", email: "" };
 
@@ -13,6 +14,7 @@ export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
   const [form, setForm] = useState(VACIO);
   const [editandoId, setEditandoId] = useState(null);
+  const [verBajas, setVerBajas] = useState(false);
   const [seleccionado, setSeleccionado] = useState(null); // proveedor cuyos productos se gestionan
   const [suyos, setSuyos] = useState([]);                 // productos que ya provee
   const [todos, setTodos] = useState([]);                 // todos los productos activos
@@ -20,8 +22,8 @@ export default function Proveedores() {
   const { aviso, ejecutar, limpiar } = useAviso();
   const parecidos = useParecidos();
 
-  const cargar = () => ejecutar(async () => setProveedores(await api.listar("/proveedores")));
-  useEffect(() => { cargar(); }, []);
+  const cargar = () => ejecutar(async () => setProveedores(await api.listar(`/proveedores?incluir_bajas=${verBajas}`)));
+  useEffect(() => { cargar(); }, [verBajas]);
 
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
@@ -56,6 +58,10 @@ export default function Proveedores() {
       if (seleccionado?.id === p.id) setSeleccionado(null);
       cargar();
     }
+  }
+
+  async function reactivar(p) {
+    if (await ejecutar(() => api.accion(`/proveedores/${p.id}/reactivar`), `"${p.razon_social}" reactivado`)) cargar();
   }
 
   // ---- Relación con productos
@@ -117,20 +123,24 @@ export default function Proveedores() {
         </div>
       </form>
 
+      <div className="barra-filtro"><CheckBajas valor={verBajas} alCambiar={setVerBajas} /></div>
+
       <div className="tabla-scroll">
         <table>
           <thead><tr><th>CUIT</th><th>Razón social</th><th>Teléfono</th><th>Email</th><th></th></tr></thead>
           <tbody>
             {proveedores.map((p) => (
-              <tr key={p.id} className={seleccionado?.id === p.id ? "fila-seleccionada" : ""}>
+              <tr key={p.id} className={`${seleccionado?.id === p.id ? "fila-seleccionada" : ""} ${p.activo ? "" : "fila-baja"}`}>
                 <td><code>{p.cuit}</code></td>
-                <td>{p.razon_social}</td>
+                <td>{p.razon_social}{!p.activo && <EtiquetaBaja />}</td>
                 <td>{p.telefono ?? "—"}</td>
                 <td>{p.email ?? "—"}</td>
                 <td className="botones-fila">
-                  <button className="secundario" onClick={() => gestionarProductos(p)}>Productos</button>
-                  <button className="secundario" onClick={() => editar(p)}>Editar</button>
-                  <button className="peligro" onClick={() => darDeBaja(p)}>Dar de baja</button>
+                  {p.activo ? (<>
+                    <button className="secundario" onClick={() => gestionarProductos(p)}>Productos</button>
+                    <button className="secundario" onClick={() => editar(p)}>Editar</button>
+                    <button className="peligro" onClick={() => darDeBaja(p)}>Dar de baja</button>
+                  </>) : <button onClick={() => reactivar(p)}>Reactivar</button>}
                 </td>
               </tr>
             ))}

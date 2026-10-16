@@ -82,6 +82,10 @@ class Categoria:
     def dar_de_baja(self):
         self.activo = False
 
+    # Deshace la baja lógica: es el mismo registro, con su id y su historia
+    def reactivar(self):
+        self.activo = True
+
     def __str__(self):
         return f"Categoria: ({self.id}, {self.nombre})"
 
@@ -198,6 +202,10 @@ class Producto:
     def dar_de_baja(self):
         self.activo = False
 
+    # Deshace la baja lógica: es el mismo registro, con su id y su historia
+    def reactivar(self):
+        self.activo = True
+
     def __str__(self):
         return f"Producto: ({self.id}, {self.codigo}, {self.nombre}, ${self.precio_venta})"
 
@@ -286,6 +294,10 @@ class Proveedor:
     def dar_de_baja(self):
         self.activo = False
 
+    # Deshace la baja lógica: es el mismo registro, con su id y su historia
+    def reactivar(self):
+        self.activo = True
+
     def __str__(self):
         return f"Proveedor: ({self.id}, {self.cuit_formateado}, {self.razon_social})"
 
@@ -351,6 +363,10 @@ class Ubicacion(ABC):
 
     def dar_de_baja(self):
         self.activo = False
+
+    # Deshace la baja lógica: es el mismo registro, con su id y su historia
+    def reactivar(self):
+        self.activo = True
 
     def __str__(self):
         return f"{self.tipo}: ({self.id}, {self.nombre})"
