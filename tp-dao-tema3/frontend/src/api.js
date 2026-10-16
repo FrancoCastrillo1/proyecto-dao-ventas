@@ -11,15 +11,37 @@ export class ErrorApi extends Error {
   }
 }
 
+// Nombre que ve el usuario para cada campo que manda el front
+const NOMBRE_CAMPO = {
+  codigo: "Código", nombre: "Nombre", categoria_id: "Categoría", precio_venta: "Precio de venta",
+  costo: "Costo", stock_minimo: "Stock mínimo", cuit: "CUIT", razon_social: "Razón social",
+  telefono: "Teléfono", email: "Email", tipo: "Tipo", direccion: "Dirección",
+};
+
+// Qué formato espera cada tipo de error de Pydantic (el "type" que viene en el 422)
+const FORMATO_ESPERADO = {
+  int_parsing: "tiene que ser un número entero, sin coma (ej: 10)",
+  int_from_float: "tiene que ser un número entero, sin coma (ej: 10)",
+  float_parsing: "tiene que ser un número; los decimales van con punto (ej: 1500.50)",
+  string_type: "tiene que ser un texto",
+  missing: "es obligatorio",
+};
+
+// Traduce un error de formato de Pydantic a un texto para el usuario
+function textoDeFormato(error) {
+  const campo = error.loc?.at(-1);
+  const nombre = NOMBRE_CAMPO[campo] ?? campo;
+  if (error.input === "") return `${nombre}: es obligatorio`;
+  return `${nombre}: ${FORMATO_ESPERADO[error.type] ?? error.msg}`;
+}
+
 // El backend manda {"detail": "texto"} en los errores de negocio (400/404/409),
-// pero Pydantic manda {"detail": [ {loc, msg}, ... ]} cuando falta un campo o el
-// tipo no es el correcto (422). Acá se unifican las dos formas en un texto.
+// pero Pydantic manda {"detail": [ {loc, type, input, msg}, ... ]} cuando falta un
+// campo o el tipo no es el correcto (422). Acá se unifican las dos formas en un texto.
 function textoDelError(cuerpo) {
   const detalle = cuerpo?.detail;
   if (typeof detalle === "string") return detalle;
-  if (Array.isArray(detalle)) {
-    return detalle.map((e) => `${e.loc?.at(-1)}: ${e.msg}`).join(" · ");
-  }
+  if (Array.isArray(detalle)) return detalle.map(textoDeFormato).join(" · ");
   return "Error desconocido";
 }
 

@@ -36,7 +36,7 @@ export default function Categorias() {
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <form className="formulario" onSubmit={guardar}>
-        <label>Nombre<input value={nombre} onChange={(e) => setNombre(e.target.value)} /></label>
+        <label>Nombre<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Bebidas" /></label>
         <div className="acciones">
           <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
           {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}

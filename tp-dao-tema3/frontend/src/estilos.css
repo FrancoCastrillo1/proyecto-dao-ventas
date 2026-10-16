@@ -52,13 +52,14 @@ button.peligro:hover { background: #fdf1f1; }
 
 /* Formularios */
 .formulario {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;
   background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 16px; margin-bottom: 20px;
 }
 label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--texto-suave); }
 input, select {
   font: inherit; color: var(--texto); padding: 7px 9px; border: 1px solid var(--borde); border-radius: 6px; background: white;
 }
+input::placeholder { color: #9aa1ad; font-size: 0.85rem; }
 input:disabled, select:disabled { background: #eef0f3; color: var(--texto-suave); cursor: not-allowed; }
 .acciones { display: flex; gap: 8px; align-items: flex-end; }
 .barra-filtro { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }

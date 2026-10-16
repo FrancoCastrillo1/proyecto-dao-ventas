@@ -65,8 +65,10 @@ export default function Ubicaciones() {
             <option value="CD">Centro de Distribución</option>
           </select>
         </label>
-        <label>Nombre<input value={form.nombre} onChange={cambiar("nombre")} /></label>
-        <label>Dirección<input value={form.direccion} onChange={cambiar("direccion")} /></label>
+        <label>Nombre<input value={form.nombre} onChange={cambiar("nombre")} placeholder="Ej: Local Centro" /></label>
+        <label>Dirección
+          <input value={form.direccion} onChange={cambiar("direccion")} placeholder="Ej: San Martín 100" />
+        </label>
         <div className="acciones">
           <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
           {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}

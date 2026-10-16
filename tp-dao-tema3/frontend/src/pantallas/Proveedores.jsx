@@ -89,12 +89,18 @@ export default function Proveedores() {
 
       <form className="formulario" onSubmit={guardar}>
         <label>CUIT
-          <input value={form.cuit} onChange={cambiar("cuit")} placeholder="20-12345678-6" disabled={!!editandoId}
-            title={editandoId ? "El CUIT no se puede modificar" : ""} />
+          <input value={form.cuit} onChange={cambiar("cuit")} placeholder="11 dígitos (ej: 20-12345678-6)"
+            disabled={!!editandoId} title={editandoId ? "El CUIT no se puede modificar" : ""} />
         </label>
-        <label>Razón social<input value={form.razon_social} onChange={cambiar("razon_social")} /></label>
-        <label>Teléfono (opcional)<input value={form.telefono} onChange={cambiar("telefono")} /></label>
-        <label>Email (opcional)<input value={form.email} onChange={cambiar("email")} /></label>
+        <label>Razón social
+          <input value={form.razon_social} onChange={cambiar("razon_social")} placeholder="Ej: Distribuidora Sur SA" />
+        </label>
+        <label>Teléfono (opcional)
+          <input value={form.telefono} onChange={cambiar("telefono")} placeholder="Ej: 11-4444-5555" />
+        </label>
+        <label>Email (opcional)
+          <input value={form.email} onChange={cambiar("email")} placeholder="ej: ventas@empresa.com" />
+        </label>
         <div className="acciones">
           <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
           {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}

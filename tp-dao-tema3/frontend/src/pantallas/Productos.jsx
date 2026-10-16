@@ -66,18 +66,25 @@ export default function Productos() {
       <form className="formulario" onSubmit={guardar}>
         <label>Código (SKU)
           <input value={form.codigo} onChange={cambiar("codigo")} disabled={!!editandoId}
+            placeholder="Hasta 20 letras (ej: BEB-001)"
             title={editandoId ? "El código no se puede modificar" : ""} />
         </label>
-        <label>Nombre<input value={form.nombre} onChange={cambiar("nombre")} /></label>
+        <label>Nombre<input value={form.nombre} onChange={cambiar("nombre")} placeholder="Ej: Coca-Cola 500ml" /></label>
         <label>Categoría
           <select value={form.categoria_id} onChange={cambiar("categoria_id")}>
             <option value="">— elegir —</option>
             {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
-        <label>Precio de venta<input value={form.precio_venta} onChange={cambiar("precio_venta")} /></label>
-        <label>Costo<input value={form.costo} onChange={cambiar("costo")} /></label>
-        <label>Stock mínimo<input value={form.stock_minimo} onChange={cambiar("stock_minimo")} /></label>
+        <label>Precio de venta
+          <input value={form.precio_venta} onChange={cambiar("precio_venta")} placeholder="Número > 0 (ej: 1500.50)" />
+        </label>
+        <label>Costo
+          <input value={form.costo} onChange={cambiar("costo")} placeholder="Número ≥ 0 (ej: 900)" />
+        </label>
+        <label>Stock mínimo
+          <input value={form.stock_minimo} onChange={cambiar("stock_minimo")} placeholder="Entero ≥ 0 (ej: 10)" />
+        </label>
         <div className="acciones">
           <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
           {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}
