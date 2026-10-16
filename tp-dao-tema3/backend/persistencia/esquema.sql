@@ -4,8 +4,16 @@
 CREATE TABLE IF NOT EXISTS categorias (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
+nombre_normalizado TEXT,
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- nombre_normalizado = nombre sin mayúsculas, tildes ni espacios de más (lo
+-- completa el DAO). El índice único hace que "Lácteos" y "lacteos " choquen.
+-- Va como índice aparte (y no UNIQUE en la columna) porque las bases que ya
+-- existían reciben la columna con ALTER TABLE, que no admite UNIQUE.
+CREATE UNIQUE INDEX IF NOT EXISTS categorias_nombre_normalizado
+ON categorias (nombre_normalizado);
 
 -- El código (SKU) es el identificador del producto: único sin distinguir
 -- mayúsculas. El precio puede ser menor al costo (venta a pérdida).
@@ -45,9 +53,14 @@ CREATE TABLE IF NOT EXISTS ubicaciones (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 tipo TEXT NOT NULL CHECK (tipo IN ('CD', 'SUCURSAL')),
 nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
+nombre_normalizado TEXT,
 direccion TEXT NOT NULL,
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- Igual que en categorías: nombres que solo difieren en tildes/espacios chocan
+CREATE UNIQUE INDEX IF NOT EXISTS ubicaciones_nombre_normalizado
+ON ubicaciones (nombre_normalizado);
 
 -- Red de seguridad: un solo CD activo (los dados de baja no cuentan)
 CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo

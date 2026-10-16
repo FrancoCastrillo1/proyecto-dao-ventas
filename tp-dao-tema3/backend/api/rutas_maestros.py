@@ -10,6 +10,13 @@ router = APIRouter(prefix="/categorias", tags=["Categorías"])
 service = CategoriaService()
 
 
+# Respuesta común de los endpoints /parecidos de todos los maestros: el front
+# muestra el mismo aviso "¿crear igual?" para cualquiera de ellos
+class Parecido(BaseModel):
+    id: int
+    nombre: str
+
+
 # Forma del JSON que llega (POST / PUT)
 class CategoriaEntrada(BaseModel):
     nombre: str
@@ -29,6 +36,12 @@ def a_salida(categoria):
 @router.get("", response_model=list[CategoriaSalida])
 def listar_categorias():
     return [a_salida(c) for c in service.listar()]
+
+
+# Las rutas /parecidos van antes que "/{id}": si no, FastAPI intenta leer "parecidos" como un id
+@router.get("/parecidos", response_model=list[Parecido])
+def categorias_parecidas(nombre: str, excluir_id: int | None = None):
+    return [Parecido(id=c.id, nombre=c.nombre) for c in service.parecidos(nombre, excluir_id)]
 
 
 @router.get("/{id}", response_model=CategoriaSalida)
@@ -101,6 +114,11 @@ def listar_productos(categoria_id: int | None = None):
     return [producto_a_salida(p) for p in producto_service.listar(categoria_id)]
 
 
+@router_productos.get("/parecidos", response_model=list[Parecido])
+def productos_parecidos(nombre: str, excluir_id: int | None = None):
+    return [Parecido(id=p.id, nombre=f"{p.codigo} · {p.nombre}") for p in producto_service.parecidos(nombre, excluir_id)]
+
+
 @router_productos.get("/{id}", response_model=ProductoSalida)
 def obtener_producto(id: int):
     return producto_a_salida(producto_service.obtener(id))
@@ -164,6 +182,14 @@ def proveedor_a_salida(proveedor):
 @router_proveedores.get("", response_model=list[ProveedorSalida])
 def listar_proveedores():
     return [proveedor_a_salida(p) for p in proveedor_service.listar()]
+
+
+@router_proveedores.get("/parecidos", response_model=list[Parecido])
+def proveedores_parecidos(razon_social: str, excluir_id: int | None = None):
+    return [
+        Parecido(id=p.id, nombre=f"{p.razon_social} ({p.cuit_formateado})")
+        for p in proveedor_service.parecidos(razon_social, excluir_id)
+    ]
 
 
 @router_proveedores.get("/{id}", response_model=ProveedorSalida)
@@ -256,6 +282,11 @@ def listar_ubicaciones(tipo: str | None = None):
 @router_ubicaciones.get("/cd", response_model=UbicacionSalida)
 def obtener_centro_distribucion():
     return ubicacion_a_salida(ubicacion_service.obtener_cd())
+
+
+@router_ubicaciones.get("/parecidos", response_model=list[Parecido])
+def ubicaciones_parecidas(nombre: str, excluir_id: int | None = None):
+    return [Parecido(id=u.id, nombre=u.nombre) for u in ubicacion_service.parecidos(nombre, excluir_id)]
 
 
 @router_ubicaciones.get("/{id}", response_model=UbicacionSalida)

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 
 const VACIO = { tipo: "SUCURSAL", nombre: "", direccion: "" };
 const NOMBRE_TIPO = { SUCURSAL: "Sucursal", CD: "Centro de Distribución" };
@@ -20,6 +21,7 @@ export default function Ubicaciones() {
   const [form, setForm] = useState(VACIO);
   const [editandoId, setEditandoId] = useState(null);
   const { aviso, ejecutar, limpiar } = useAviso();
+  const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => {
     setUbicaciones(await api.listar(`/ubicaciones${filtroTipo ? `?tipo=${filtroTipo}` : ""}`));
@@ -29,6 +31,7 @@ export default function Ubicaciones() {
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
   function cancelar() {
+    parecidos.descartar();
     setEditandoId(null);
     setForm(VACIO);
   }
@@ -38,8 +41,13 @@ export default function Ubicaciones() {
     setForm({ tipo: u.tipo, nombre: u.nombre, direccion: u.direccion });
   }
 
-  async function guardar(evento) {
+  // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
+  function guardar(evento) {
     evento.preventDefault();
+    parecidos.verificar("/ubicaciones", { nombre: form.nombre }, editandoId, enviar);
+  }
+
+  async function enviar() {
     const datos = { nombre: form.nombre, direccion: form.direccion };
     // Al modificar no se manda el tipo: una ubicación no cambia de clase
     const ok = editandoId
@@ -56,6 +64,8 @@ export default function Ubicaciones() {
     <section>
       <h2>Sucursales y Centro de Distribución</h2>
       <Aviso aviso={aviso} alCerrar={limpiar} />
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
+        alCancelar={parecidos.descartar} />
 
       <form className="formulario" onSubmit={guardar}>
         <label>Tipo

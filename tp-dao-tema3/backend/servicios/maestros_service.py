@@ -3,7 +3,7 @@
 # Acá NO va SQL (usa dao_maestros) ni nada de endpoints (eso está en api).
 from backend.dominio.excepciones import DatoInvalido, EntidadDuplicada, NoEncontrado
 from backend.dominio.maestros import (
-    TIPOS_UBICACION, Categoria, CentroDistribucion, Producto, Proveedor, crear_ubicacion,
+    TIPOS_UBICACION, Categoria, CentroDistribucion, Producto, Proveedor, buscar_parecidos, crear_ubicacion,
 )
 from backend.persistencia.dao_maestros import CategoriaDAO, ProductoDAO, ProveedorDAO, UbicacionDAO
 
@@ -39,6 +39,11 @@ class CategoriaService:
         categoria = self.obtener(id)
         categoria.dar_de_baja()
         self.dao.actualizar(categoria)
+
+    # Ayuda para el front ("¿crear igual?"), no una regla. Los idénticos no se
+    # incluyen: el nombre es único y el alta ya los rechaza con un 409.
+    def parecidos(self, nombre, excluir_id=None):
+        return buscar_parecidos(nombre, self.dao.listar(), lambda c: c.nombre, excluir_id, incluir_iguales=False)
 
 
 class ProductoService:
@@ -86,6 +91,11 @@ class ProductoService:
         producto.dar_de_baja()
         self.dao.actualizar(producto)
 
+    # El nombre de un producto puede repetirse (lo identifica el código), así
+    # que acá los idénticos también se avisan
+    def parecidos(self, nombre, excluir_id=None):
+        return buscar_parecidos(nombre, self.dao.listar(), lambda p: p.nombre, excluir_id)
+
 
 class ProveedorService:
     def __init__(self, dao=None, producto_dao=None):
@@ -119,6 +129,10 @@ class ProveedorService:
         proveedor = self.obtener(id)
         proveedor.dar_de_baja()
         self.dao.actualizar(proveedor)
+
+    # La razón social puede repetirse (lo identifica el CUIT): los idénticos también se avisan
+    def parecidos(self, razon_social, excluir_id=None):
+        return buscar_parecidos(razon_social, self.dao.listar(), lambda p: p.razon_social, excluir_id)
 
     # ---- Relación con productos
 
@@ -207,3 +221,7 @@ class UbicacionService:
         ubicacion = self.obtener(id)
         ubicacion.dar_de_baja()
         self.dao.actualizar(ubicacion)
+
+    # El nombre es único: los idénticos no se incluyen, el alta los rechaza con un 409
+    def parecidos(self, nombre, excluir_id=None):
+        return buscar_parecidos(nombre, self.dao.listar(), lambda u: u.nombre, excluir_id, incluir_iguales=False)

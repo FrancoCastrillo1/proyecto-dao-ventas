@@ -2,9 +2,57 @@
 # Ubicacion, Sucursal y CentroDistribucion, con sus validaciones básicas.
 # Acá NO va el stock ni los movimientos (eso está en stock.py) ni nada de base de datos.
 import re
+import unicodedata
 from abc import ABC, abstractmethod
+from difflib import SequenceMatcher
 
 from backend.dominio.excepciones import DatoInvalido
+
+
+# ---------------------------------------------------- Comparación de nombres
+
+def quitar_tilde(letra):
+    # La ñ se conserva: "Peña" y "Pena" son palabras distintas
+    if letra == "ñ":
+        return letra
+    return unicodedata.normalize("NFD", letra)[0]
+
+
+# Forma "canónica" de un nombre para detectar duplicados: sin mayúsculas, sin
+# tildes y sin espacios de más. "  Lácteos  Frescos" → "lacteos frescos".
+def normalizar_texto(texto):
+    texto = " ".join((texto or "").split()).casefold()
+    return "".join(quitar_tilde(letra) for letra in texto)
+
+
+# Umbral elegido a mano: "Bebida"/"Bebidas" da 0.92 (avisa) y
+# "Coca 500ml"/"Coca 1L" da 0.71 (no avisa). Límite conocido: en palabras muy
+# cortas no alcanza ("Pan"/"Panes" da 0.75).
+UMBRAL_PARECIDO = 0.8
+
+
+def son_parecidos(texto_a, texto_b):
+    a, b = normalizar_texto(texto_a), normalizar_texto(texto_b)
+    return SequenceMatcher(None, a, b).ratio() >= UMBRAL_PARECIDO
+
+
+# Devuelve los elementos cuyo texto se parece al buscado. No es una regla de
+# negocio sino una ayuda: el front pregunta "¿crear igual?" antes de guardar.
+# incluir_iguales=False sirve cuando el nombre es único: los idénticos ya los
+# rechaza el alta con un 409, no tiene sentido preguntar por ellos.
+def buscar_parecidos(texto, elementos, obtener_texto, excluir_id=None, incluir_iguales=True):
+    buscado = normalizar_texto(texto)
+    resultado = []
+    for elemento in elementos:
+        if elemento.id == excluir_id:
+            continue
+        propio = obtener_texto(elemento)
+        if not incluir_iguales and normalizar_texto(propio) == buscado:
+            continue
+        if son_parecidos(propio, texto):
+            resultado.append(elemento)
+    return resultado
+
 
 class Categoria:
     def __init__(self, nombre, id=None, activo=True):
@@ -25,6 +73,11 @@ class Categoria:
         if len(valor) > 50:
             raise DatoInvalido("El nombre de la categoria no puede tener mas de 50 caracteres")
         self._nombre = valor
+
+    # Lo que se compara para detectar duplicados (se guarda en la base con índice único)
+    @property
+    def nombre_normalizado(self):
+        return normalizar_texto(self.nombre)
 
     def dar_de_baja(self):
         self.activo = False
@@ -266,6 +319,11 @@ class Ubicacion(ABC):
         if len(valor) > 50:
             raise DatoInvalido("El nombre de la ubicación no puede tener más de 50 caracteres")
         self._nombre = valor
+
+    # Lo que se compara para detectar duplicados (se guarda en la base con índice único)
+    @property
+    def nombre_normalizado(self):
+        return normalizar_texto(self.nombre)
 
     @property
     def direccion(self):

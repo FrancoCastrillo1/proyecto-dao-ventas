@@ -2,7 +2,7 @@
 # Proveedor, Ubicacion, Sucursal y CentroDistribucion contra la base.
 # Acá NO se valida el negocio, solo se lee y escribe en SQLite.
 from backend.config import DB_PATH
-from backend.dominio.maestros import Categoria, Producto, Proveedor, crear_ubicacion
+from backend.dominio.maestros import Categoria, Producto, Proveedor, crear_ubicacion, normalizar_texto
 from backend.persistencia.conexion import get_conexion
 
 class CategoriaDAO:
@@ -17,7 +17,10 @@ class CategoriaDAO:
 
     def crear(self, categoria):
         with self._conn() as cx:
-            cur = cx.execute("INSERT INTO categorias (nombre,activo) VALUES (?, ?)", (categoria.nombre, int(categoria.activo)),)
+            cur = cx.execute(
+                "INSERT INTO categorias (nombre, nombre_normalizado, activo) VALUES (?, ?, ?)",
+                (categoria.nombre, categoria.nombre_normalizado, int(categoria.activo)),
+            )
             categoria.id = cur.lastrowid
         return categoria
 
@@ -26,9 +29,12 @@ class CategoriaDAO:
             fila = cx.execute("SELECT * FROM categorias WHERE id = ?", (id,)).fetchone()
         return self._a_objeto(fila) if fila else None
 
+    # Busca sin importar mayúsculas, tildes ni espacios de más
     def obtener_por_nombre(self, nombre):
         with self._conn() as cx:
-            fila = cx.execute("SELECT * FROM categorias WHERE nombre = ?", (nombre,)).fetchone()
+            fila = cx.execute(
+                "SELECT * FROM categorias WHERE nombre_normalizado = ?", (normalizar_texto(nombre),)
+            ).fetchone()
         return self._a_objeto(fila) if fila else None
 
     def listar(self, solo_activas=True):
@@ -43,8 +49,8 @@ class CategoriaDAO:
     def actualizar(self, categoria):
         with self._conn() as cx:
             cx.execute(
-                "UPDATE categorias SET nombre = ?, activo = ? WHERE id = ?",
-                (categoria.nombre, int(categoria.activo), categoria.id),
+                "UPDATE categorias SET nombre = ?, nombre_normalizado = ?, activo = ? WHERE id = ?",
+                (categoria.nombre, categoria.nombre_normalizado, int(categoria.activo), categoria.id),
             )
         return categoria
 
@@ -229,8 +235,8 @@ class UbicacionDAO:
     def crear(self, ubicacion):
         with self._conn() as cx:
             cur = cx.execute(
-                "INSERT INTO ubicaciones (tipo, nombre, direccion, activo) VALUES (?, ?, ?, ?)",
-                (ubicacion.tipo, ubicacion.nombre, ubicacion.direccion, int(ubicacion.activo)),
+                "INSERT INTO ubicaciones (tipo, nombre, nombre_normalizado, direccion, activo) VALUES (?, ?, ?, ?, ?)",
+                (ubicacion.tipo, ubicacion.nombre, ubicacion.nombre_normalizado, ubicacion.direccion, int(ubicacion.activo)),
             )
             ubicacion.id = cur.lastrowid
         return ubicacion
@@ -240,9 +246,12 @@ class UbicacionDAO:
             fila = cx.execute("SELECT * FROM ubicaciones WHERE id = ?", (id,)).fetchone()
         return self._a_objeto(fila) if fila else None
 
+    # Busca sin importar mayúsculas, tildes ni espacios de más
     def obtener_por_nombre(self, nombre):
         with self._conn() as cx:
-            fila = cx.execute("SELECT * FROM ubicaciones WHERE nombre = ?", (nombre,)).fetchone()
+            fila = cx.execute(
+                "SELECT * FROM ubicaciones WHERE nombre_normalizado = ?", (normalizar_texto(nombre),)
+            ).fetchone()
         return self._a_objeto(fila) if fila else None
 
     def obtener_cd_activo(self):
@@ -267,7 +276,7 @@ class UbicacionDAO:
     def actualizar(self, ubicacion):
         with self._conn() as cx:
             cx.execute(
-                "UPDATE ubicaciones SET nombre = ?, direccion = ?, activo = ? WHERE id = ?",
-                (ubicacion.nombre, ubicacion.direccion, int(ubicacion.activo), ubicacion.id),
+                "UPDATE ubicaciones SET nombre = ?, nombre_normalizado = ?, direccion = ?, activo = ? WHERE id = ?",
+                (ubicacion.nombre, ubicacion.nombre_normalizado, ubicacion.direccion, int(ubicacion.activo), ubicacion.id),
             )
         return ubicacion

@@ -3,23 +3,31 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 
 export default function Categorias() {
   const [categorias, setCategorias] = useState([]);
   const [nombre, setNombre] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const { aviso, ejecutar, limpiar } = useAviso();
+  const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => setCategorias(await api.listar("/categorias")));
   useEffect(() => { cargar(); }, []);
 
   function cancelar() {
+    parecidos.descartar();
     setEditandoId(null);
     setNombre("");
   }
 
-  async function guardar(evento) {
+  // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
+  function guardar(evento) {
     evento.preventDefault();
+    parecidos.verificar("/categorias", { nombre }, editandoId, enviar);
+  }
+
+  async function enviar() {
     const ok = editandoId
       ? await ejecutar(() => api.modificar(`/categorias/${editandoId}`, { nombre }), "Categoría modificada")
       : await ejecutar(() => api.crear("/categorias", { nombre }), "Categoría creada");
@@ -34,6 +42,8 @@ export default function Categorias() {
     <section>
       <h2>Categorías</h2>
       <Aviso aviso={aviso} alCerrar={limpiar} />
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
+        alCancelar={parecidos.descartar} />
 
       <form className="formulario" onSubmit={guardar}>
         <label>Nombre<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Bebidas" /></label>

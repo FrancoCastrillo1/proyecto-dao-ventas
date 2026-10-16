@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 
 const VACIO = { codigo: "", nombre: "", categoria_id: "", precio_venta: "", costo: "", stock_minimo: "0" };
 
@@ -16,6 +17,7 @@ export default function Productos() {
   const [editandoId, setEditandoId] = useState(null);
   const [proveedoresDe, setProveedoresDe] = useState(null); // { producto, proveedores }
   const { aviso, ejecutar, limpiar } = useAviso();
+  const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => {
     const filtro = filtroCategoria ? `?categoria_id=${filtroCategoria}` : "";
@@ -28,6 +30,7 @@ export default function Productos() {
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
   function cancelar() {
+    parecidos.descartar();
     setEditandoId(null);
     setForm(VACIO);
   }
@@ -37,8 +40,13 @@ export default function Productos() {
     setForm({ ...p, categoria_id: String(p.categoria_id) });
   }
 
-  async function guardar(evento) {
+  // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
+  function guardar(evento) {
     evento.preventDefault();
+    parecidos.verificar("/productos", { nombre: form.nombre }, editandoId, enviar);
+  }
+
+  async function enviar() {
     const datos = {
       nombre: form.nombre, categoria_id: form.categoria_id, precio_venta: form.precio_venta,
       costo: form.costo, stock_minimo: form.stock_minimo,
@@ -62,6 +70,8 @@ export default function Productos() {
     <section>
       <h2>Productos</h2>
       <Aviso aviso={aviso} alCerrar={limpiar} />
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
+        alCancelar={parecidos.descartar} />
 
       <form className="formulario" onSubmit={guardar}>
         <label>Código (SKU)

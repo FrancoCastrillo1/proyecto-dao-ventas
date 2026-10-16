@@ -96,3 +96,6 @@ code { font-size: 0.9em; }
 }
 .aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
 .aviso-error { background: var(--error-fondo); color: var(--error-texto); }
+.aviso-advertencia { background: #fff6e0; color: #7a4b00; }
+.botones-aviso { display: flex; gap: 8px; margin-left: auto; }
+.botones-aviso button { padding: 4px 12px; font-size: 0.85rem; }

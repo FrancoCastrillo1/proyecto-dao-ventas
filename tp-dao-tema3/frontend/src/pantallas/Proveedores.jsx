@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 
 const VACIO = { cuit: "", razon_social: "", telefono: "", email: "" };
 
@@ -17,6 +18,7 @@ export default function Proveedores() {
   const [todos, setTodos] = useState([]);                 // todos los productos activos
   const [aAsignar, setAAsignar] = useState("");
   const { aviso, ejecutar, limpiar } = useAviso();
+  const parecidos = useParecidos();
 
   const cargar = () => ejecutar(async () => setProveedores(await api.listar("/proveedores")));
   useEffect(() => { cargar(); }, []);
@@ -24,6 +26,7 @@ export default function Proveedores() {
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
   function cancelar() {
+    parecidos.descartar();
     setEditandoId(null);
     setForm(VACIO);
   }
@@ -33,8 +36,13 @@ export default function Proveedores() {
     setForm({ cuit: p.cuit, razon_social: p.razon_social, telefono: p.telefono ?? "", email: p.email ?? "" });
   }
 
-  async function guardar(evento) {
+  // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
+  function guardar(evento) {
     evento.preventDefault();
+    parecidos.verificar("/proveedores", { razon_social: form.razon_social }, editandoId, enviar);
+  }
+
+  async function enviar() {
     const datos = { razon_social: form.razon_social, telefono: form.telefono, email: form.email };
     // Al modificar no se manda el CUIT: es la identidad del proveedor
     const ok = editandoId
@@ -86,6 +94,8 @@ export default function Proveedores() {
     <section>
       <h2>Proveedores</h2>
       <Aviso aviso={aviso} alCerrar={limpiar} />
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
+        alCancelar={parecidos.descartar} />
 
       <form className="formulario" onSubmit={guardar}>
         <label>CUIT
