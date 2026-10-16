@@ -8,6 +8,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Front: dependencias de npm y build
+node_modules/
+dist/
+
 # Base de datos local
 *.db
 *.sqlite

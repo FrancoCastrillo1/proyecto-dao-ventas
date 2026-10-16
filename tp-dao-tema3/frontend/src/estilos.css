@@ -1,0 +1,97 @@
+/* Estilos generales del front. Un solo archivo: son pocas pantallas. */
+:root {
+  --fondo: #f5f6f8;
+  --tarjeta: #ffffff;
+  --texto: #1f2430;
+  --texto-suave: #667085;
+  --borde: #d9dde3;
+  --primario: #2457c5;
+  --primario-oscuro: #1b4399;
+  --peligro: #c53030;
+  --exito-fondo: #e7f6ec;
+  --exito-texto: #1e6b3a;
+  --error-fondo: #fdecec;
+  --error-texto: #a12626;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.contenedor { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+
+header h1 { font-size: 1.4rem; margin: 0 0 16px; }
+h2 { font-size: 1.2rem; margin: 0 0 16px; }
+h3 { font-size: 1rem; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
+
+/* Pestañas */
+.pestanias { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--borde); margin-bottom: 24px; }
+.pestanias button {
+  background: none; color: var(--texto-suave); border: none; border-bottom: 3px solid transparent;
+  border-radius: 0; padding: 10px 14px; font-weight: 500;
+}
+.pestanias button:hover { color: var(--texto); background: none; }
+.pestanias button.activa { color: var(--primario); border-bottom-color: var(--primario); }
+
+/* Botones */
+button {
+  font: inherit; cursor: pointer; border-radius: 6px; padding: 7px 14px;
+  border: 1px solid var(--primario); background: var(--primario); color: white;
+}
+button:hover { background: var(--primario-oscuro); }
+button.secundario { background: white; color: var(--primario); }
+button.secundario:hover { background: #eef2fb; }
+button.peligro { background: white; color: var(--peligro); border-color: var(--peligro); }
+button.peligro:hover { background: #fdf1f1; }
+.boton-cerrar {
+  background: none; border: none; color: inherit; font-size: 1.3rem; line-height: 1; padding: 0 4px; margin-left: auto;
+}
+.boton-cerrar:hover { background: none; opacity: 0.6; }
+
+/* Formularios */
+.formulario {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 16px; margin-bottom: 20px;
+}
+label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--texto-suave); }
+input, select {
+  font: inherit; color: var(--texto); padding: 7px 9px; border: 1px solid var(--borde); border-radius: 6px; background: white;
+}
+input:disabled, select:disabled { background: #eef0f3; color: var(--texto-suave); cursor: not-allowed; }
+.acciones { display: flex; gap: 8px; align-items: flex-end; }
+.barra-filtro { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.barra-filtro label { min-width: 200px; }
+
+/* Tablas */
+.tabla-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--texto-suave); background: #fafbfc; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.centro, th.centro { text-align: center; }
+.botones-fila { display: flex; gap: 6px; justify-content: flex-end; }
+.botones-fila button { padding: 4px 10px; font-size: 0.85rem; }
+.vacio { color: var(--texto-suave); text-align: center; font-style: italic; }
+.negativo { color: var(--peligro); font-weight: 600; }
+.fila-seleccionada td { background: #eef2fb; }
+code { font-size: 0.9em; }
+
+.si { color: var(--exito-texto); font-weight: 700; }
+.no { color: #b0b6c0; }
+.etiqueta { font-size: 0.8rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+.etiqueta-sucursal { background: #e8f0fe; color: var(--primario-oscuro); }
+.etiqueta-cd { background: #fff3e0; color: #9a5300; }
+
+/* Panel secundario (proveedores de un producto, productos de un proveedor) */
+.panel { margin-top: 20px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 16px; }
+.panel ul { margin: 0; padding-left: 20px; }
+
+/* Avisos: el texto del error es el mensaje exacto de la regla del backend */
+.aviso {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 8px; margin-bottom: 16px;
+}
+.aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
+.aviso-error { background: var(--error-fondo); color: var(--error-texto); }
