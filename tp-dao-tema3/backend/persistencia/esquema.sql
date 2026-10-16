@@ -6,3 +6,16 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- El código (SKU) es el identificador del producto: único sin distinguir
+-- mayúsculas. El precio puede ser menor al costo (venta a pérdida).
+CREATE TABLE IF NOT EXISTS productos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+codigo TEXT NOT NULL UNIQUE COLLATE NOCASE,
+nombre TEXT NOT NULL,
+categoria_id INTEGER NOT NULL REFERENCES categorias(id),
+precio_venta REAL NOT NULL CHECK (precio_venta > 0),
+costo REAL NOT NULL CHECK (costo >= 0),
+stock_minimo INTEGER NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
+activo INTEGER NOT NULL DEFAULT 1
+);

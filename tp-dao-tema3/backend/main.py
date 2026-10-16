@@ -32,3 +32,4 @@ def salud():
 
 
 app.include_router(rutas_maestros.router)
+app.include_router(rutas_maestros.router_productos)
