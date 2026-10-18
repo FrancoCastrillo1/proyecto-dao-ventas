@@ -65,3 +65,28 @@ ON ubicaciones (nombre_normalizado);
 -- Red de seguridad: un solo CD activo (los dados de baja no cuentan)
 CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo
 ON ubicaciones (tipo) WHERE tipo = 'CD' AND activo = 1;
+
+-- Cantidad de cada producto en cada ubicación (CD o sucursal): una fila por
+-- par producto-ubicación. La cantidad nunca puede ser negativa. El stock
+-- mínimo no se repite acá: se toma de productos.stock_minimo.
+CREATE TABLE IF NOT EXISTS stock (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
+UNIQUE (producto_id, ubicacion_id)
+);
+
+-- Libro de movimientos: solo se insertan filas, nunca se modifican ni se
+-- borran. La cantidad lleva signo (positiva entra, negativa sale).
+CREATE TABLE IF NOT EXISTS movimientos_stock (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+stock_id INTEGER NOT NULL REFERENCES stock(id),
+fecha TEXT NOT NULL,
+cantidad INTEGER NOT NULL CHECK (cantidad <> 0),
+tipo TEXT NOT NULL CHECK (tipo IN ('COMPRA', 'DESPACHO', 'RECEPCION', 'VENTA', 'DEVOLUCION', 'AJUSTE')),
+referencia TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS movimientos_stock_por_stock
+ON movimientos_stock (stock_id);
