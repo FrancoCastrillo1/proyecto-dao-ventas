@@ -15,3 +15,6 @@ class DatoInvalido(ErrorDeNegocio):
 
 class TransicionDeEstadoInvalida(ErrorDeNegocio):
     pass
+
+class StockInsuficiente(ErrorDeNegocio):
+    pass

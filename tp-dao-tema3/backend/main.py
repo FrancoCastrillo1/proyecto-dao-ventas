@@ -4,7 +4,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.api import rutas_maestros
+from backend.api import rutas_maestros, rutas_stock
 from backend.dominio.excepciones import DatoInvalido, EntidadDuplicada, ErrorDeNegocio, NoEncontrado
 from backend.persistencia.conexion import crear_tablas
 
@@ -35,3 +35,4 @@ app.include_router(rutas_maestros.router)
 app.include_router(rutas_maestros.router_productos)
 app.include_router(rutas_maestros.router_proveedores)
 app.include_router(rutas_maestros.router_ubicaciones)
+app.include_router(rutas_stock.router)
