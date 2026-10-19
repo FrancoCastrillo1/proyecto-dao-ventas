@@ -39,7 +39,7 @@ from datetime import datetime
 import pytest
 
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
-from backend.dominio.logistica import Bulto, CambioEstadoBulto
+from backend.dominio.logistica import Bulto, CambioEstadoBulto, DetalleBulto  # juan
 
 PRECINTO = "PRE-001"
 
@@ -50,9 +50,9 @@ def bulto_preparado():
     return Bulto(1)
 
 
-def bulto_con_items():
+def bulto_con_items(): # juan
     bulto = Bulto(1)
-    bulto.agregar_item("item-1")
+    bulto.agregar_item("prod-1", 5)
     return bulto
 
 
@@ -100,32 +100,32 @@ def test_bulto_nuevo_nace_preparado_y_vacio():
 
 def test_en_preparado_se_pueden_agregar_items():
     bulto = bulto_preparado()
-    bulto.agregar_item("item-1")
-    bulto.agregar_item("item-2")
-    assert bulto.items == ["item-1", "item-2"]
+    bulto.agregar_item("prod-1", 5)
+    bulto.agregar_item("prod-2", 3)
+    assert bulto.items == [DetalleBulto("prod-1", 5), DetalleBulto("prod-2", 3)]
     assert bulto.estado == "PREPARADO"
 
 
-def test_en_preparado_se_puede_quitar_un_item():
+def test_en_preparado_se_puede_quitar_un_item(): # juan
     bulto = bulto_preparado()
-    bulto.agregar_item("item-1")
-    bulto.agregar_item("item-2")
-    bulto.quitar_item("item-1")
-    assert bulto.items == ["item-2"]
+    bulto.agregar_item("prod-1", 5)
+    bulto.agregar_item("prod-2", 3)
+    bulto.quitar_item("prod-1")
+    assert bulto.items == [DetalleBulto("prod-2", 3)]
     assert bulto.estado == "PREPARADO"
 
 
 def test_quitar_un_item_que_no_esta_es_dato_invalido():
     bulto = bulto_con_items()
     with pytest.raises(DatoInvalido):
-        bulto.quitar_item("item-que-no-esta")
-    assert bulto.items == ["item-1"]
+        bulto.quitar_item("prod-que-no-esta")
+    assert bulto.items == [DetalleBulto("prod-1", 5)]
 
 
 def test_agregar_y_quitar_items_no_genera_historial():
     bulto = bulto_preparado()
-    bulto.agregar_item("item-1")
-    bulto.quitar_item("item-1")
+    bulto.agregar_item("prod-1", 5)
+    bulto.quitar_item("prod-1")
     assert bulto.historial == ()
 
 
@@ -142,7 +142,7 @@ def test_precintar_un_bulto_vacio_es_dato_invalido_y_no_cambia_de_estado():
 
 def test_no_se_puede_precintar_si_se_quitaron_todos_los_items():
     bulto = bulto_con_items()
-    bulto.quitar_item("item-1")
+    bulto.quitar_item("prod-1")
     with pytest.raises(DatoInvalido):
         bulto.precintar(PRECINTO)
     assert bulto.estado == "PREPARADO"
@@ -170,7 +170,7 @@ def test_precintar_pasa_a_precintado_y_guarda_el_precinto_sin_espacios():
 def test_flujo_completo_termina_en_verificado():
     bulto = bulto_preparado()
     assert bulto.estado == "PREPARADO"
-    bulto.agregar_item("item-1")
+    bulto.agregar_item("prod-1", 5)
     bulto.precintar(PRECINTO)
     assert bulto.estado == "PRECINTADO"
     bulto.despachar()
@@ -247,8 +247,8 @@ def test_solo_un_bulto_verificado_habilita_la_venta(armar, estado, habilita):
 # Cada fila: (cómo llegar al estado, nombre del estado, acciones que NO están permitidas)
 
 ACCIONES = {
-    "agregar_item": lambda b: b.agregar_item("item-x"),
-    "quitar_item": lambda b: b.quitar_item("item-1"),
+    "agregar_item": lambda b: b.agregar_item("prod-x", 1),
+    "quitar_item": lambda b: b.quitar_item("prod-1"),
     "precintar": lambda b: b.precintar("PRE-999"),
     "despachar": lambda b: b.despachar(),
     "recibir": lambda b: b.recibir(),
@@ -287,15 +287,15 @@ def test_transicion_invalida_lanza_error_y_no_cambia_el_estado(armar, estado, ac
 def test_agregar_item_fuera_de_preparado_no_modifica_los_items():
     bulto = bulto_precintado()
     with pytest.raises(TransicionDeEstadoInvalida):
-        bulto.agregar_item("item-tarde")
-    assert bulto.items == ["item-1"]
+        bulto.agregar_item("prod-tarde", 1)
+    assert bulto.items == [DetalleBulto("prod-1", 5)]
 
 
 def test_quitar_item_fuera_de_preparado_no_modifica_los_items():
     bulto = bulto_precintado()
     with pytest.raises(TransicionDeEstadoInvalida):
-        bulto.quitar_item("item-1")
-    assert bulto.items == ["item-1"]
+        bulto.quitar_item("prod-1")
+    assert bulto.items == [DetalleBulto("prod-1", 5)]
 
 
 def test_el_mensaje_del_error_dice_en_que_estado_estaba():
@@ -368,3 +368,24 @@ def test_str_del_bulto_muestra_estado_precinto_e_items():
     assert "PRECINTADO" in texto
     assert PRECINTO in texto
     assert "Items: 1" in texto
+
+# juan 
+def test_agregar_el_mismo_producto_suma_la_cantidad_en_una_sola_linea(): 
+    bulto = bulto_preparado()
+    bulto.agregar_item("prod-1", 5)
+    bulto.agregar_item("prod-1", 3)
+    assert bulto.items == [DetalleBulto("prod-1", 8)]
+
+@pytest.mark.parametrize("cantidad_invalida", [0, -2, 1.5, None])
+def test_agregar_con_cantidad_invalida_es_dato_invalido(cantidad_invalida):
+    bulto = bulto_con_items()
+    with pytest.raises(DatoInvalido):
+        bulto.agregar_item("prod-2", cantidad_invalida)
+    assert bulto.items == [DetalleBulto("prod-1", 5)]
+
+
+def test_agregar_cantidad_invalida_a_un_producto_existente_no_modifica_la_linea():
+    bulto = bulto_con_items()
+    with pytest.raises(DatoInvalido):
+        bulto.agregar_item("prod-1", 0)
+    assert bulto.items == [DetalleBulto("prod-1", 5)]

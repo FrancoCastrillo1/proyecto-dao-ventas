@@ -15,10 +15,10 @@ class EstadoBulto(ABC):
 
     # Por defecto ninguna acción está permitida. Cada estado redefine
     # solo las que sí puede hacer; el resto cae acá y lanza el error.
-    def agregar_item(self, bulto, item):
+    def agregar_item(self, bulto, producto, cantidad):
         raise TransicionDeEstadoInvalida(f"No se pueden agregar items a un bulto en estado {self.nombre}")
 
-    def quitar_item(self, bulto, item):
+    def quitar_item(self, bulto, producto):
         raise TransicionDeEstadoInvalida(f"No se pueden quitar items de un bulto en estado {self.nombre}")
 
     def precintar(self, bulto, nro_precinto):
@@ -43,13 +43,11 @@ class Preparado(EstadoBulto):
     def nombre(self):
         return "PREPARADO"
 
-    def agregar_item(self, bulto, item):
-        bulto.items.append(item)
+    def agregar_item(self, bulto, producto, cantidad):
+        bulto.sumar_detalle(producto, cantidad)
 
-    def quitar_item(self, bulto, item):
-        if item not in bulto.items:
-            raise DatoInvalido("El item no está en el bulto")
-        bulto.items.remove(item)
+    def quitar_item(self, bulto, producto):
+        bulto.sacar_detalle(producto)
 
     def precintar(self, bulto, nro_precinto):
         # Primero se valida todo, después se modifica el bulto

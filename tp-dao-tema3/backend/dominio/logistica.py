@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from backend.dominio.estados_bulto import Preparado
+from backend.dominio.excepciones import DatoInvalido
+from backend.dominio.stock import _validar_entero
 
 
 @dataclass(frozen=True)
@@ -30,11 +32,28 @@ class Bulto():
     def __str__(self):
         return f"Bulto {self.id_bulto} - Estado: {self.estado}, Precinto: {self.nro_precinto}, Items: {len(self.items)}"
 
-    def agregar_item(self, item):
-        self.estado_actual.agregar_item(self, item)
+    def agregar_item(self, producto, cantidad):
+        self.estado_actual.agregar_item(self, producto, cantidad)
 
-    def quitar_item(self, item):
-        self.estado_actual.quitar_item(self, item)
+    def quitar_item(self, producto):
+        self.estado_actual.quitar_item(self, producto)
+        
+    def sumar_detalle(self, producto, cantidad):
+        # Se valida ANTES de sumar: si no, sumar 0 a una línea existente
+        # daría un total válido y pasaría sin error
+        _validar_entero(cantidad, "La cantidad", 1)
+        for i, detalle in enumerate(self.items):
+            if detalle.producto == producto:
+                self.items[i] = DetalleBulto(producto, detalle.cantidad + cantidad)
+                return
+        self.items.append(DetalleBulto(producto, cantidad))
+
+    def sacar_detalle(self, producto):
+        for detalle in self.items:
+            if detalle.producto == producto:
+                self.items.remove(detalle)
+                return
+        raise DatoInvalido("El producto no está en el bulto")
 
     def precintar(self, nro_precinto):
         self.estado_actual.precintar(self, nro_precinto)
@@ -66,3 +85,18 @@ class Bulto():
     @property
     def estado(self):
         return self.estado_actual.nombre
+
+
+    #juan _______
+
+@dataclass(frozen=True)
+class DetalleBulto:
+    """Una línea del bulto: qué producto lleva y cuántas unidades. Es inmutable,
+    igual que el registro del historial. Para cambiar una cantidad se reemplaza
+    la línea por otra."""
+    producto: object
+    cantidad: int
+
+    def __post_init__(self):
+        # Una línea con cantidad 0 no tiene sentido: el mínimo es 1
+        _validar_entero(self.cantidad, "La cantidad", 1)
