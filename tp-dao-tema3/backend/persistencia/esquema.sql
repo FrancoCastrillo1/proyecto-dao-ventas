@@ -90,3 +90,69 @@ referencia TEXT NOT NULL DEFAULT ''
 
 CREATE INDEX IF NOT EXISTS movimientos_stock_por_stock
 ON movimientos_stock (stock_id);
+
+-- ================================================================== Ventas
+-- Todos los montos se guardan en CENTAVOS (INTEGER): $1500.50 → 150050.
+-- Así los SUM de los reportes dan exactos (con REAL aparecen diferencias
+-- de centavos). El DAO convierte entre Decimal y centavos.
+
+-- Una venta ya cobrada. El medio y el porcentaje se guardan tal como se
+-- aplicaron: si después cambia el descuento del efectivo, esta venta no cambia.
+-- El comprobante es correlativo por sucursal (punto de venta).
+CREATE TABLE IF NOT EXISTS ventas (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+sucursal_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL,
+medio_pago TEXT NOT NULL CHECK (medio_pago IN ('EFECTIVO', 'DEBITO', 'TRANSFERENCIA', 'CREDITO')),
+porcentaje_ajuste TEXT NOT NULL,
+subtotal INTEGER NOT NULL CHECK (subtotal > 0),
+total INTEGER NOT NULL CHECK (total > 0),
+vuelto INTEGER NOT NULL DEFAULT 0 CHECK (vuelto >= 0),
+nro_comprobante INTEGER NOT NULL CHECK (nro_comprobante > 0),
+UNIQUE (sucursal_id, nro_comprobante)
+);
+
+CREATE INDEX IF NOT EXISTS ventas_por_sucursal_y_fecha
+ON ventas (sucursal_id, fecha);
+
+-- Precio y costo DEL MOMENTO de la venta (no se leen de productos)
+CREATE TABLE IF NOT EXISTS detalles_venta (
+venta_id INTEGER NOT NULL REFERENCES ventas(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+precio_unitario INTEGER NOT NULL CHECK (precio_unitario > 0),
+costo_unitario INTEGER NOT NULL CHECK (costo_unitario >= 0),
+PRIMARY KEY (venta_id, producto_id)
+);
+
+-- Solo de ventas registradas (la clave foránea lo exige también en la base)
+CREATE TABLE IF NOT EXISTS devoluciones (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+venta_id INTEGER NOT NULL REFERENCES ventas(id),
+fecha TEXT NOT NULL,
+motivo TEXT NOT NULL,
+importe INTEGER NOT NULL CHECK (importe >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS detalles_devolucion (
+devolucion_id INTEGER NOT NULL REFERENCES devoluciones(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+importe INTEGER NOT NULL CHECK (importe >= 0),
+PRIMARY KEY (devolucion_id, producto_id)
+);
+
+-- Caja de cada local: como el libro de stock, solo se insertan filas. El
+-- importe lleva signo (venta entra, devolución sale).
+CREATE TABLE IF NOT EXISTS movimientos_caja (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+sucursal_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL,
+tipo TEXT NOT NULL CHECK (tipo IN ('VENTA', 'DEVOLUCION')),
+medio_pago TEXT NOT NULL,
+importe INTEGER NOT NULL,
+referencia TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS movimientos_caja_por_sucursal_y_fecha
+ON movimientos_caja (sucursal_id, fecha);

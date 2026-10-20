@@ -11,6 +11,12 @@ from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
 PLAZO_DEVOLUCION_DIAS = 30
 
 
+def ahora():
+    # Sin microsegundos: es la precisión con la que se guarda en la base, así
+    # una venta leída de la base es igual a la que se guardó
+    return datetime.now().replace(microsecond=0)
+
+
 def _validar_cantidad(cantidad):
     # bool es subclase de int en Python, por eso se lo excluye aparte
     if isinstance(cantidad, bool) or not isinstance(cantidad, int):
@@ -95,7 +101,7 @@ class Venta:
     def __init__(self, sucursal_id, fecha=None, id=None, detalles=(), pago=None, comprobante=None, devoluciones=()):
         self.id = id
         self.sucursal_id = sucursal_id
-        self.fecha = fecha or datetime.now()
+        self.fecha = fecha or ahora()
         self._detalles = list(detalles)
         self._pago = pago
         self._comprobante = comprobante
@@ -174,7 +180,8 @@ class Venta:
         if self._comprobante is not None:
             raise TransicionDeEstadoInvalida("La venta ya tiene comprobante")
         _validar_cantidad(numero)
-        self._comprobante = Comprobante(self.sucursal_id, numero, datetime.now())
+        # El ticket lleva la fecha de la venta
+        self._comprobante = Comprobante(self.sucursal_id, numero, self.fecha)
 
     def referencia(self):
         # Cómo se nombra la venta en los movimientos de stock y caja
@@ -206,7 +213,7 @@ class Venta:
         devolución: si un ítem no cumple, no se devuelve nada.
         Se reintegra lo que realmente se cobró: si se pagó en efectivo con 15%
         de descuento, devolver un producto de $1000 reintegra $850."""
-        fecha = fecha or datetime.now()
+        fecha = fecha or ahora()
         motivo = (motivo or "").strip()
         if not self.esta_cobrada():
             raise TransicionDeEstadoInvalida("No se puede devolver una venta que no se cobró")
@@ -273,7 +280,7 @@ class Devolucion:
         self.medio_pago = medio_pago  # se reintegra por el mismo medio con que se cobró
         self.motivo = motivo
         self.detalles = tuple(detalles)
-        self.fecha = fecha or datetime.now()
+        self.fecha = fecha or ahora()
 
     @property
     def importe(self):
