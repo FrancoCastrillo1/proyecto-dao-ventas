@@ -21,7 +21,15 @@ class ReposicionService:
         for producto, cantidad in items:
             pedido.agregar_item(producto, cantidad)
         return self.dao.guardar_pedido(pedido)
+    
+    def obtener_pedido(self, pedido_id):
+        return self.dao.obtener_pedido(pedido_id)
 
+    def obtener_orden(self, orden_id):
+        return self.dao.obtener_orden(orden_id)
+
+    def obtener_remito(self, remito_id):
+        return self.dao.obtener_remito(remito_id)
     def consolidar_pedido(self, pedido_id):
         pedido = self.dao.obtener_pedido(pedido_id)
         pedido.consolidar()

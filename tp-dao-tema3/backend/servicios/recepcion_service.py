@@ -18,6 +18,9 @@ class RecepcionService:
         bulto.recibir()
         self.dao.guardar_bulto(bulto)
 
+    def obtener_bulto(self, bulto_id):
+        return self.dao.obtener_bulto(bulto_id)
+
     def verificar_bulto(self, bulto_id, nro_leido, intacto):
         bulto = self.dao.obtener_bulto(bulto_id)
         destino = self.dao.obtener_destino_del_bulto(bulto_id)
