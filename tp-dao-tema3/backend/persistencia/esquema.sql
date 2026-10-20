@@ -90,3 +90,93 @@ referencia TEXT NOT NULL DEFAULT ''
 
 CREATE INDEX IF NOT EXISTS movimientos_stock_por_stock
 ON movimientos_stock (stock_id);
+
+-- ---------- Logística: reposición CD -> locales ----------
+
+-- Lo que pide UN local al CD. Mientras está PENDIENTE se edita; al consolidarse
+-- queda cerrado. La ubicación es siempre una sucursal.
+CREATE TABLE IF NOT EXISTS pedidos_reposicion (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL DEFAULT (datetime('now')),
+estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'CONSOLIDADO'))
+);
+
+-- Líneas de lo PEDIDO (distinto de lo enviado, que va en detalles_bulto).
+CREATE TABLE IF NOT EXISTS detalles_pedido (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+pedido_id INTEGER NOT NULL REFERENCES pedidos_reposicion(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad >= 1),
+UNIQUE (pedido_id, producto_id)
+);
+
+-- Lo que arma el CD juntando pedidos de varios locales.
+CREATE TABLE IF NOT EXISTS ordenes_reposicion (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL DEFAULT (datetime('now')),
+estado TEXT NOT NULL DEFAULT 'ABIERTA' CHECK (estado IN ('ABIERTA', 'CERRADA'))
+);
+
+-- Qué pedidos consolida cada orden. pedido_id es la clave primaria: un pedido
+-- solo puede estar en UNA orden. El dominio no puede saberlo, lo garantiza la base.
+CREATE TABLE IF NOT EXISTS orden_pedido (
+orden_id INTEGER NOT NULL REFERENCES ordenes_reposicion(id),
+pedido_id INTEGER PRIMARY KEY REFERENCES pedidos_reposicion(id)
+);
+
+-- Documento de despacho del CD hacia UN local.
+CREATE TABLE IF NOT EXISTS remitos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+destino_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL DEFAULT (datetime('now')),
+estado TEXT NOT NULL DEFAULT 'ABIERTO' CHECK (estado IN ('ABIERTO', 'CERRADO')),
+CHECK (origen_id <> destino_id)
+);
+
+-- El estado se guarda como texto y el DAO lo convierte al objeto State al leer.
+-- Solo un bulto PREPARADO puede no tener precinto.
+CREATE TABLE IF NOT EXISTS bultos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+remito_id INTEGER REFERENCES remitos(id),
+nro_precinto TEXT,
+estado TEXT NOT NULL DEFAULT 'PREPARADO'
+CHECK (estado IN ('PREPARADO', 'PRECINTADO', 'EN_TRANSITO', 'RECIBIDO', 'VERIFICADO', 'RECHAZADO')),
+CHECK (estado = 'PREPARADO' OR (nro_precinto IS NOT NULL AND length(trim(nro_precinto)) > 0))
+);
+
+CREATE TABLE IF NOT EXISTS detalles_bulto (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+bulto_id INTEGER NOT NULL REFERENCES bultos(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad >= 1),
+UNIQUE (bulto_id, producto_id)
+);
+
+-- Trazabilidad inmutable: solo se insertan filas. Los triggers de abajo
+-- rechazan cualquier UPDATE o DELETE, así que la regla vale aunque falle el DAO.
+CREATE TABLE IF NOT EXISTS historial_bulto (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+bulto_id INTEGER NOT NULL REFERENCES bultos(id),
+fecha_hora TEXT NOT NULL,
+estado_anterior TEXT NOT NULL,
+estado_nuevo TEXT NOT NULL,
+observacion TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS historial_bulto_por_bulto
+ON historial_bulto (bulto_id);
+
+CREATE TRIGGER IF NOT EXISTS historial_bulto_no_update
+BEFORE UPDATE ON historial_bulto
+BEGIN
+SELECT RAISE(ABORT, 'El historial del bulto es inmutable: no se puede modificar');
+END;
+
+CREATE TRIGGER IF NOT EXISTS historial_bulto_no_delete
+BEFORE DELETE ON historial_bulto
+BEGIN
+SELECT RAISE(ABORT, 'El historial del bulto es inmutable: no se puede borrar');
+END;
