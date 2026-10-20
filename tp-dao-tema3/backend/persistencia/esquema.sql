@@ -239,3 +239,30 @@ BEFORE DELETE ON historial_bultos
 BEGIN
     SELECT RAISE(ABORT, 'El historial de estados de un bulto es inmutable: no se puede borrar');
 END;
+
+-- Los libros de stock y de caja ya eran "solo INSERT" por convención: con
+-- estos triggers lo garantiza la base, igual que el historial de bultos.
+-- Una corrección se hace con un movimiento nuevo (AJUSTE), nunca editando.
+CREATE TRIGGER IF NOT EXISTS movimientos_stock_no_se_modifican
+BEFORE UPDATE ON movimientos_stock
+BEGIN
+    SELECT RAISE(ABORT, 'Los movimientos de stock son inmutables: se corrigen con un AJUSTE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS movimientos_stock_no_se_borran
+BEFORE DELETE ON movimientos_stock
+BEGIN
+    SELECT RAISE(ABORT, 'Los movimientos de stock son inmutables: se corrigen con un AJUSTE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS movimientos_caja_no_se_modifican
+BEFORE UPDATE ON movimientos_caja
+BEGIN
+    SELECT RAISE(ABORT, 'Los movimientos de caja son inmutables');
+END;
+
+CREATE TRIGGER IF NOT EXISTS movimientos_caja_no_se_borran
+BEFORE DELETE ON movimientos_caja
+BEGIN
+    SELECT RAISE(ABORT, 'Los movimientos de caja son inmutables');
+END;

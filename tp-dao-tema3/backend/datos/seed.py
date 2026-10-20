@@ -1,66 +1,164 @@
-from backend.dominio.excepciones import ErrorDeNegocio
+# Datos de prueba: carga un escenario completo para probar el sistema y los
+# reportes desde /docs o el front.
+#
+# Todo se carga A TRAVÉS DE LOS SERVICES (no con INSERT directos): así se
+# respetan todas las reglas de negocio, cada unidad de stock deja su
+# movimiento y cada bulto su historial. Si un dato violara una regla, el seed
+# fallaría en vez de dejar la base inconsistente.
+#
+# Uso (desde tp-dao-tema3):
+#   .venv\Scripts\python -m backend.datos.seed              carga solo si la base está vacía
+#   .venv\Scripts\python -m backend.datos.seed --reiniciar  BORRA la base local y la vuelve a cargar
+import sys
+
+from backend.config import DB_PATH
 from backend.dominio.stock import TipoMovimiento
-from backend.persistencia.conexion import crear_tablas, get_conexion
+from backend.persistencia.conexion import crear_tablas
+from backend.persistencia.dao_maestros import ProductoDAO
+from backend.servicios.maestros_service import (
+    CategoriaService, ProductoService, ProveedorService, UbicacionService,
+)
+from backend.servicios.recepcion_service import RecepcionService
+from backend.servicios.reposicion_service import ReposicionService
 from backend.servicios.stock_service import StockService
+from backend.servicios.ventas_service import VentasService
+
+# (código, nombre, categoría, precio, costo, stock mínimo)
+PRODUCTOS = [
+    ("BEB-001", "Gaseosa Cola 2.25L", "Bebidas", 2500, 1600, 20),
+    ("BEB-002", "Agua Mineral 1.5L", "Bebidas", 1200, 650, 15),
+    ("BEB-003", "Jugo de Naranja 1L", "Bebidas", 1800, 1100, 10),
+    ("ALM-001", "Fideos Spaghetti 500g", "Almacén", 1500, 900, 25),
+    ("ALM-002", "Arroz Largo Fino 1kg", "Almacén", 2100, 1300, 20),
+    ("ALM-003", "Aceite de Girasol 1.5L", "Almacén", 4200, 2900, 10),
+    ("LIM-001", "Lavandina 1L", "Limpieza", 1100, 600, 12),
+    ("LIM-002", "Detergente 750ml", "Limpieza", 1900, 1150, 10),
+    ("LAC-001", "Leche Entera 1L", "Lácteos", 1400, 950, 30),
+    # En promoción por debajo del costo: el reporte de margen muestra la pérdida
+    ("LAC-002", "Yogur Bebible 1L (promo)", "Lácteos", 1400, 1500, 8),
+]
+
+# (CUIT, razón social, teléfono, email, prefijos de código que provee)
+PROVEEDORES = [
+    ("20-12345678-6", "Distribuidora Sur SA", "11-4444-5555", "ventas@distsur.com", ("BEB",)),
+    ("30-71234567-1", "Mayorista Norte SA", "11-5555-6666", "pedidos@mayoristanorte.com", ("ALM", "LIM")),
+    ("27-34567890-0", "Láctea del Valle SRL", None, "comercial@lacteadelvalle.com", ("LAC", "BEB-003")),
+]
+
+
+def base_vacia():
+    return not ProductoDAO().listar(solo_activos=False)
+
 
 def cargar_datos_prueba():
-    crear_tablas()  # por si se corre antes de levantar el backend por primera vez
-    conexion = get_conexion()
-    cursor = conexion.cursor()
+    crear_tablas()
+    if not base_vacia():
+        print("La base ya tiene datos: no se cargó nada. Para empezar de cero usá --reiniciar.")
+        return
 
-    # 1. Categoría de prueba
-    cursor.execute("""
-        INSERT OR IGNORE INTO categorias (id, nombre, nombre_normalizado, activo)
-        VALUES (1, 'Bebidas', 'bebidas', 1)
-    """)
+    # ------------------------------------------------------------ Maestros
+    categorias = CategoriaService()
+    ids_categoria = {nombre: categorias.crear(nombre).id for nombre in ("Bebidas", "Almacén", "Limpieza", "Lácteos")}
 
-    # 2. Producto de prueba (con stock_minimo)
-    cursor.execute("""
-        INSERT OR IGNORE INTO productos (id, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo, activo)
-        VALUES (1, 'PROD-001', 'Gaseosa Cola 2L', 1, 1500.0, 1000.0, 20, 1)
-    """)
+    productos_service = ProductoService()
+    p = {}  # código → id
+    for codigo, nombre, categoria, precio, costo, minimo in PRODUCTOS:
+        p[codigo] = productos_service.crear(codigo, nombre, ids_categoria[categoria], precio, costo, minimo).id
 
-    cursor.execute("""
-        INSERT OR IGNORE INTO productos (id, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo, activo)
-        VALUES (2, 'PROD-002', 'Agua Mineral 1.5L', 1, 800.0, 450.0, 10, 1)
-    """)
+    proveedores = ProveedorService()
+    for cuit, razon_social, telefono, email, prefijos in PROVEEDORES:
+        proveedor = proveedores.crear(cuit, razon_social, telefono, email)
+        for codigo, producto_id in p.items():
+            if codigo.startswith(prefijos):
+                proveedores.asignar_producto(proveedor.id, producto_id)
 
-    # 3. Ubicaciones (Centro de Distribución y Sucursal)
-    cursor.execute("""
-        INSERT OR IGNORE INTO ubicaciones (id, tipo, nombre, nombre_normalizado, direccion, activo)
-        VALUES (1, 'CD', 'Centro de Distribucion Central', 'centro de distribucion central', 'Av. Colon 1000', 1)
-    """)
+    ubicaciones = UbicacionService()
+    cd = ubicaciones.crear("CD", "CD Central", "Av. Colón 1000").id
+    centro = ubicaciones.crear("SUCURSAL", "Sucursal Centro", "San Martín 250").id
+    norte = ubicaciones.crear("SUCURSAL", "Sucursal Norte", "Belgrano 1800").id
+    sur = ubicaciones.crear("SUCURSAL", "Sucursal Sur", "Mitre 75").id
 
-    cursor.execute("""
-        INSERT OR IGNORE INTO ubicaciones (id, tipo, nombre, nombre_normalizado, direccion, activo)
-        VALUES (2, 'SUCURSAL', 'Sucursal Centro', 'sucursal centro', 'San Martin 250', 1)
-    """)
-
-    conexion.commit()
-    conexion.close()
-    cargar_stock_prueba()
-    print("¡Datos de prueba (Seed) cargados con éxito!")
-
-
-# Stock inicial por el service (así deja sus movimientos). Solo se carga si
-# está en 0, para que correr el seed dos veces no lo duplique.
-# PROVISORIO: al local se le carga como RECEPCION para poder probar ventas
-# desde /docs mientras no esté el circuito de bultos (bloque B). Cuando esté,
-# el stock del local tiene que entrar solo por bultos verificados.
-def cargar_stock_prueba():
+    # --------------------------------------------------- Compras al CD
     stock = StockService()
-    cargas = [
-        (1, TipoMovimiento.COMPRA, 100, "Seed: compra inicial al CD"),
-        (2, TipoMovimiento.RECEPCION, 30, "Seed: stock inicial del local (provisorio)"),
+    for codigo, producto_id in p.items():
+        stock.ingresar(cd, producto_id, 300, TipoMovimiento.COMPRA, f"Factura compra inicial {codigo}")
+
+    # ------------------------------------------------------- Reposición
+    reposicion = ReposicionService()
+    recepcion = RecepcionService()
+    pedido_centro = reposicion.crear_pedido(centro, [
+        (p["BEB-001"], 60), (p["BEB-002"], 40), (p["ALM-001"], 50), (p["ALM-002"], 30),
+        (p["LIM-001"], 20), (p["LAC-001"], 50), (p["LAC-002"], 20),
+    ])
+    pedido_norte = reposicion.crear_pedido(norte, [
+        (p["BEB-001"], 30), (p["BEB-003"], 20), (p["ALM-003"], 15), (p["LIM-002"], 15),
+    ])
+    pedido_sur = reposicion.crear_pedido(sur, [(p["BEB-002"], 25), (p["LAC-001"], 40)])
+    orden = reposicion.crear_orden([pedido_centro.id_pedido, pedido_norte.id_pedido, pedido_sur.id_pedido])
+
+    def armar(destino, bultos, prefijo):
+        remito = reposicion.crear_remito(orden.id_orden, destino)
+        ids = []
+        for i, items in enumerate(bultos, start=1):
+            bulto = reposicion.agregar_bulto(remito.id_remito, [(p[codigo], cantidad) for codigo, cantidad in items])
+            reposicion.precintar(bulto.id_bulto, f"{prefijo}-{i:03d}")
+            ids.append((bulto.id_bulto, f"{prefijo}-{i:03d}"))
+        reposicion.despachar(remito.id_remito)
+        return ids
+
+    # Centro: todo llega bien
+    for bulto_id, precinto in armar(centro, [
+        [("BEB-001", 60), ("BEB-002", 40)],
+        [("ALM-001", 50), ("ALM-002", 30), ("LIM-001", 20)],
+        [("LAC-001", 50), ("LAC-002", 20)],
+    ], "PC"):
+        recepcion.recibir(bulto_id)
+        recepcion.verificar(bulto_id, precinto, True)
+
+    # Norte: un bulto llega con el precinto roto → rechazo logístico (merma)
+    norte_bultos = armar(norte, [
+        [("BEB-001", 30), ("BEB-003", 20)],
+        [("ALM-003", 15), ("LIM-002", 15)],
+    ], "PN")
+    (bueno, precinto_bueno), (roto, precinto_roto) = norte_bultos
+    recepcion.recibir(bueno)
+    recepcion.verificar(bueno, precinto_bueno, True)
+    recepcion.recibir(roto)
+    recepcion.verificar(roto, precinto_roto, False)
+
+    # Sur: despachado y todavía en camino (para ver un remito En tránsito)
+    armar(sur, [[("BEB-002", 25), ("LAC-001", 40)]], "PS")
+
+    # ------------------------------------------------------------- Ventas
+    ventas = VentasService()
+    ventas_hechas = [
+        ventas.vender(centro, [(p["BEB-001"], 6), (p["ALM-001"], 10)], "DEBITO"),
+        ventas.vender(centro, [(p["LAC-001"], 12), (p["LAC-002"], 8)], "EFECTIVO", 40000),
+        ventas.vender(centro, [(p["ALM-002"], 5), (p["LIM-001"], 3)], "CREDITO"),
+        ventas.vender(centro, [(p["BEB-002"], 15), (p["BEB-001"], 20)], "TRANSFERENCIA"),
+        ventas.vender(centro, [(p["LAC-001"], 30)], "EFECTIVO"),
+        ventas.vender(norte, [(p["BEB-001"], 10), (p["BEB-003"], 4)], "DEBITO"),
+        ventas.vender(norte, [(p["BEB-003"], 12)], "CREDITO"),
+        ventas.vender(norte, [(p["BEB-001"], 8)], "EFECTIVO", 20000),
     ]
-    for producto_id in (1, 2):
-        for ubicacion_id, tipo, cantidad, referencia in cargas:
-            try:
-                if stock.obtener(ubicacion_id, producto_id).cantidad == 0:
-                    stock.ingresar(ubicacion_id, producto_id, cantidad, tipo, referencia)
-            except ErrorDeNegocio as error:
-                # Pasa si la base ya tenía otros datos con esos ids (ej. el id 2 es el CD)
-                print(f"No se cargó stock del producto {producto_id} en la ubicación {ubicacion_id}: {error}")
+    # Devoluciones: solo de ventas registradas y de lo que se vendió
+    ventas.devolver(ventas_hechas[1].id, [(p["LAC-002"], 2)], "Producto vencido")
+    ventas.devolver(ventas_hechas[5].id, [(p["BEB-003"], 1)], "Envase dañado")
+
+    print("Datos de prueba cargados:")
+    print(f"  {len(PRODUCTOS)} productos, {len(PROVEEDORES)} proveedores, CD + 3 sucursales")
+    print("  1 orden de reposición: Centro verificado, Norte con un bulto rechazado, Sur en tránsito")
+    print(f"  {len(ventas_hechas)} ventas y 2 devoluciones")
+
+
+def reiniciar():
+    # Borra SOLO la base local de desarrollo (está en .gitignore)
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+        print(f"Base borrada: {DB_PATH}")
+
 
 if __name__ == "__main__":
+    if "--reiniciar" in sys.argv:
+        reiniciar()
     cargar_datos_prueba()
