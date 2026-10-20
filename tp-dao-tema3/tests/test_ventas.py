@@ -1,6 +1,7 @@
 # Tests de ventas: totales, medios de pago (Strategy), comprobantes y devoluciones.
 # Acá NO se prueba la base de datos ni la api.
 from dataclasses import FrozenInstanceError
+from datetime import datetime
 from decimal import Decimal
 
 import pytest
@@ -172,3 +173,111 @@ def test_la_venta_genera_una_entrada_de_caja_por_lo_cobrado():
 def test_una_venta_sin_cobrar_no_mueve_la_caja():
     with pytest.raises(TransicionDeEstadoInvalida):
         venta_con((producto(), 1)).movimiento_caja()
+
+
+# ---------- devoluciones ----------
+
+def venta_cobrada(medio=None, items=None, fecha=None):
+    """Venta del local 2: 3 unidades del producto 1 ($1000) y 2 del producto 2 ($500)."""
+    venta = Venta(2, fecha=fecha, id=10)
+    for prod, cantidad in items or [(producto(1, 1000), 3), (producto(2, 500), 2)]:
+        venta.agregar_item(prod, cantidad)
+    venta.cobrar(medio or Debito())
+    return venta
+
+
+@pytest.mark.parametrize("medio, reintegro", [
+    (Efectivo(), D("850.00")), (Debito(), D("1000.00")), (Credito(), D("1100.00")),
+])
+def test_se_reintegra_lo_que_realmente_se_cobro(medio, reintegro):
+    devolucion = venta_cobrada(medio).devolver([(1, 1)], "Falla de fábrica")
+    assert devolucion.importe == reintegro
+    assert devolucion.medio_pago == medio.nombre
+
+
+def test_la_devolucion_puede_tener_varios_productos():
+    devolucion = venta_cobrada().devolver([(1, 2), (2, 1)], "No le gustó")
+    assert [(d.producto_id, d.cantidad, d.importe) for d in devolucion.detalles] == [
+        (1, 2, D("2000.00")), (2, 1, D("500.00")),
+    ]
+    assert devolucion.importe == D("2500.00")
+
+
+def test_no_se_devuelve_un_producto_que_no_estaba_en_la_venta():
+    with pytest.raises(DatoInvalido):
+        venta_cobrada().devolver([(99, 1)], "Error")
+
+
+def test_no_se_devuelve_mas_de_lo_vendido():
+    with pytest.raises(DatoInvalido):
+        venta_cobrada().devolver([(1, 4)], "Error")
+
+
+def test_las_devoluciones_anteriores_descuentan_de_lo_devolvible():
+    venta = venta_cobrada()
+    venta.devolver([(1, 2)], "Primera")
+    assert venta.cantidad_devolvible(1) == 1
+    with pytest.raises(DatoInvalido):
+        venta.devolver([(1, 2)], "Segunda")
+    venta.devolver([(1, 1)], "Segunda")
+    assert venta.cantidad_devolvible(1) == 0
+
+
+def test_el_mismo_producto_repetido_en_el_pedido_suma():
+    with pytest.raises(DatoInvalido):
+        venta_cobrada().devolver([(1, 2), (1, 2)], "Error")   # 4 > 3 vendidas
+
+
+def test_si_un_item_falla_no_se_devuelve_nada():
+    venta = venta_cobrada()
+    with pytest.raises(DatoInvalido):
+        venta.devolver([(1, 1), (2, 5)], "Error")
+    assert venta.devoluciones == ()
+    assert venta.cantidad_devolvible(1) == 3
+
+
+def test_vencido_el_plazo_no_se_acepta():
+    venta = venta_cobrada(fecha=datetime(2026, 9, 1, 10, 0))
+    with pytest.raises(DatoInvalido):
+        venta.devolver([(1, 1)], "Tarde", fecha=datetime(2026, 10, 2, 10, 0))   # 31 días
+
+
+def test_el_ultimo_dia_del_plazo_se_acepta():
+    venta = venta_cobrada(fecha=datetime(2026, 9, 1, 10, 0))
+    venta.devolver([(1, 1)], "Justo", fecha=datetime(2026, 10, 1, 10, 0))      # 30 días
+
+
+@pytest.mark.parametrize("motivo", ["", "   ", None, "x" * 201])
+def test_motivo_invalido(motivo):
+    with pytest.raises(DatoInvalido):
+        venta_cobrada().devolver([(1, 1)], motivo)
+
+
+@pytest.mark.parametrize("items", [[], [(1, 0)], [(1, -1)], [(1, 1.5)]])
+def test_items_invalidos(items):
+    with pytest.raises(DatoInvalido):
+        venta_cobrada().devolver(items, "Error")
+
+
+def test_no_se_devuelve_una_venta_sin_cobrar():
+    venta = venta_con((producto(), 1))
+    with pytest.raises(TransicionDeEstadoInvalida):
+        venta.devolver([(1, 1)], "Error")
+
+
+def test_nunca_se_reintegra_mas_de_lo_cobrado_por_redondeo():
+    # 3 x $0.10 en efectivo: se cobra $0.26 (0.255 redondeado), pero cada
+    # unidad suelta reintegra $0.09 (0.085 redondeado): 3 x 0.09 = 0.27
+    venta = venta_cobrada(Efectivo(), [(producto(1, 0.10, 0), 3)])
+    assert venta.total == D("0.26")
+    for _ in range(3):
+        venta.devolver([(1, 1)], "Una por una")
+    assert venta.total_reintegrado == venta.total
+
+
+def test_la_devolucion_genera_una_salida_de_caja():
+    devolucion = venta_cobrada(Efectivo()).devolver([(1, 1)], "Falla")
+    devolucion.id = 4
+    movimiento = devolucion.movimiento_caja()
+    assert (movimiento.tipo, movimiento.medio_pago, movimiento.importe) == ("DEVOLUCION", "EFECTIVO", D("-850.00"))
+    assert movimiento.referencia == "Devolución 4 de la venta 10"

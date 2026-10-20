@@ -2,10 +2,13 @@
 # con reglas como calcular totales o validar que lo devuelto se haya vendido.
 # Los medios de pago concretos NO van acá, van en medios_pago.py (patrón Strategy).
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from backend.dominio.dinero import CERO, a_dinero
+from backend.dominio.dinero import CERO, a_dinero, aplicar_porcentaje
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
+
+# Regla del negocio definida por el grupo: pasado este plazo no se aceptan devoluciones
+PLAZO_DEVOLUCION_DIAS = 30
 
 
 def _validar_cantidad(cantidad):
@@ -87,15 +90,16 @@ class Venta:
     agregar_item() → cobrar() → emitir_comprobante(). Una vez cobrada ya no
     se puede modificar."""
 
-    # Los parámetros detalles, pago y comprobante existen para que el DAO pueda
-    # reconstruir una venta guardada; una venta nueva arranca vacía.
-    def __init__(self, sucursal_id, fecha=None, id=None, detalles=(), pago=None, comprobante=None):
+    # Los parámetros detalles, pago, comprobante y devoluciones existen para que
+    # el DAO pueda reconstruir una venta guardada; una venta nueva arranca vacía.
+    def __init__(self, sucursal_id, fecha=None, id=None, detalles=(), pago=None, comprobante=None, devoluciones=()):
         self.id = id
         self.sucursal_id = sucursal_id
         self.fecha = fecha or datetime.now()
         self._detalles = list(detalles)
         self._pago = pago
         self._comprobante = comprobante
+        self._devoluciones = list(devoluciones)
 
     # Solo lectura desde afuera: se cambian con los métodos de abajo
     @property
@@ -109,6 +113,10 @@ class Venta:
     @property
     def comprobante(self):
         return self._comprobante
+
+    @property
+    def devoluciones(self):
+        return tuple(self._devoluciones)
 
     def esta_cobrada(self):
         return self._pago is not None
@@ -178,5 +186,100 @@ class Venta:
         return MovimientoCaja(self.fecha, self.sucursal_id, "VENTA", self._pago.medio.nombre,
                               self._pago.monto, self.referencia())
 
+    # ------------------------------------------------------------ Devoluciones
+
+    def cantidad_vendida(self, producto_id):
+        return sum(d.cantidad for d in self._detalles if d.producto_id == producto_id)
+
+    def cantidad_devuelta(self, producto_id):
+        return sum(d.cantidad for dev in self._devoluciones for d in dev.detalles if d.producto_id == producto_id)
+
+    def cantidad_devolvible(self, producto_id):
+        return self.cantidad_vendida(producto_id) - self.cantidad_devuelta(producto_id)
+
+    @property
+    def total_reintegrado(self):
+        return sum((dev.importe for dev in self._devoluciones), CERO)
+
+    def devolver(self, items, motivo, fecha=None):
+        """items: pares (producto_id, cantidad). Valida todo antes de crear la
+        devolución: si un ítem no cumple, no se devuelve nada.
+        Se reintegra lo que realmente se cobró: si se pagó en efectivo con 15%
+        de descuento, devolver un producto de $1000 reintegra $850."""
+        fecha = fecha or datetime.now()
+        motivo = (motivo or "").strip()
+        if not self.esta_cobrada():
+            raise TransicionDeEstadoInvalida("No se puede devolver una venta que no se cobró")
+        if not motivo:
+            raise DatoInvalido("La devolución tiene que indicar el motivo")
+        if len(motivo) > 200:
+            raise DatoInvalido("El motivo no puede tener más de 200 caracteres")
+        if fecha - self.fecha > timedelta(days=PLAZO_DEVOLUCION_DIAS):
+            raise DatoInvalido(f"Venció el plazo de {PLAZO_DEVOLUCION_DIAS} días para devolver esta venta")
+
+        # El mismo producto dos veces en el pedido de devolución suma
+        pedidas = {}
+        for producto_id, cantidad in items:
+            _validar_cantidad(cantidad)
+            pedidas[producto_id] = pedidas.get(producto_id, 0) + cantidad
+        if not pedidas:
+            raise DatoInvalido("La devolución tiene que tener al menos un producto")
+
+        detalles = []
+        for producto_id, cantidad in pedidas.items():
+            if self.cantidad_vendida(producto_id) == 0:
+                raise DatoInvalido(f"El producto {producto_id} no está en esta venta")
+            devolvible = self.cantidad_devolvible(producto_id)
+            if cantidad > devolvible:
+                raise DatoInvalido(
+                    f"Del producto {producto_id} se pueden devolver {devolvible} unidades y se piden {cantidad}"
+                )
+            precio = next(d.precio_unitario for d in self._detalles if d.producto_id == producto_id)
+            importe = aplicar_porcentaje(precio * cantidad, self._pago.porcentaje_ajuste)
+            detalles.append(DetalleDevolucion(producto_id, cantidad, importe))
+
+        # Por el redondeo de cada línea, la suma de varias devoluciones puede
+        # pasarse por un centavo de lo cobrado (ej. 3 x $0.10 en efectivo se
+        # cobra $0.26, pero cada unidad reintegra $0.09). Nunca se reintegra
+        # más de lo que entró a la caja.
+        exceso = self.total_reintegrado + sum(d.importe for d in detalles) - self._pago.monto
+        if exceso > 0:
+            ultimo = detalles[-1]
+            detalles[-1] = DetalleDevolucion(ultimo.producto_id, ultimo.cantidad, ultimo.importe - exceso)
+
+        devolucion = Devolucion(self.id, self.sucursal_id, self._pago.medio.nombre, motivo, detalles, fecha)
+        self._devoluciones.append(devolucion)
+        return devolucion
+
     def __str__(self):
         return f"Venta {self.id}: sucursal {self.sucursal_id}, {len(self._detalles)} productos, total {self.total}"
+
+
+@dataclass(frozen=True)
+class DetalleDevolucion:
+    producto_id: int
+    cantidad: int
+    importe: object  # Decimal: lo que se reintegra por esta línea
+
+
+class Devolucion:
+    """Lo que el cliente devuelve de UNA venta registrada. No se crea suelta:
+    la arma Venta.devolver(), que valida contra lo vendido."""
+
+    def __init__(self, venta_id, sucursal_id, medio_pago, motivo, detalles, fecha=None, id=None):
+        self.id = id
+        self.venta_id = venta_id
+        self.sucursal_id = sucursal_id
+        self.medio_pago = medio_pago  # se reintegra por el mismo medio con que se cobró
+        self.motivo = motivo
+        self.detalles = tuple(detalles)
+        self.fecha = fecha or datetime.now()
+
+    @property
+    def importe(self):
+        return sum((d.importe for d in self.detalles), CERO)
+
+    def movimiento_caja(self):
+        # Salida de dinero: el importe va en negativo
+        return MovimientoCaja(self.fecha, self.sucursal_id, "DEVOLUCION", self.medio_pago, -self.importe,
+                              f"Devolución {self.id} de la venta {self.venta_id}")
