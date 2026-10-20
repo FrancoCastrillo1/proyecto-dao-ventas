@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from backend.dominio.estados_bulto import Preparado
+from backend.dominio.estados_bulto import Preparado, estado_desde_nombre
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
 from backend.dominio.stock import _validar_entero
 
@@ -28,6 +28,17 @@ class Bulto():
         self.nro_precinto = None
         self.estado_actual = Preparado()  # Empieza Siempre en PREPARADO
         self.registros_historial = []  # Trazabilidad: solo se agrega, nunca se edita ni se borra
+        
+    @classmethod
+    def reconstruir(cls, id_bulto, estado, nro_precinto, items, historial):
+        """Arma un bulto ya en su estado, para cuando el DAO lo lee de la base.
+        No pasa por precintar/despachar/etc.: eso generaría historial nuevo."""
+        bulto = cls(id_bulto)
+        bulto.estado_actual = estado_desde_nombre(estado)
+        bulto.nro_precinto = nro_precinto
+        bulto.items = list(items)  # copia: no se comparte la lista de quien la pasó
+        bulto.registros_historial = list(historial)
+        return bulto
 
     def __str__(self):
         return f"Bulto {self.id_bulto} - Estado: {self.estado}, Precinto: {self.nro_precinto}, Items: {len(self.items)}"

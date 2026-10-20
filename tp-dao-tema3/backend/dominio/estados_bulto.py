@@ -109,3 +109,17 @@ class Rechazado(EstadoBulto):
     @property
     def nombre(self):
         return "RECHAZADO"
+
+# Para leer un bulto de la base: el estado se guarda como texto y acá se
+# convierte de vuelta en el objeto State correspondiente.
+ESTADOS_POR_NOMBRE = {
+    estado().nombre: estado
+    for estado in (Preparado, Precintado, EnTransito, Recibido, Verificado, Rechazado)
+}
+
+
+def estado_desde_nombre(nombre):
+    clase = ESTADOS_POR_NOMBRE.get(nombre)
+    if clase is None:
+        raise DatoInvalido(f"Estado de bulto desconocido: {nombre!r}")
+    return clase()
