@@ -1,38 +1,71 @@
-from backend.persistencia.dao_stock import DaoStock
-from backend.dominio.stock import Stock, TipoMovimiento
+# Casos de uso del stock: consultar existencias e ingresar/egresar mercadería.
+# Lo usan la api (compras al CD) y los otros services (despacho, recepción,
+# venta y devolución), que le pasan su conexión para que todo quede en una
+# sola transacción. Acá NO va SQL (usa dao_stock) ni nada de endpoints.
+from backend.dominio.excepciones import DatoInvalido, NoEncontrado
+from backend.dominio.stock import TipoMovimiento, validar_ubicacion_para
+from backend.persistencia.dao_maestros import ProductoDAO, UbicacionDAO
+from backend.persistencia.dao_stock import StockDAO
+
 
 class StockService:
-    def __init__(self):
-        self.dao = DaoStock()
+    def __init__(self, dao=None, producto_dao=None, ubicacion_dao=None):
+        self.dao = dao or StockDAO()
+        self.producto_dao = producto_dao or ProductoDAO()
+        self.ubicacion_dao = ubicacion_dao or UbicacionDAO()
 
-    def obtener_stock_ubicacion(self, ubicacion_id: int, producto_id: int):
-        res = self.dao.obtener_stock(ubicacion_id, producto_id)
-        return {"cantidad": res["cantidad"], "stock_minimo": res["stock_minimo"]}
+    def obtener_producto(self, producto_id):
+        producto = self.producto_dao.obtener_por_id(producto_id)
+        if producto is None:
+            raise NoEncontrado(f"No se encontro el producto {producto_id}")
+        return producto
 
-    def ingresar_stock(self, ubicacion_id: int, producto_id: int, cantidad: int, tipo: TipoMovimiento, referencia: str):
-        datos_actuales = self.dao.obtener_stock(ubicacion_id, producto_id)
-        cantidad_actual = datos_actuales["cantidad"]
-        stock_minimo = datos_actuales["stock_minimo"]
+    def obtener_ubicacion(self, ubicacion_id):
+        ubicacion = self.ubicacion_dao.obtener_por_id(ubicacion_id)
+        if ubicacion is None:
+            raise NoEncontrado(f"No se encontro la ubicación {ubicacion_id}")
+        return ubicacion
 
-        # Pasamos None para producto y ubicacion, y agregamos 'tipo' en ingresar
-        stock_dominio = Stock(None, None, cantidad=cantidad_actual, stock_minimo=stock_minimo)
-        stock_dominio.ingresar(cantidad, tipo)
+    def obtener(self, ubicacion_id, producto_id):
+        self.obtener_ubicacion(ubicacion_id)
+        self.obtener_producto(producto_id)
+        return self.dao.obtener(producto_id, ubicacion_id)
 
-        stock_id = self.dao.guardar_o_actualizar(ubicacion_id, producto_id, stock_dominio.cantidad)
-        tipo_str = tipo.value if hasattr(tipo, 'value') else str(tipo)
-        self.dao.registrar_movimiento(stock_id, cantidad, tipo_str, referencia)
+    def listar_por_ubicacion(self, ubicacion_id):
+        self.obtener_ubicacion(ubicacion_id)
+        return self.dao.listar_por_ubicacion(ubicacion_id)
 
-    def egresar_stock(self, ubicacion_id: int, producto_id: int, cantidad: int, tipo: TipoMovimiento, referencia: str):
-        datos_actuales = self.dao.obtener_stock(ubicacion_id, producto_id)
-        if datos_actuales["cantidad"] < cantidad:
-            raise ValueError("No hay suficiente stock para realizar el egreso.")
+    def listar_movimientos(self, ubicacion_id, producto_id):
+        self.obtener_ubicacion(ubicacion_id)
+        self.obtener_producto(producto_id)
+        return self.dao.listar_movimientos(producto_id, ubicacion_id)
 
-        cantidad_actual = datos_actuales["cantidad"]
-        stock_minimo = datos_actuales["stock_minimo"]
+    # cx: la conexión de una transacción ya abierta por otro service. Si no
+    # viene, la operación abre y cierra la suya.
+    def ingresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None):
+        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, ingreso=True)
 
-        stock_dominio = Stock(None, None, cantidad=cantidad_actual, stock_minimo=stock_minimo)
-        stock_dominio.egresar(cantidad, tipo)
+    def egresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None):
+        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, ingreso=False)
 
-        stock_id = self.dao.guardar_o_actualizar(ubicacion_id, producto_id, stock_dominio.cantidad)
-        tipo_str = tipo.value if hasattr(tipo, 'value') else str(tipo)
-        self.dao.registrar_movimiento(stock_id, -cantidad, tipo_str, referencia)
+    def _mover(self, ubicacion_id, producto_id, cantidad, tipo, referencia, cx, ingreso):
+        # Primero se valida todo lo que no depende de la cantidad actual
+        producto = self.obtener_producto(producto_id)
+        if tipo == TipoMovimiento.COMPRA and not producto.activo:
+            raise DatoInvalido(f"El producto '{producto.nombre}' está dado de baja: no se puede comprar")
+        validar_ubicacion_para(tipo, self.obtener_ubicacion(ubicacion_id))
+
+        if cx is None:
+            with self.dao.transaccion() as cx:
+                return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, ingreso)
+        return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, ingreso)
+
+    def _mover_en(self, cx, ubicacion_id, producto_id, cantidad, tipo, referencia, ingreso):
+        # La cantidad se lee dentro de la transacción, y la regla de "no
+        # egresar más de lo que hay" la aplica el dominio (StockInsuficiente)
+        stock = self.dao.obtener(producto_id, ubicacion_id, cx)
+        if ingreso:
+            stock.ingresar(cantidad, tipo, referencia)
+        else:
+            stock.egresar(cantidad, tipo, referencia)
+        return self.dao.guardar(cx, stock)
