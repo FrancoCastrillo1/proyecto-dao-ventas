@@ -187,6 +187,59 @@ class OrdenReposicion:
             for detalle in pedido.items:
                 totales[detalle.producto] = totales.get(detalle.producto, 0) + detalle.cantidad
         return totales
+    
+class Remito:
+    """Documento de despacho: agrupa los bultos que viajan del Centro de
+    Distribución a UN mismo local. Mientras está ABIERTO admite bultos; al
+    cerrarse queda fijo y listo para despachar."""
+    ABIERTO = "ABIERTO"
+    CERRADO = "CERRADO"
+
+    def __init__(self, id_remito, origen, destino):
+        for valor, nombre in ((origen, "el origen"), (destino, "el destino")):
+            if valor is None or (isinstance(valor, str) and not valor.strip()):
+                raise DatoInvalido(f"El remito tiene que indicar {nombre}")
+        if origen == destino:
+            raise DatoInvalido("El origen y el destino del remito no pueden ser el mismo")
+        self.id_remito = id_remito
+        self.origen = origen
+        self.destino = destino
+        self.bultos = []  # Lista de Bulto
+        self.estado = self.ABIERTO
+
+    def _validar_abierto(self, accion):
+        if self.estado != self.ABIERTO:
+            raise TransicionDeEstadoInvalida(
+                f"No se puede {accion} un remito en estado {self.estado}"
+            )
+
+    def agregar_bulto(self, bulto):
+        self._validar_abierto("modificar")
+        # Solo bultos que todavía no salieron del CD
+        if bulto.estado not in ("PREPARADO", "PRECINTADO"):
+            raise DatoInvalido(
+                f"No se puede agregar un bulto en estado {bulto.estado}: ya salió del CD"
+            )
+        if bulto in self.bultos:
+            raise DatoInvalido("El bulto ya está en el remito")
+        self.bultos.append(bulto)
+
+    def cerrar(self):
+        self._validar_abierto("cerrar")
+        if not self.bultos:
+            raise DatoInvalido("No se puede cerrar un remito sin bultos")
+        # Un bulto sin precinto no puede salir del CD
+        if any(bulto.estado != "PRECINTADO" for bulto in self.bultos):
+            raise DatoInvalido("Todos los bultos del remito tienen que estar precintados")
+        self.estado = self.CERRADO
+
+    def total_por_producto(self):
+        # Lo que lleva el remito en total, para compararlo contra lo pedido
+        totales = {}
+        for bulto in self.bultos:
+            for detalle in bulto.items:
+                totales[detalle.producto] = totales.get(detalle.producto, 0) + detalle.cantidad
+        return totales
 
 @dataclass(frozen=True)
 class DetalleBulto:
