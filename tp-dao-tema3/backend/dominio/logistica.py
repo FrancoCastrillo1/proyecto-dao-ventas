@@ -28,7 +28,7 @@ class Bulto():
         self.nro_precinto = None
         self.estado_actual = Preparado()  # Empieza Siempre en PREPARADO
         self.registros_historial = []  # Trazabilidad: solo se agrega, nunca se edita ni se borra
-        
+
     @classmethod
     def reconstruir(cls, id_bulto, estado, nro_precinto, items, historial):
         """Arma un bulto ya en su estado, para cuando el DAO lo lee de la base.
@@ -126,6 +126,16 @@ class PedidoReposicion:
         self.items = []  # Lista de DetallePedido
         self.estado = self.PENDIENTE
 
+    @classmethod
+    def reconstruir(cls, id_pedido, local, estado, items):
+        """Para cuando el DAO lo lee de la base: lo arma ya en su estado."""
+        if estado not in (cls.PENDIENTE, cls.CONSOLIDADO):
+            raise DatoInvalido(f"Estado de pedido desconocido: {estado!r}")
+        pedido = cls(id_pedido, local)
+        pedido.estado = estado
+        pedido.items = list(items)
+        return pedido
+
     def _validar_pendiente(self, accion):
         if self.estado != self.PENDIENTE:
             raise TransicionDeEstadoInvalida(
@@ -171,6 +181,15 @@ class OrdenReposicion:
         self.pedidos = []  # Lista de PedidoReposicion
         self.estado = self.ABIERTA
 
+    @classmethod
+    def reconstruir(cls, id_orden, origen, estado, pedidos):
+        if estado not in (cls.ABIERTA, cls.CERRADA):
+            raise DatoInvalido(f"Estado de orden desconocido: {estado!r}")
+        orden = cls(id_orden, origen)
+        orden.estado = estado
+        orden.pedidos = list(pedidos)
+        return orden
+    
     def _validar_abierta(self, accion):
         if self.estado != self.ABIERTA:
             raise TransicionDeEstadoInvalida(
@@ -217,6 +236,16 @@ class Remito:
         self.destino = destino
         self.bultos = []  # Lista de Bulto
         self.estado = self.ABIERTO
+        
+    @classmethod
+    def reconstruir(cls, id_remito, origen, destino, estado, bultos):
+        # No pasa por agregar_bulto(): esa regla rechaza bultos que ya salieron del CD
+        if estado not in (cls.ABIERTO, cls.CERRADO):
+            raise DatoInvalido(f"Estado de remito desconocido: {estado!r}")
+        remito = cls(id_remito, origen, destino)
+        remito.estado = estado
+        remito.bultos = list(bultos)
+        return remito
 
     def _validar_abierto(self, accion):
         if self.estado != self.ABIERTO:
