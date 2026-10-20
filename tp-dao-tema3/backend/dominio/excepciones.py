@@ -18,3 +18,6 @@ class TransicionDeEstadoInvalida(ErrorDeNegocio):
 
 class StockInsuficiente(ErrorDeNegocio):
     pass
+
+class PagoInsuficiente(ErrorDeNegocio):
+    pass
