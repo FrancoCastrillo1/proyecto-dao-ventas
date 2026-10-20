@@ -25,6 +25,22 @@ TIPOS_DE_EGRESO = {TipoMovimiento.DESPACHO, TipoMovimiento.VENTA,
                    TipoMovimiento.AJUSTE}
 
 
+def validar_ubicacion_para(tipo, ubicacion):
+    """Cada tipo de movimiento ocurre en un solo tipo de ubicación. Esta regla
+    es la que garantiza que a una sucursal solo entre stock vendible por
+    RECEPCION de un bulto verificado (o por DEVOLUCION de algo vendido ahí):
+    una COMPRA directa a un local saltearía todo el circuito del bulto.
+    El AJUSTE (corrección manual) vale en cualquier ubicación."""
+    if not ubicacion.activo:
+        raise DatoInvalido(f"La ubicación '{ubicacion.nombre}' está dada de baja")
+    if tipo in (TipoMovimiento.COMPRA, TipoMovimiento.DESPACHO) and not ubicacion.puede_despachar():
+        raise DatoInvalido(f"El movimiento {tipo.value} solo puede hacerse en el Centro de Distribución")
+    if tipo == TipoMovimiento.RECEPCION and not ubicacion.puede_recibir():
+        raise DatoInvalido("Solo una sucursal puede recibir bultos")
+    if tipo in (TipoMovimiento.VENTA, TipoMovimiento.DEVOLUCION) and not ubicacion.puede_vender():
+        raise DatoInvalido(f"El movimiento {tipo.value} solo puede hacerse en una sucursal")
+
+
 @dataclass(frozen=True)
 class MovimientoStock:
     """Un registro del libro de movimientos. Es inmutable (frozen): una vez
