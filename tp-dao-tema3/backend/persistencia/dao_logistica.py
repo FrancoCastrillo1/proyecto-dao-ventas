@@ -259,3 +259,16 @@ class DaoLogistica:
             )
         finally:
             cx.close()
+    def obtener_destino_del_bulto(self, bulto_id):
+        """Id de la ubicación a la que viaja el bulto (el destino de su remito)."""
+        cx = get_conexion(self.db_path)
+        try:
+            fila = cx.execute(
+                "SELECT r.destino_id FROM bultos b JOIN remitos r ON b.remito_id = r.id WHERE b.id = ?",
+                (bulto_id,),
+            ).fetchone()
+            if fila is None:
+                raise NoEncontrado(f"El bulto {bulto_id} no existe o no está en ningún remito")
+            return fila["destino_id"]
+        finally:
+            cx.close()
