@@ -88,7 +88,7 @@ class Bulto():
 
 
     #juan _______
-    
+
 @dataclass(frozen=True)
 class DetallePedido:
     """Una línea del pedido: qué producto pide el local y cuántas unidades.
@@ -144,6 +144,49 @@ class PedidoReposicion:
         if not self.items:
             raise DatoInvalido("No se puede consolidar un pedido vacío")
         self.estado = self.CONSOLIDADO
+
+class OrdenReposicion:
+    """Lo que arma el Centro de Distribución juntando pedidos de varios locales
+    para prepararlos de una vez. Mientras está ABIERTA admite pedidos; al
+    cerrarse queda fija."""
+    ABIERTA = "ABIERTA"
+    CERRADA = "CERRADA"
+
+    def __init__(self, id_orden, origen):
+        if origen is None or (isinstance(origen, str) and not origen.strip()):
+            raise DatoInvalido("La orden tiene que indicar el origen (Centro de Distribución)")
+        self.id_orden = id_orden
+        self.origen = origen
+        self.pedidos = []  # Lista de PedidoReposicion
+        self.estado = self.ABIERTA
+
+    def _validar_abierta(self, accion):
+        if self.estado != self.ABIERTA:
+            raise TransicionDeEstadoInvalida(
+                f"No se puede {accion} una orden en estado {self.estado}"
+            )
+
+    def agregar_pedido(self, pedido):
+        self._validar_abierta("modificar")
+        if pedido.estado != PedidoReposicion.CONSOLIDADO:
+            raise DatoInvalido("Solo se pueden agregar pedidos consolidados")
+        if pedido in self.pedidos:
+            raise DatoInvalido("El pedido ya está en la orden")
+        self.pedidos.append(pedido)
+
+    def cerrar(self):
+        self._validar_abierta("cerrar")
+        if not self.pedidos:
+            raise DatoInvalido("No se puede cerrar una orden sin pedidos")
+        self.estado = self.CERRADA
+
+    def total_por_producto(self):
+        # Lo que el CD necesita juntar en total, sumando todos los pedidos
+        totales = {}
+        for pedido in self.pedidos:
+            for detalle in pedido.items:
+                totales[detalle.producto] = totales.get(detalle.producto, 0) + detalle.cantidad
+        return totales
 
 @dataclass(frozen=True)
 class DetalleBulto:
