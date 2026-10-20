@@ -1,70 +1,94 @@
-from backend.persistencia.conexion import get_conexion
+# DAO de stock: lee y guarda la cantidad de cada producto en cada ubicación y
+# el libro de movimientos. Acá NO se valida el negocio (eso lo hacen el dominio
+# y el service), solo se lee y escribe en SQLite.
+# Los métodos que reciben "cx" trabajan dentro de la transacción de quien los
+# llama (ver conexion.transaccion), así un despacho o una venta pueden mover
+# varios stocks y guardarse todo junto o nada.
+from contextlib import nullcontext
+from datetime import datetime
 
-class DaoStock:
+from backend.config import DB_PATH
+from backend.dominio.stock import MovimientoStock, Stock, TipoMovimiento
+from backend.persistencia.conexion import get_conexion, transaccion
+from backend.persistencia.dao_maestros import ProductoDAO
 
-    def obtener_stock(self, ubicacion_id: int, producto_id: int):
-        conexion = get_conexion()
-        cursor = conexion.cursor()
-        
-        # Buscamos en stock junto con el stock_minimo del producto
-        cursor.execute(
-            """
-            SELECT s.id, s.cantidad, p.stock_minimo 
-            FROM stock s
-            JOIN productos p ON s.producto_id = p.id
-            WHERE s.ubicacion_id = ? AND s.producto_id = ?
-            """,
-            (ubicacion_id, producto_id)
-        )
-        row = cursor.fetchone()
-        
-        if row:
-            conexion.close()
-            return {"id": row[0], "cantidad": row[1], "stock_minimo": row[2]}
-        
-        # Si el par ubicacion-producto aún no tiene registro en 'stock', buscamos stock_minimo en productos
-        cursor.execute("SELECT stock_minimo FROM productos WHERE id = ?", (producto_id,))
-        prod_row = cursor.fetchone()
-        conexion.close()
-        
-        if not prod_row:
-            raise ValueError(f"El producto con ID {producto_id} no existe.")
-            
-        return {"id": None, "cantidad": 0, "stock_minimo": prod_row[0]}
 
-    def guardar_o_actualizar(self, ubicacion_id: int, producto_id: int, cantidad: int):
-        conexion = get_conexion()
-        cursor = conexion.cursor()
-        
-        cursor.execute(
-            "SELECT id FROM stock WHERE ubicacion_id = ? AND producto_id = ?",
-            (ubicacion_id, producto_id)
-        )
-        row = cursor.fetchone()
-        
-        if row:
-            stock_id = row[0]
-            cursor.execute("UPDATE stock SET cantidad = ? WHERE id = ?", (cantidad, stock_id))
-        else:
-            cursor.execute(
-                "INSERT INTO stock (ubicacion_id, producto_id, cantidad) VALUES (?, ?, ?)",
-                (ubicacion_id, producto_id, cantidad)
+class StockDAO:
+    def __init__(self, db_path=DB_PATH):
+        self.db_path = db_path
+
+    def _conn(self):
+        return get_conexion(self.db_path)
+
+    def transaccion(self):
+        return transaccion(self.db_path)
+
+    def obtener(self, producto_id, ubicacion_id, cx=None):
+        """Arma el Stock del par producto-ubicación. Si todavía no tiene fila
+        (nunca hubo movimientos) devuelve uno en 0, sin id. Si el producto no
+        existe devuelve None."""
+        with nullcontext(cx) if cx else self._conn() as cx:
+            fila = cx.execute(
+                "SELECT p.stock_minimo, s.id, s.cantidad FROM productos p "
+                "LEFT JOIN stock s ON s.producto_id = p.id AND s.ubicacion_id = ? "
+                "WHERE p.id = ?",
+                (ubicacion_id, producto_id),
+            ).fetchone()
+        if fila is None:
+            return None
+        return Stock(producto_id, ubicacion_id, stock_minimo=fila["stock_minimo"],
+                     cantidad=fila["cantidad"] or 0, id=fila["id"])
+
+    def guardar(self, cx, stock):
+        """Guarda la cantidad y agrega al libro los movimientos del objeto.
+        Un Stock leído con obtener() arranca sin movimientos, así que los que
+        tiene son los de esta operación: se guarda una vez por operación.
+        Al libro solo se le hacen INSERT, nunca UPDATE ni DELETE."""
+        if stock.id is None:
+            cur = cx.execute(
+                "INSERT INTO stock (producto_id, ubicacion_id, cantidad) VALUES (?, ?, ?)",
+                (stock.producto, stock.ubicacion, stock.cantidad),
             )
-            stock_id = cursor.lastrowid
-            
-        conexion.commit()
-        conexion.close()
-        return stock_id
-
-    def registrar_movimiento(self, stock_id: int, cantidad: int, tipo: str, referencia: str):
-        conexion = get_conexion()
-        cursor = conexion.cursor()
-        cursor.execute(
-            """
-            INSERT INTO movimientos_stock (stock_id, fecha, cantidad, tipo, referencia)
-            VALUES (?, datetime('now'), ?, ?, ?)
-            """,
-            (stock_id, cantidad, tipo, referencia)
+            stock.id = cur.lastrowid
+        else:
+            cx.execute("UPDATE stock SET cantidad = ? WHERE id = ?", (stock.cantidad, stock.id))
+        cx.executemany(
+            "INSERT INTO movimientos_stock (stock_id, fecha, cantidad, tipo, referencia) VALUES (?, ?, ?, ?, ?)",
+            [(stock.id, m.fecha.isoformat(sep=" ", timespec="seconds"), m.cantidad, m.tipo.value, m.referencia)
+             for m in stock.movimientos],
         )
-        conexion.commit()
-        conexion.close()
+        return stock
+
+    def listar_por_ubicacion(self, ubicacion_id):
+        """Existencias de una ubicación: todos los productos activos (los que
+        nunca tuvieron movimientos ahí aparecen en 0) y los dados de baja que
+        todavía tienen algo. Devuelve pares (Producto, Stock)."""
+        with self._conn() as cx:
+            filas = cx.execute(
+                "SELECT p.*, s.id AS stock_id, s.cantidad FROM productos p "
+                "LEFT JOIN stock s ON s.producto_id = p.id AND s.ubicacion_id = ? "
+                "WHERE p.activo = 1 OR s.cantidad > 0 "
+                "ORDER BY p.nombre",
+                (ubicacion_id,),
+            ).fetchall()
+        # El Producto se arma igual que en su propio DAO, para no repetir el mapeo
+        a_producto = ProductoDAO(self.db_path)._a_objeto
+        return [
+            (a_producto(f), Stock(f["id"], ubicacion_id, stock_minimo=f["stock_minimo"],
+                                  cantidad=f["cantidad"] or 0, id=f["stock_id"]))
+            for f in filas
+        ]
+
+    def listar_movimientos(self, producto_id, ubicacion_id):
+        with self._conn() as cx:
+            filas = cx.execute(
+                "SELECT m.fecha, m.cantidad, m.tipo, m.referencia FROM movimientos_stock m "
+                "JOIN stock s ON s.id = m.stock_id "
+                "WHERE s.producto_id = ? AND s.ubicacion_id = ? "
+                "ORDER BY m.id",
+                (producto_id, ubicacion_id),
+            ).fetchall()
+        return [
+            MovimientoStock(datetime.fromisoformat(f["fecha"]), f["cantidad"], TipoMovimiento(f["tipo"]), f["referencia"])
+            for f in filas
+        ]

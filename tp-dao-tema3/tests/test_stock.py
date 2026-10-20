@@ -7,7 +7,8 @@ from datetime import datetime
 import pytest
 
 from backend.dominio.excepciones import DatoInvalido, StockInsuficiente
-from backend.dominio.stock import MovimientoStock, Stock, TipoMovimiento
+from backend.dominio.maestros import CentroDistribucion, Sucursal
+from backend.dominio.stock import MovimientoStock, Stock, TipoMovimiento, validar_ubicacion_para
 
 COMPRA = TipoMovimiento.COMPRA
 DESPACHO = TipoMovimiento.DESPACHO
@@ -282,3 +283,33 @@ def test_cada_stock_lleva_su_propia_cantidad_y_sus_propios_movimientos():
 
     assert (en_cd.cantidad, en_local.cantidad) == (10, 2)
     assert len(en_cd.movimientos) == len(en_local.movimientos) == 1
+
+
+# ---------- qué movimiento va en cada ubicación ----------
+
+CD = CentroDistribucion("CD Central", "Ruta 9 km 5")
+LOCAL = Sucursal("Local Centro", "San Martín 100")
+
+
+@pytest.mark.parametrize("tipo, ubicacion", [
+    (COMPRA, CD), (DESPACHO, CD), (AJUSTE, CD),
+    (RECEPCION, LOCAL), (VENTA, LOCAL), (DEVOLUCION, LOCAL), (AJUSTE, LOCAL),
+])
+def test_movimientos_permitidos_segun_la_ubicacion(tipo, ubicacion):
+    validar_ubicacion_para(tipo, ubicacion)  # no lanza nada
+
+
+@pytest.mark.parametrize("tipo, ubicacion", [
+    (COMPRA, LOCAL),     # a un local no entra stock vendible sin bulto verificado
+    (DESPACHO, LOCAL),
+    (RECEPCION, CD), (VENTA, CD), (DEVOLUCION, CD),
+])
+def test_movimientos_prohibidos_segun_la_ubicacion(tipo, ubicacion):
+    with pytest.raises(DatoInvalido):
+        validar_ubicacion_para(tipo, ubicacion)
+
+
+def test_una_ubicacion_dada_de_baja_no_mueve_stock():
+    cd = CentroDistribucion("CD Viejo", "Ruta 9 km 5", activo=False)
+    with pytest.raises(DatoInvalido):
+        validar_ubicacion_para(COMPRA, cd)

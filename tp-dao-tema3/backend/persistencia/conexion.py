@@ -2,6 +2,7 @@
 # a partir de esquema.sql si la base no existe.
 # Acá NO van consultas de ninguna entidad, eso lo hace cada DAO.
 import sqlite3
+from contextlib import contextmanager
 
 from backend.config import DB_PATH, ESQUEMA_PATH
 from backend.dominio.maestros import normalizar_texto
@@ -11,6 +12,23 @@ def get_conexion(db_path= DB_PATH):
     conexion.row_factory = sqlite3.Row
     conexion.execute("PRAGMA foreign_keys = ON")
     return conexion
+
+
+# Para operaciones que tocan varias filas y tienen que guardarse todas juntas o
+# ninguna (un despacho descuenta varios productos y cambia el estado del bulto).
+# Quien la abre le pasa la conexión a cada DAO; si algo falla adentro del with,
+# se deshace todo. BEGIN IMMEDIATE toma el permiso de escritura desde el
+# principio: así dos pedidos simultáneos no leen la misma cantidad y uno pisa
+# lo que guardó el otro.
+@contextmanager
+def transaccion(db_path=DB_PATH):
+    cx = get_conexion(db_path)
+    try:
+        with cx:  # commit si sale bien, rollback si hubo una excepción
+            cx.execute("BEGIN IMMEDIATE")
+            yield cx
+    finally:
+        cx.close()
 
 def crear_tablas(db_path=DB_PATH):
     with get_conexion(db_path) as cx:
