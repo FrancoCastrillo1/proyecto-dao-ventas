@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from backend.dominio.estados_bulto import Preparado
-from backend.dominio.excepciones import DatoInvalido
+from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
 from backend.dominio.stock import _validar_entero
 
 
@@ -88,6 +88,62 @@ class Bulto():
 
 
     #juan _______
+    
+@dataclass(frozen=True)
+class DetallePedido:
+    """Una línea del pedido: qué producto pide el local y cuántas unidades.
+    Es lo que se PIDE; lo que se ENVÍA es el DetalleBulto (pueden diferir si
+    el CD no tiene stock suficiente)."""
+    producto: object
+    cantidad: int
+
+    def __post_init__(self):
+        _validar_entero(self.cantidad, "La cantidad", 1)
+
+
+class PedidoReposicion:
+    """Lo que pide UN local al Centro de Distribución. Mientras está PENDIENTE
+    se puede editar; al consolidarse pasa a CONSOLIDADO y queda cerrado."""
+    PENDIENTE = "PENDIENTE"
+    CONSOLIDADO = "CONSOLIDADO"
+
+    def __init__(self, id_pedido, local):
+        if local is None or (isinstance(local, str) and not local.strip()):
+            raise DatoInvalido("El pedido tiene que indicar el local que lo solicita")
+        self.id_pedido = id_pedido
+        self.local = local
+        self.items = []  # Lista de DetallePedido
+        self.estado = self.PENDIENTE
+
+    def _validar_pendiente(self, accion):
+        if self.estado != self.PENDIENTE:
+            raise TransicionDeEstadoInvalida(
+                f"No se puede {accion} un pedido en estado {self.estado}"
+            )
+
+    def agregar_item(self, producto, cantidad):
+        self._validar_pendiente("modificar")
+        # Se valida ANTES de sumar, igual que en el Bulto
+        _validar_entero(cantidad, "La cantidad", 1)
+        for i, detalle in enumerate(self.items):
+            if detalle.producto == producto:
+                self.items[i] = DetallePedido(producto, detalle.cantidad + cantidad)
+                return
+        self.items.append(DetallePedido(producto, cantidad))
+
+    def quitar_item(self, producto):
+        self._validar_pendiente("modificar")
+        for detalle in self.items:
+            if detalle.producto == producto:
+                self.items.remove(detalle)
+                return
+        raise DatoInvalido("El producto no está en el pedido")
+
+    def consolidar(self):
+        self._validar_pendiente("consolidar")
+        if not self.items:
+            raise DatoInvalido("No se puede consolidar un pedido vacío")
+        self.estado = self.CONSOLIDADO
 
 @dataclass(frozen=True)
 class DetalleBulto:
