@@ -16,6 +16,10 @@ const NOMBRE_CAMPO = {
   codigo: "Código", nombre: "Nombre", categoria_id: "Categoría", precio_venta: "Precio de venta",
   costo: "Costo", stock_minimo: "Stock mínimo", cuit: "CUIT", razon_social: "Razón social",
   telefono: "Teléfono", email: "Email", tipo: "Tipo", direccion: "Dirección",
+  producto_id: "Producto", cantidad: "Cantidad", sucursal_id: "Sucursal", ubicacion_id: "Ubicación",
+  medio_pago: "Medio de pago", monto_entregado: "Monto entregado", motivo: "Motivo", referencia: "Referencia",
+  nro_precinto: "Precinto", nro_leido: "Precinto leído", intacto: "Intacto", pedido_ids: "Pedidos",
+  orden_id: "Orden", destino_id: "Destino", items: "Productos", limite: "Límite",
 };
 
 // Qué formato espera cada tipo de error de Pydantic (el "type" que viene en el 422)

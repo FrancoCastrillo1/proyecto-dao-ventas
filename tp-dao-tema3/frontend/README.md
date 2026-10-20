@@ -11,8 +11,9 @@ frontend/
     ├── api.js          → único lugar que habla con el backend (fetch + errores)
     ├── App.jsx         → encabezado y pestañas
     ├── estilos.css     → estilos de todas las pantallas
-    ├── componentes/    → piezas compartidas (Aviso de éxito / error)
-    └── pantallas/      → una pantalla por entidad (Categorías, Productos, ...)
+    ├── formato.js      → cómo se muestran montos y fechas
+    ├── componentes/    → piezas compartidas (avisos, líneas producto + cantidad, estados, catálogos)
+    └── pantallas/      → Operación (Stock, Logística, Ventas, Reportes) y Maestros
 ```
 
 ## Decisiones

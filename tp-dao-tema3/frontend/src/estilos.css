@@ -34,6 +34,9 @@ h3 { font-size: 1rem; margin: 0 0 12px; display: flex; justify-content: space-be
 }
 .pestanias button:hover { color: var(--texto); background: none; }
 .pestanias button.activa { color: var(--primario); border-bottom-color: var(--primario); }
+.pestanias { gap: 24px; }
+.grupo-pestanias { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.grupo-titulo { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texto-suave); margin-right: 6px; }
 
 /* Botones */
 button {
@@ -102,3 +105,48 @@ code { font-size: 0.9em; }
 .aviso-advertencia { background: #fff6e0; color: #7a4b00; }
 .botones-aviso { display: flex; gap: 8px; margin-left: auto; }
 .botones-aviso button { padding: 4px 12px; font-size: 0.85rem; }
+
+/* ------------------------------------------------ Pantallas de procesos */
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+h3.paso { margin-top: 28px; color: var(--primario-oscuro); justify-content: flex-start; }
+.nota { color: var(--texto-suave); font-size: 0.85rem; }
+.totales { margin: 10px 0 0; }
+.formulario-ancho { grid-template-columns: 1fr; }
+.botones-izquierda { justify-content: flex-start; flex-wrap: wrap; }
+
+/* Editor de líneas producto + cantidad */
+.lineas { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.linea { display: flex; gap: 6px; width: 100%; max-width: 560px; }
+.linea select { flex: 1; min-width: 0; }
+.linea .cantidad { width: 90px; }
+
+/* Etiquetas de estado */
+.estado { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.estado-gris { background: #eceff3; color: #475467; }
+.estado-azul { background: #e8f0fe; color: #1b4399; }
+.estado-naranja { background: #fff3e0; color: #9a5300; }
+.estado-violeta { background: #f1e8fd; color: #5b2a9e; }
+.estado-verde { background: #e7f6ec; color: #1e6b3a; }
+.estado-rojo { background: #fdecec; color: #a12626; }
+.estado-amarillo { background: #fff6d6; color: #7a5a00; }
+
+/* Bultos dentro del remito */
+.bulto { border: 1px solid var(--borde); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.bulto-cabecera { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bulto-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.bulto-acciones input { max-width: 220px; }
+.historial { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+
+/* Tarjetas de totales (caja y reportes) */
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 16px 0; }
+.tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 4px; }
+.tarjeta span { font-size: 0.8rem; color: var(--texto-suave); }
+.tarjeta strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.tarjeta-total { border-color: var(--primario); }
+.tarjeta-total strong { color: var(--primario-oscuro); }
+
+.selector-reportes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.selector-reportes button { font-size: 0.85rem; }
+.fila-alerta td { background: #fff6f6; }
+.comprobante { border-color: var(--primario); }
