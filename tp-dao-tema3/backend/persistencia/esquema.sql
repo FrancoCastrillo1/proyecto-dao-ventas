@@ -156,3 +156,86 @@ referencia TEXT NOT NULL DEFAULT ''
 
 CREATE INDEX IF NOT EXISTS movimientos_caja_por_sucursal_y_fecha
 ON movimientos_caja (sucursal_id, fecha);
+
+-- ===================================================== Logística CD → locales
+
+-- Lo que consolida el CD juntando pedidos de varias sucursales
+CREATE TABLE IF NOT EXISTS ordenes_reposicion (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL,
+estado TEXT NOT NULL CHECK (estado IN ('ABIERTA', 'CERRADA'))
+);
+
+-- Lo que pide cada sucursal. orden_id queda vacío hasta que se consolida.
+CREATE TABLE IF NOT EXISTS pedidos_reposicion (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+sucursal_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL,
+estado TEXT NOT NULL CHECK (estado IN ('PENDIENTE', 'CONSOLIDADO')),
+orden_id INTEGER REFERENCES ordenes_reposicion(id)
+);
+
+CREATE TABLE IF NOT EXISTS detalles_pedido (
+pedido_id INTEGER NOT NULL REFERENCES pedidos_reposicion(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+PRIMARY KEY (pedido_id, producto_id)
+);
+
+-- Un remito por destino dentro de cada orden: agrupa los bultos que viajan
+-- del CD a esa sucursal
+CREATE TABLE IF NOT EXISTS remitos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+orden_id INTEGER NOT NULL REFERENCES ordenes_reposicion(id),
+origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+destino_id INTEGER NOT NULL REFERENCES ubicaciones(id),
+fecha TEXT NOT NULL,
+estado TEXT NOT NULL CHECK (estado IN ('ABIERTO', 'CERRADO', 'EN_TRANSITO', 'VERIFICADO', 'VERIFICADO_CON_RECHAZOS')),
+CHECK (origen_id <> destino_id),
+UNIQUE (orden_id, destino_id)
+);
+
+-- El estado se guarda como texto y el DAO vuelve a armar el objeto del
+-- patrón State al leerlo. El precinto es único: dos bultos con el mismo
+-- precinto harían inútil la verificación (los NULL, sin precintar, no chocan).
+CREATE TABLE IF NOT EXISTS bultos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+remito_id INTEGER NOT NULL REFERENCES remitos(id),
+nro_precinto TEXT UNIQUE,
+estado TEXT NOT NULL CHECK (estado IN ('PREPARADO', 'PRECINTADO', 'EN_TRANSITO', 'RECIBIDO', 'VERIFICADO', 'RECHAZADO'))
+);
+
+CREATE TABLE IF NOT EXISTS detalles_bulto (
+bulto_id INTEGER NOT NULL REFERENCES bultos(id),
+producto_id INTEGER NOT NULL REFERENCES productos(id),
+cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+PRIMARY KEY (bulto_id, producto_id)
+);
+
+-- Trazabilidad inmutable de estados del bulto (validación de la consigna):
+-- solo se insertan filas. Los triggers hacen que la BASE rechace cualquier
+-- UPDATE o DELETE, aunque alguien se saltee el sistema.
+CREATE TABLE IF NOT EXISTS historial_bultos (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+bulto_id INTEGER NOT NULL REFERENCES bultos(id),
+fecha_hora TEXT NOT NULL,
+estado_anterior TEXT NOT NULL,
+estado_nuevo TEXT NOT NULL,
+observacion TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS historial_bultos_por_bulto
+ON historial_bultos (bulto_id);
+
+CREATE TRIGGER IF NOT EXISTS historial_bultos_no_se_modifica
+BEFORE UPDATE ON historial_bultos
+BEGIN
+    SELECT RAISE(ABORT, 'El historial de estados de un bulto es inmutable: no se puede modificar');
+END;
+
+CREATE TRIGGER IF NOT EXISTS historial_bultos_no_se_borra
+BEFORE DELETE ON historial_bultos
+BEGIN
+    SELECT RAISE(ABORT, 'El historial de estados de un bulto es inmutable: no se puede borrar');
+END;

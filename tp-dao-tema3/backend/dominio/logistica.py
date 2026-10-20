@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from backend.dominio.estados_bulto import Preparado
+from backend.dominio.estados_bulto import ESTADOS_FINALES, Preparado
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
 from backend.dominio.stock import _validar_entero
 
@@ -28,6 +28,7 @@ class Bulto():
         self.nro_precinto = None
         self.estado_actual = Preparado()  # Empieza Siempre en PREPARADO
         self.registros_historial = []  # Trazabilidad: solo se agrega, nunca se edita ni se borra
+        self.remito_id = None  # remito en el que viaja (lo completa el DAO al leerlo)
 
     def __str__(self):
         return f"Bulto {self.id_bulto} - Estado: {self.estado}, Precinto: {self.nro_precinto}, Items: {len(self.items)}"
@@ -114,6 +115,8 @@ class PedidoReposicion:
         self.local = local
         self.items = []  # Lista de DetallePedido
         self.estado = self.PENDIENTE
+        self.fecha = datetime.now()
+        self.orden_id = None  # orden en la que se consolidó
 
     def _validar_pendiente(self, accion):
         if self.estado != self.PENDIENTE:
@@ -159,6 +162,7 @@ class OrdenReposicion:
         self.origen = origen
         self.pedidos = []  # Lista de PedidoReposicion
         self.estado = self.ABIERTA
+        self.fecha = datetime.now()
 
     def _validar_abierta(self, accion):
         if self.estado != self.ABIERTA:
@@ -191,11 +195,21 @@ class OrdenReposicion:
 class Remito:
     """Documento de despacho: agrupa los bultos que viajan del Centro de
     Distribución a UN mismo local. Mientras está ABIERTO admite bultos; al
-    cerrarse queda fijo y listo para despachar."""
+    cerrarse queda fijo y listo para despachar.
+
+    Después del despacho: EN_TRANSITO hasta que todos sus bultos llegan a un
+    estado final. Ahí pasa a VERIFICADO (todos verificados) o a
+    VERIFICADO_CON_RECHAZOS (al menos uno rechazado). La consigna pide que el
+    stock no quede disponible hasta que "el remito y el contenedor" estén
+    verificados: el servicio de recepción suma stock recién en ese momento y
+    solo de los bultos verificados."""
     ABIERTO = "ABIERTO"
     CERRADO = "CERRADO"
+    EN_TRANSITO = "EN_TRANSITO"
+    VERIFICADO = "VERIFICADO"
+    VERIFICADO_CON_RECHAZOS = "VERIFICADO_CON_RECHAZOS"
 
-    def __init__(self, id_remito, origen, destino):
+    def __init__(self, id_remito, origen, destino, orden_id=None):
         for valor, nombre in ((origen, "el origen"), (destino, "el destino")):
             if valor is None or (isinstance(valor, str) and not valor.strip()):
                 raise DatoInvalido(f"El remito tiene que indicar {nombre}")
@@ -204,8 +218,10 @@ class Remito:
         self.id_remito = id_remito
         self.origen = origen
         self.destino = destino
+        self.orden_id = orden_id  # orden de reposición de la que sale
         self.bultos = []  # Lista de Bulto
         self.estado = self.ABIERTO
+        self.fecha = datetime.now()
 
     def _validar_abierto(self, accion):
         if self.estado != self.ABIERTO:
@@ -232,6 +248,35 @@ class Remito:
         if any(bulto.estado != "PRECINTADO" for bulto in self.bultos):
             raise DatoInvalido("Todos los bultos del remito tienen que estar precintados")
         self.estado = self.CERRADO
+
+    def despachar(self):
+        """Sale del CD: si todavía está abierto se cierra (eso valida que todos
+        los bultos estén precintados) y cada bulto pasa a EN_TRANSITO."""
+        if self.estado == self.ABIERTO:
+            self.cerrar()
+        if self.estado != self.CERRADO:
+            raise TransicionDeEstadoInvalida(f"No se puede despachar un remito en estado {self.estado}")
+        for bulto in self.bultos:
+            bulto.despachar()
+        self.estado = self.EN_TRANSITO
+
+    def registrar_verificacion(self):
+        """Se llama cada vez que se verifica un bulto. Si ya no queda ninguno
+        pendiente, el remito pasa a su estado final y devuelve True (es el
+        momento de sumar el stock al local). Si quedan, devuelve False."""
+        if self.estado != self.EN_TRANSITO:
+            raise TransicionDeEstadoInvalida(f"No se puede verificar un remito en estado {self.estado}")
+        if any(bulto.estado not in ESTADOS_FINALES for bulto in self.bultos):
+            return False
+        if all(bulto.habilita_venta() for bulto in self.bultos):
+            self.estado = self.VERIFICADO
+        else:
+            self.estado = self.VERIFICADO_CON_RECHAZOS
+        return True
+
+    def bultos_verificados(self):
+        # Polimorfismo del State: no se compara el texto del estado, se le pregunta
+        return [bulto for bulto in self.bultos if bulto.habilita_venta()]
 
     def total_por_producto(self):
         # Lo que lleva el remito en total, para compararlo contra lo pedido

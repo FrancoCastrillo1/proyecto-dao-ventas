@@ -109,3 +109,19 @@ class Rechazado(EstadoBulto):
     @property
     def nombre(self):
         return "RECHAZADO"
+
+
+# Fábrica simple, igual que TIPOS_UBICACION y MEDIOS_PAGO: el único lugar que
+# sabe qué clase corresponde a cada nombre. La usa el DAO para volver a armar
+# el estado de un bulto guardado en la base (ahí se guarda solo el texto).
+ESTADOS_BULTO = {clase().nombre: clase for clase in (Preparado, Precintado, EnTransito, Recibido, Verificado, Rechazado)}
+
+# Estados de los que el bulto ya no sale
+ESTADOS_FINALES = {"VERIFICADO", "RECHAZADO"}
+
+
+def crear_estado(nombre):
+    clase = ESTADOS_BULTO.get(nombre)
+    if clase is None:
+        raise DatoInvalido(f"Estado de bulto '{nombre}' inválido")
+    return clase()
