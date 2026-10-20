@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { fecha, pesos, porcentaje } from "../formato.js";
 
@@ -44,7 +45,13 @@ export default function Reportes() {
 
   return (
     <section>
-      <h2>Reportes</h2>
+      <EncabezadoPantalla id="reportes" icono="📊" titulo="Reportes"
+        descripcion="Información para tomar decisiones, calculada con los datos reales del sistema."
+        pasos={[
+          "Elegí un reporte con los botones de arriba.",
+          "Usá los filtros (fechas, sucursal) y tocá «Consultar».",
+          "Las tarjetas muestran los totales y la tabla el detalle.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <nav className="selector-reportes">

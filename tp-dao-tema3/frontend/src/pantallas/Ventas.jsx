@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
 import { fecha, pesos } from "../formato.js";
@@ -59,7 +60,13 @@ export default function Ventas() {
 
   return (
     <section>
-      <h2>Ventas</h2>
+      <EncabezadoPantalla id="ventas" icono="🛒" titulo="Ventas"
+        descripcion="Venta al público en un local. Solo se puede vender lo que hay en el local (lo que llegó en bultos verificados)."
+        pasos={[
+          "Elegí la sucursal, agregá los productos con su cantidad y el medio de pago.",
+          "Cada medio tiene su descuento o recargo (se ve al elegirlo). En efectivo podés poner con cuánto paga para calcular el vuelto.",
+          "Al vender se muestra el comprobante. Con «Ver / devolver» se registra una devolución: el producto vuelve al local y se reintegra el dinero.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <form className="formulario formulario-ancho" onSubmit={vender}>

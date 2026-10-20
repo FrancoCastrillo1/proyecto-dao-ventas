@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
@@ -70,7 +71,13 @@ export default function Ubicaciones() {
 
   return (
     <section>
-      <h2>Sucursales y Centro de Distribución</h2>
+      <EncabezadoPantalla id="ubicaciones" icono="🏬" titulo="Sucursales y Centro de Distribución"
+        descripcion="El CD guarda y despacha la mercadería; las sucursales (locales) la reciben y la venden. Hay un solo CD activo."
+        pasos={[
+          "Creá primero el Centro de Distribución y después las sucursales.",
+          "Las columnas Vende, Despacha y Recibe muestran qué puede hacer cada una.",
+          "El tipo (sucursal o CD) no se puede cambiar después de crearla.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
         alCancelar={parecidos.descartar} />

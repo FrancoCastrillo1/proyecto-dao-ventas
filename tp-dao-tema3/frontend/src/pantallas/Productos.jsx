@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
@@ -75,7 +76,13 @@ export default function Productos() {
 
   return (
     <section>
-      <h2>Productos</h2>
+      <EncabezadoPantalla id="productos" icono="🧃" titulo="Productos"
+        descripcion="Lo que se compra, se reparte y se vende. El código (SKU) identifica a cada producto y no se puede repetir."
+        pasos={[
+          "Completá código, nombre, categoría, precio de venta y costo. El margen se calcula solo.",
+          "El stock mínimo es la cantidad por debajo de la cual el producto aparece como faltante en los reportes.",
+          "Con «Proveedores» ves quién vende cada producto (se asignan desde la pestaña Proveedores).",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
         alCancelar={parecidos.descartar} />

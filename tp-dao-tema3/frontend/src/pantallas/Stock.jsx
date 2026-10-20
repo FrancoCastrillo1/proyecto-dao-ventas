@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { fecha } from "../formato.js";
 
@@ -49,7 +50,13 @@ export default function Stock() {
 
   return (
     <section>
-      <h2>Stock</h2>
+      <EncabezadoPantalla id="stock" icono="📦" titulo="Stock"
+        descripcion="Cuánto hay de cada producto en cada lugar. Al CD la mercadería entra por compras; a los locales, solo por bultos verificados."
+        pasos={[
+          "Elegí una ubicación para ver sus existencias. En rojo, lo que está bajo el mínimo.",
+          "Con el CD elegido aparece el formulario para registrar una compra a un proveedor.",
+          "«Movimientos» muestra cada entrada y salida del producto: compras, despachos, recepciones, ventas y devoluciones.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <div className="barra-filtro">

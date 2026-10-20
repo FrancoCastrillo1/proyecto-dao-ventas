@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
@@ -46,7 +47,13 @@ export default function Categorias() {
 
   return (
     <section>
-      <h2>Categorías</h2>
+      <EncabezadoPantalla id="categorias" icono="🏷️" titulo="Categorías"
+        descripcion="Agrupan los productos (Bebidas, Almacén, Limpieza...). Todo producto pertenece a una categoría."
+        pasos={[
+          "Escribí el nombre y tocá «Crear».",
+          "Para corregir un nombre tocá «Editar»; para dejar de usarla, «Dar de baja».",
+          "Lo dado de baja no se borra: se ve tildando «Mostrar dados de baja» y se puede «Reactivar».",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
         alCancelar={parecidos.descartar} />

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
 
@@ -98,7 +99,13 @@ export default function Proveedores() {
 
   return (
     <section>
-      <h2>Proveedores</h2>
+      <EncabezadoPantalla id="proveedores" icono="🤝" titulo="Proveedores"
+        descripcion="Las empresas que le venden mercadería al comercio. Se identifican por su CUIT, que no se puede repetir."
+        pasos={[
+          "Cargá CUIT y razón social (teléfono y email son opcionales).",
+          "Tocá «Productos» en un proveedor para indicar qué productos vende.",
+          "Un producto puede tener varios proveedores y un proveedor muchos productos.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
         alCancelar={parecidos.descartar} />

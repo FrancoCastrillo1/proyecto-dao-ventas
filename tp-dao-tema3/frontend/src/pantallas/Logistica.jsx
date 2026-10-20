@@ -7,8 +7,9 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
+import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
-import Estado from "../componentes/Estado.jsx";
+import Estado, { PROXIMO_PASO_BULTO } from "../componentes/Estado.jsx";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
 import { fecha } from "../formato.js";
 
@@ -56,11 +57,19 @@ export default function Logistica() {
 
   return (
     <section>
-      <h2>Logística: reposición CD → sucursales</h2>
+      <EncabezadoPantalla id="logistica" icono="🚚" titulo="Logística"
+        descripcion="Cómo llega la mercadería del CD a los locales: en bultos cerrados con un precinto de seguridad que se revisa al llegar."
+        pasos={[
+          "La sucursal hace un pedido (paso 1).",
+          "El CD junta los pedidos pendientes en una orden (paso 2) y crea un remito por sucursal (paso 3).",
+          "En el remito se arman los bultos, se les pone el precinto y se despacha: ahí sale el stock del CD (paso 4).",
+          "En el local se recibe cada bulto y se verifica el precinto. Cuando se verifican todos, la mercadería queda para vender.",
+        ]} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       {/* ---------------------------------------------------------- 1. Pedido */}
-      <h3 className="paso">1 · Pedido de una sucursal</h3>
+      <h3 className="paso"><span className="numero">1</span> La sucursal pide mercadería</h3>
+      <p className="descripcion-paso">Elegí la sucursal y qué productos necesita. El pedido queda pendiente hasta que el CD lo procese.</p>
       <form className="formulario formulario-ancho" onSubmit={crearPedido}>
         <label>Sucursal que pide
           <select value={sucursalPedido} onChange={(e) => setSucursalPedido(e.target.value)}>
@@ -73,7 +82,8 @@ export default function Logistica() {
       </form>
 
       {/* --------------------------------------------------- 2. Consolidación */}
-      <h3 className="paso">2 · El CD consolida los pedidos pendientes en una orden</h3>
+      <h3 className="paso"><span className="numero">2</span> El CD junta los pedidos en una orden</h3>
+      <p className="descripcion-paso">Tildá los pedidos pendientes que se van a preparar juntos y tocá «Consolidar». La orden dice cuánto de cada producto hay que juntar.</p>
       <div className="tabla-scroll">
         <table>
           <thead><tr><th></th><th>Pedido</th><th>Sucursal</th><th>Fecha</th><th>Productos</th></tr></thead>
@@ -99,7 +109,8 @@ export default function Logistica() {
       </div>
 
       {/* ----------------------------------------------------- 3. Órdenes */}
-      <h3 className="paso">3 · Órdenes: un remito por cada sucursal</h3>
+      <h3 className="paso"><span className="numero">3</span> Un remito por cada sucursal</h3>
+      <p className="descripcion-paso">El remito es el documento de envío: agrupa los bultos que viajan a una misma sucursal. Creá uno por cada sucursal de la orden.</p>
       <div className="tabla-scroll">
         <table>
           <thead><tr><th>Orden</th><th>Fecha</th><th>Estado</th><th>A preparar</th><th>Remitos por sucursal</th></tr></thead>
@@ -129,7 +140,8 @@ export default function Logistica() {
       </div>
 
       {/* ----------------------------------------------------- 4. Remitos */}
-      <h3 className="paso">4 · Remitos y bultos</h3>
+      <h3 className="paso"><span className="numero">4</span> Armar, precintar, despachar y recibir los bultos</h3>
+      <p className="descripcion-paso">Abrí un remito. Cada bulto muestra en qué estado está y qué hacer después. Pasá el mouse sobre un estado para ver qué significa.</p>
       <div className="tabla-scroll">
         <table>
           <thead><tr><th>Remito</th><th>Orden</th><th>Destino</th><th>Estado</th><th className="num">Bultos</th><th></th></tr></thead>
@@ -220,6 +232,8 @@ function FilaBulto({ bulto, catalogos, accion }) {
         <span className="nota">{bulto.items.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ")}</span>
       </div>
 
+      <p className="pista">👉 {PROXIMO_PASO_BULTO[bulto.estado]}</p>
+
       {/* Solo las acciones del estado actual */}
       <div className="bulto-acciones">
         {bulto.estado === "PREPARADO" && (<>
@@ -241,7 +255,7 @@ function FilaBulto({ bulto, catalogos, accion }) {
           <button onClick={verificar}>Verificar</button>
         </>)}
         <button className="secundario" onClick={() => setVerHistorial(!verHistorial)}>
-          {verHistorial ? "Ocultar historial" : "Historial"}
+          {verHistorial ? "Ocultar historial" : "Ver historial"}
         </button>
       </div>
 
