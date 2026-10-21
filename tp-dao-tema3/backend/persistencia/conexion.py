@@ -42,10 +42,27 @@ def crear_tablas(db_path=DB_PATH):
 # Corre ANTES del esquema: el esquema crea índices sobre estas columnas.
 COLUMNAS_NORMALIZADAS = {"categorias": "nombre", "ubicaciones": "nombre"}
 
+# Tablas de operaciones que registran QUIÉN las hizo. Las filas que ya existían
+# quedan con usuario_id vacío: se hicieron antes de que hubiera usuarios.
+TABLAS_CON_USUARIO = [
+    "pedidos_reposicion", "ordenes_reposicion", "remitos", "historial_bultos",
+    "movimientos_stock", "ventas", "devoluciones",
+]
+
+
+def columnas_de(cx, tabla):
+    # Vacío si la tabla todavía no existe (base nueva: la crea el esquema)
+    return [fila["name"] for fila in cx.execute(f"PRAGMA table_info({tabla})")]
+
 
 def migrar(cx):
+    for tabla in TABLAS_CON_USUARIO:
+        columnas = columnas_de(cx, tabla)
+        if columnas and "usuario_id" not in columnas:
+            cx.execute(f"ALTER TABLE {tabla} ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)")
+
     for tabla, origen in COLUMNAS_NORMALIZADAS.items():
-        columnas = [fila["name"] for fila in cx.execute(f"PRAGMA table_info({tabla})")]
+        columnas = columnas_de(cx, tabla)
         if columnas and "nombre_normalizado" not in columnas:
             cx.execute(f"ALTER TABLE {tabla} ADD COLUMN nombre_normalizado TEXT")
             for fila in cx.execute(f"SELECT id, {origen} FROM {tabla}").fetchall():
