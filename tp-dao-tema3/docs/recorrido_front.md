@@ -29,62 +29,68 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ## 1. Inicio
 
-- [ ] **1.1 Hacé:** abrí la app.
+- [ CHECK] **1.1 Hacé:** abrí la app.
   **Debería:** verse 4 tarjetas con números (ventas de hoy, pedidos sin preparar, envíos en camino, faltantes para reponer) y abajo 4 accesos rápidos.
-- [ ] **1.2 Hacé:** tocá cada tarjeta y cada acceso rápido.
+   (Mejorar el front los titulos se ven re chiquitos)
+- [ check] **1.2 Hacé:** tocá cada tarjeta y cada acceso rápido.
   **Debería:** llevarte a la pantalla de lo que dice (Vender, Envíos, Stock, Reportes).
-- [ ] **1.3 Hacé:** apagá el backend y recargá la página.
+- [CHECK ] **1.3 Hacé:** apagá el backend y recargá la página.
   **Debería:** aparecer "No hay conexión con el sistema", con el comando para levantarlo.
 
 ## 2. Locales y CD (Datos → Locales y CD)
 
-- [ ] **2.1 Hacé:** entrá a la pantalla.
-  **Debería:** verse *CD Central* con la etiqueta "Despacha", y los 3 locales con "Vende" y "Recibe".
-- [ ] **2.2 Hacé:** tocá "Locales" y después "CD" en el filtro de arriba.
+- [ CHECK] **2.1 Hacé:** entrá a la pantalla.
+  **Debería:** verse *CD Central* con la etiqueta "Despacha", y los 3 locales con "Vende" y "Recibe". (esto igual hay que cambiarlo porque tendriamos que manejar los perfiles de sucursales y de cd)
+- [check ] **2.2 Hacé:** tocá "Locales" y después "CD" en el filtro de arriba.
   **Debería:** la lista muestra solo ese tipo.
-- [ ] **2.3 Hacé:** "+ Nueva ubicación", elegí la tarjeta **Centro de Distribución**, nombre "CD Sur", y Crear.
-  **Debería:** salir un error que diga que ya existe un Centro de Distribución activo. El panel queda abierto con lo que escribiste.
-- [ ] **2.4 Hacé:** "+ Nueva ubicación" → Local → "Sucursal Oeste", dirección "Oeste 10" → Crear.
-  **Debería:** salir "✓ Listo: «Sucursal Oeste» creada", y aparece en la lista.
-- [ ] **2.5 Hacé:** creá otra con el nombre "sucursal oeste".
-  **Debería:** salir un error de nombre repetido (no importan las mayúsculas ni las tildes).
-- [ ] **2.6 Hacé:** creá otra con el nombre "Sucursal Oest".
+- [ CHECK ] **2.3 Hacé:** "+ Nueva ubicación", elegí la tarjeta **Centro de Distribución**, nombre "CD Sur", y Crear.
+  **Debería:** salir un error que diga que ya existe un Centro de Distribución activo. El panel queda abierto con lo que escribiste. (si vamos a tener solo 1 centro de distribucion deberiamos ni dar la oportunidad de crearlo)
+- [CHECK ] **2.4 Hacé:** "+ Nueva ubicación" → Local → "Sucursal Oeste", dirección "Oeste 10" → Crear.
+  **Debería:** salir "✓ Listo: «Sucursal Oeste» creada", y aparece en la lista. ( que aparezca un boton de confirmar la creacion de la sucursal)
+- [ FALLO ] **2.5 Hacé:** creá otra con el nombre "sucursal oeste".
+  **Debería:** salir un error de nombre repetido (no importan las mayúsculas ni las tildes). (esto falla ya que yo cree chacabuco y local chacabuco y me dejo, habria que revvisar esto de ultima que puedan compartir nombre pero no direccion)
+- [ CHECK ] **2.6 Hacé:** creá otra con el nombre "Sucursal Oest".
   **Debería:** aparecer dentro del panel el cartel amarillo "¿Es un duplicado?". "Cancelar" no guarda nada; "Guardar igual" la crea.
-- [ ] **2.7 Hacé:** tocá la fila de un local.
+- [CHECK ] **2.7 Hacé:** tocá la fila de un local.
   **Debería:** abrirse el panel para editar el nombre y la dirección. El tipo **no** aparece, porque no se puede cambiar.
-- [ ] **2.8 Hacé:** en el panel de "Sucursal Oeste" tocá "Dar de baja" y confirmá.
+- [ CHECK] **2.8 Hacé:** en el panel de "Sucursal Oeste" tocá "Dar de baja" y confirmá.
   **Debería:** desaparecer de "Activas" y aparecer en "De baja" (el número del filtro cambia). Ahí, "Reactivar" la vuelve a "Activas".
+
+
+
+  deberiamos hacer un perfil ADMINISTRADOR que permita hacer esto, crear lcoales, cd, dar de baja, editarlos etc hay que ver bien
 
 ## 3. Categorías y productos (Datos)
 
-- [ ] **3.1 Hacé:** en Categorías, "+ Nueva categoría" → "lacteos" → Crear.
-  **Debería:** salir un error de que ya existe (*Lácteos*), aunque no tenga tilde ni mayúscula.
-- [ ] **3.2 Hacé:** escribí "lim" en el buscador.
+- [ check] **3.1 Hacé:** en Categorías, "+ Nueva categoría" → "lacteos" → Crear.
+  **Debería:** salir un error de que ya existe (*Lácteos*), aunque no tenga tilde ni mayúscula. (si deja esta bien, pero aparece error 409, un usuario normal no va a entender que es error 409)
+- [check ] **3.2 Hacé:** escribí "lim" en el buscador.
   **Debería:** quedar solo *Limpieza*.
-- [ ] **3.3 Hacé:** en Productos, mirá la lista.
+- [ check] **3.3 Hacé:** en Productos, mirá la lista.
   **Debería:** verse los 10 del seed; *Yogur Bebible 1L (promo)* tiene la ganancia en rojo (se vende por debajo del costo).
-- [ ] **3.4 Hacé:** elegí "Bebidas" en el desplegable de categorías y buscá "cola".
+- [check ] **3.4 Hacé:** elegí "Bebidas" en el desplegable de categorías y buscá "cola".
   **Debería:** quedar solo *Gaseosa Cola 2.25L*.
-- [ ] **3.5 Hacé:** "+ Nuevo producto" con código `beb-001` y el resto completo → Crear producto.
+- [check ] **3.5 Hacé:** "+ Nuevo producto" con código `beb-001` y el resto completo → Crear producto.
   **Debería:** salir un error de código repetido (se guarda en mayúsculas, así que choca con BEB-001).
-- [ ] **3.6 Hacé:** "+ Nuevo producto" con precio `-5`.
-  **Debería:** salir "Revisá los datos: …" diciendo que el precio tiene que ser mayor a cero.
-- [ ] **3.7 Hacé:** "+ Nuevo producto" con todo vacío → Crear producto.
-  **Debería:** salir un solo mensaje con lo que falta: "Categoría: es obligatorio · Precio de venta: es obligatorio · Costo: es obligatorio".
-- [ ] **3.8 Hacé:** tocá la fila de *Aceite de Girasol*.
+- [check ] **3.6 Hacé:** "+ Nuevo producto" con precio `-5`.
+  **Debería:** salir "Revisá los datos: …" diciendo que el precio tiene que ser mayor a cero. (en el desplegable sale un cartel que dice mayor o IGUAL a 0 cuando pones los dos en 0 el de costo y precio de venta aparece una notificacion arriba que dicer MAYOR a 0, Deberiamos poner las notificaciones en el desplegable mayor a 0 )
+- [ Check ] **3.7 Hacé:** "+ Nuevo producto" con todo vacío → Crear producto.
+  **Debería:** salir un solo mensaje con lo que falta: "Categoría: es obligatorio · Precio de venta: es obligatorio · Costo: es obligatorio". (el mensaje deberia salir en cada lugar donde tengo que llenar)
+- [Check] **3.8 Hacé:** tocá la fila de *Aceite de Girasol*.
   **Debería:** abrirse el panel sin el campo código (el código va en el subtítulo y no se cambia), y abajo "Quién lo vende" con *Mayorista Norte SA*.
 
 ## 4. Proveedores (Datos → Proveedores)
 
-- [ ] **4.1 Hacé:** "+ Nuevo proveedor" con CUIT `20-12345678-5`.
-  **Debería:** salir un error de CUIT inválido (el dígito verificador no da).
-- [ ] **4.2 Hacé:** lo mismo con `20-12345678-6`.
+- [check ] **4.1 Hacé:** "+ Nuevo proveedor" con CUIT `20-12345678-5`. (funciona pero de vuelta, primero no explica q esta mal, y ademas tira el numero del codigo 400 que un usuario no sabe q es )
+  **Debería:** salir un error de CUIT inválido (el dígito verificador no da). 
+- [check ] **4.2 Hacé:** lo mismo con `20-12345678-6`. (funciona pero de vuelta,tira el numero del codigo 400 que un usuario no sabe q es)
   **Debería:** salir un error de que ya existe (es *Distribuidora Sur SA*).
-- [ ] **4.3 Hacé:** creá uno con un CUIT válido nuevo, por ejemplo `20-30111222-0`.
+- [check ] **4.3 Hacé:** creá uno con un CUIT válido nuevo, por ejemplo `20-30111222-0`.
   **Debería:** salir "Proveedor creado: ahora elegí qué productos vende". El panel **no se cierra**: queda abierto con la sección "Productos que vende (0)".
-- [ ] **4.4 Hacé:** elegí un producto en el desplegable y tocá "Agregar".
+  (estaria bueno cuando sale el que productos vende, poder crear un producto desde ahi, asi no hay que crearlo previamente o crear el proovedor y despues crear el producto)
+- [ check] **4.4 Hacé:** elegí un producto en el desplegable y tocá "Agregar".
   **Debería:** el producto pasa a la lista de abajo y **desaparece del desplegable**, así no se puede asignar dos veces.
-- [ ] **4.5 Hacé:** "Quitar" en ese producto.
+- [check] **4.5 Hacé:** "Quitar" en ese producto.
   **Debería:** volver al desplegable.
 
 ## 5. Pedido de un local y preparación (Operación → Envíos a locales)
@@ -92,74 +98,75 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercadería:
 **Pedidos de locales → Armando en el CD → En camino → Entregados**.
 
-- [ ] **5.1 Hacé:** entrá a la pantalla.
+- [check ] **5.1 Hacé:** entrá a la pantalla.
   **Debería:**
   - *Sucursal Sur* en "En camino";
   - *Centro* y *Norte* en "Entregados" (Norte con "⚠ 1 bulto rechazado");
   - la columna de pedidos vacía.
-- [ ] **5.2 Hacé:** "+ Nuevo pedido", sin elegir local.
-  **Debería:** el botón "Crear pedido" estar deshabilitado.
-- [ ] **5.3 Hacé:** elegí *Sucursal Norte*, *Lavandina 1L*, cantidad 10 → Crear pedido.
-  **Debería:** salir "Pedido creado"; aparece una tarjeta en "Pedidos de locales" con "10 × Lavandina 1L".
-- [ ] **5.4 Hacé:** tildá el pedido.
+- [ check] **5.2 Hacé:** "+ Nuevo pedido", sin elegir local.
+  **Debería:** el botón "Crear pedido" estar deshabilitado. (en el perfil del local se deberia de pedir)
+- [check ] **5.3 Hacé:** elegí *Sucursal Norte*, *Lavandina 1L*, cantidad 10 → Crear pedido.
+  **Debería:** salir "Pedido creado"; aparece una tarjeta en "Pedidos de locales" con "10 × Lavandina 1L". (cuando creamos el pedido en cantidad sale un uno y alguien podria no entender que la cantidad va ahi, segundo, deberiamos pedir confirmacion de la generacion del pedido y que se haga un detalle extraible a pdf)
+- [ check] **5.4 Hacé:** tildá el pedido.
   **Debería:** aparecer el botón "Preparar 1 pedido →".
-- [ ] **5.5 Hacé:** tocá "Preparar 1 pedido →".
+- [ check] **5.5 Hacé:** tocá "Preparar 1 pedido →".
   **Debería:** el pedido sale de la primera columna y aparece en "Armando en el CD" como "Sucursal Norte · 0 bultos · Armar bultos →".
   (Por detrás se creó la orden de reposición y un remito por local.)
+  (funciona pero como vnego diciendo habria que ir manejando esto en perfiles diferentes)
 
 ## 6. Bultos con remito y precinto (Envíos, columna "Armando en el CD")
 
-- [ ] **6.1 Hacé:** tocá la tarjeta de *Sucursal Norte*.
-  **Debería:** abrirse el remito, con una tabla "Lo que pidió el local": Lavandina, Pidió 10, En bultos 0, Falta 10.
-- [ ] **6.2 Hacé:** en "Armar un bulto" elegí Lavandina, cantidad 6 → Armar bulto.
+- [ check ] **6.1 Hacé:** tocá la tarjeta de *Sucursal Norte*.
+  **Debería:** abrirse el remito, con una tabla "Lo que pidió el local": Lavandina, Pidió 10, En bultos 0, Falta 10. 
+- [check ] **6.2 Hacé:** en "Armar un bulto" elegí Lavandina, cantidad 6 → Armar bulto.
   **Debería:**
   - salir "Bulto armado: ahora precintalo";
   - en la tabla, Falta queda en 4;
   - en "Bultos" aparece el bulto con sus pasos: **Preparado** marcado y Precintado → En camino → Recibido → Verificado por delante.
-- [ ] **6.3 Hacé:** armá otro bulto con 6 Lavandinas.
+- [check ] **6.3 Hacé:** armá otro bulto con 6 Lavandinas.
   **Debería:** salir un error de que se pidieron 10 y se mandarían 12.
-- [ ] **6.4 Hacé:** armá un bulto con un producto que no se pidió.
-  **Debería:** salir un error de que ese producto no fue pedido.
-- [ ] **6.5 Hacé:** tocá "Cargar lo que falta" → Armar bulto.
+- [chejc ] **6.4 Hacé:** armá un bulto con un producto que no se pidió.
+  **Debería:** salir un error de que ese producto no fue pedido. (no le veo mucho sentido, que directamente ni aparezca otro tipo de productos)
+- [ check] **6.5 Hacé:** tocá "Cargar lo que falta" → Armar bulto.
   **Debería:** cargarse sola la línea "Lavandina, 4". Al armar, la columna Falta muestra ✓ y la sección "Armar un bulto" desaparece.
-- [ ] **6.6 Hacé:** mirá el pie del panel.
+- [check ] **6.6 Hacé:** mirá el pie del panel.
   **Debería:** estar deshabilitado "Despachar →", con el texto "Precintá todos los bultos para poder despachar".
-- [ ] **6.7 Hacé:** en un bulto, precinto `PC-001` → Precintar.
+- [check] **6.7 Hacé:** en un bulto, precinto `PC-001` → Precintar.
   **Debería:** salir un error de que ese precinto ya se usó (es del seed).
-- [ ] **6.8 Hacé:** precintá los dos bultos con `PN-100` y `PN-101`.
+- [ check] **6.8 Hacé:** precintá los dos bultos con `PN-100` y `PN-101`.
   **Debería:** cada bulto pasar a **Precintado** en sus pasos.
-- [ ] **6.9 Hacé:** "Historial" en un bulto.
+- [ check] **6.9 Hacé:** "Historial" en un bulto.
   **Debería:** verse "preparado → Precintado" con fecha y hora.
 
 ## 7. Despacho
 
-- [ ] **7.1 Hacé:** antes de despachar, en Stock → *CD Central*, anotá cuántas *Lavandina 1L* hay.
+- [check ] **7.1 Hacé:** antes de despachar, en Stock → *CD Central*, anotá cuántas *Lavandina 1L* hay.
   **Debería:** verse un número (llamalo X).
-- [ ] **7.2 Hacé:** volvé al remito y tocá "Despachar →".
+- [check ] **7.2 Hacé:** volvé al remito y tocá "Despachar →".
   **Debería:** aparecer "¿Despachar a Sucursal Norte?", con la lista "10 × Lavandina 1L" y "No se puede deshacer". "Cancelar" no hace nada.
-- [ ] **7.3 Hacé:** confirmá "Despachar".
+- [check ] **7.3 Hacé:** confirmá "Despachar".
   **Debería:** salir "Despachado: el envío está en camino"; el panel se cierra y la tarjeta pasa a "En camino" con una barra de progreso en 0 de 2.
-- [ ] **7.4 Hacé:** mirá Stock → *CD Central*.
+- [check] **7.4 Hacé:** mirá Stock → *CD Central*.
   **Debería:** haber X − 10 Lavandinas. En "Ver movimientos" aparece "Despacho a un local −6" y "−4".
 
 ## 8. Recepción verificando el precinto
 
-- [ ] **8.1 Hacé:** abrí la tarjeta de *Sucursal Sur* en "En camino" (es la del seed).
+- [ check] **8.1 Hacé:** abrí la tarjeta de *Sucursal Sur* en "En camino" (es la del seed).
   **Debería:** verse su bulto en **En camino**, con el botón "Marcar como recibido".
-- [ ] **8.2 Hacé:** "Marcar como recibido".
+- [ check] **8.2 Hacé:** "Marcar como recibido".
   **Debería:** el bulto pasar a **Recibido** y aparecer "Número que se lee en el precinto" con "¿Llegó sano? Sí / No". **Ninguno viene elegido**, y "Verificar" está deshabilitado.
-- [ ] **8.3 Hacé:** escribí `PS-001`, tocá "Sí" → Verificar → confirmá.
+- [ check] **8.3 Hacé:** escribí `PS-001`, tocá "Sí" → Verificar → confirmá.
   **Debería:** el bulto quedar **Verificado** (todos los pasos con ✓); la tarjeta pasa a "Entregados" con "Todo llegó bien".
-- [ ] **8.4 Hacé:** Stock → *Sucursal Sur*.
+- [check ] **8.4 Hacé:** Stock → *Sucursal Sur*.
   **Debería:** haber 25 *Agua Mineral* y 40 *Leche Entera*, que llegaron en ese bulto.
-- [ ] **8.5 Hacé:** en el envío de Norte del punto 7: recibí los 2 bultos. Verificá uno con `PN-100` y "Sí", y el otro con un número **equivocado** (por ejemplo `XXX`).
+- [ check] **8.5 Hacé:** en el envío de Norte del punto 7: recibí los 2 bultos. Verificá uno con `PN-100` y "Sí", y el otro con un número **equivocado** (por ejemplo `XXX`).
   **Debería:**
   - en el equivocado, la confirmación tiene el botón **rojo**;
   - después, el último paso muestra **✕ Rechazado**;
   - la tarjeta pasa a "Entregados" con "⚠ 1 bulto rechazado".
-- [ ] **8.6 Hacé:** Stock → *Sucursal Norte* → Lavandina → "Ver movimientos".
-  **Debería:** aparecer **solo** la recepción del bulto bueno (6 o 4). La del rechazado **no entró**.
-- [ ] **8.7 Hacé:** Reportes → "⚠️ Mermas".
+- [ check] **8.6 Hacé:** Stock → *Sucursal Norte* → Lavandina → "Ver movimientos".
+  **Debería:** aparecer **solo** la recepción del bulto bueno (6 o 4). La del rechazado **no entró**. (solo aparece el que entro el que fue rechazado ni aparece)
+- [check ] **8.7 Hacé:** Reportes → "⚠️ Mermas".
   **Debería:** aparecer el bulto rechazado en "Qué se perdió", con su valor.
 
 ## 9. Ventas, cobro, comprobante y devoluciones (Operación → Vender)

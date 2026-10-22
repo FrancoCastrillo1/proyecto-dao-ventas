@@ -116,8 +116,9 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Al cerrar el paso: tabla con archivo, qué cambió y por qué; qué tengo que probar a mano; un mensaje de commit sugerido; y agregá a "Decisiones tomadas" lo que elegí. No avances al paso siguiente.
 
 ## Decisiones tomadas
-- Dos perfiles: Centro de Distribución (hay uno solo) y Local (puede haber muchos). Sin administrador.
-- Los maestros y los usuarios los maneja el CD.
+- Tres perfiles: Administrador (sin ubicación), Centro de Distribución (hay uno solo) y Local (puede haber muchos). (23/10: antes era "sin administrador".)
+- Los maestros y los usuarios los maneja el Administrador; el CD solo opera.
+- Se entra con usuario y contraseña (23/10).
 - El local de ventas, pedidos, recepción y reportes sale del usuario logueado, nunca del formulario.
 
 ### Paso 3: usuarios y perfiles (decidido el 20/10)

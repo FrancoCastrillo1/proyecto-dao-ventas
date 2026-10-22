@@ -13,9 +13,18 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
   - Hecho el 22/10 en la rama `feature/usabilidad`: 13 de los 15 problemas de `docs/recorrido_front.md`, más la cotización de la venta en el back (`POST /ventas/cotizar`). Quedan: elegir el local a mano (lo resuelven los pasos 2 y 3) y el stock disponible al hacer un pedido.
 - [x] ~~**1c. Rediseño del front.** Que la interfaz se entienda sola, sin recuadros de instrucciones, y el checklist en formato "Hacé → Debería".~~
   - Hecho el 22/10 en la rama `feature/usabilidad`: menú lateral, panel lateral para crear/editar/ver, Inicio con indicadores, Vender como punto de venta, Envíos como tablero por etapas con los pasos del bulto dibujados, filtros que se aplican solos. Solo front (más los tests de la cotización del 1b). Probado de punta a punta en Chrome headless.
+- [ ] **1d. Arreglos del recorrido de Geronimo** (probó del 1 al 8 el 23/10; las notas están en `docs/recorrido_front.md`). Lo que no resuelven los perfiles:
+  - Errores: que no muestren el código (400, 409) y que digan qué está mal; los de formato, al lado de cada campo y no solo en el aviso de arriba.
+  - Producto: el formulario permite 0 en precio y costo, pero el back exige mayor a 0 (que coincidan).
+  - Ubicaciones: no ofrecer crear un CD si ya hay uno activo; ¿dirección única? (pueden repetir nombre parecido, no dirección).
+  - Pedido: la cantidad no se entiende (falta etiqueta); confirmar antes de crear el pedido; detalle descargable en PDF (con el paso 5).
+  - Bulto: al armarlo, ofrecer solo los productos que pidió el local.
+  - Proveedor: crear un producto desde "Productos que vende".
+  - Títulos más grandes en todo el front.
 - [ ] **2. Usuarios y perfiles en el back.** Que el back separe las funciones de cada perfil y registre quién hizo cada operación.
+  - Administrador (sin ubicación): locales, CD, productos, categorías, proveedores y usuarios; ve los reportes de toda la red. No opera.
   - Local: pedir reposición, ver sus pedidos y remitos, recibir y verificar los bultos de su local, vender, devolver, caja, ver su stock y el catálogo, reportes de su local.
-  - CD: maestros y usuarios, compras, consolidar pedidos, armar y precintar bultos, remitos, despachar, stock del CD, reportes de toda la red.
+  - CD: compras, consolidar pedidos, armar y precintar bultos, remitos, despachar, stock del CD, reportes de toda la red.
   - Opciones a dar: cómo modelar el perfil, cómo autenticar y guardar la sesión, y dónde controlar los permisos.
   - **Estado (22/10): empezado en la rama `feature/usuarios`.**
     - [x] a) Dominio: `Usuario` abstracto con `UsuarioCD` y `UsuarioSucursal`, capacidades, `validar_ubicacion`, `puede_ver_ubicacion`, fábrica `crear_usuario`, baja y reactivación (commit `98be82d`).
@@ -49,9 +58,9 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 ## Decisiones tomadas
 
 ### Generales
-- Dos perfiles: Centro de Distribución (hay uno solo) y Local (puede haber muchos). Sin administrador.
-- Al entrar se elige el perfil. Si es Local, se elige cuál de los locales activos.
-- Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el CD.
+- Tres perfiles: Administrador (sin ubicación), Centro de Distribución (hay uno solo) y Local (puede haber muchos). Decidido el 23/10; antes era "sin administrador".
+- Se entra con usuario y contraseña (decidido el 23/10; antes era "se elige el perfil").
+- Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el Administrador. El CD solo opera.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
 
