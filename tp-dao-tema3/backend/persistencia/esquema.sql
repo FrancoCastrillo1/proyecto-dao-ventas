@@ -66,6 +66,54 @@ ON ubicaciones (nombre_normalizado);
 CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo
 ON ubicaciones (tipo) WHERE tipo = 'CD' AND activo = 1;
 
+-- ================================================================= Usuarios
+-- El perfil define qué puede hacer cada usuario (UsuarioAdministrador,
+-- UsuarioCD o UsuarioSucursal en el dominio; "perfil" decide la clase al leer).
+-- El CD y las sucursales pertenecen a una ubicación; el administrador, a
+-- ninguna. El nombre de usuario es único sin distinguir mayúsculas. Baja lógica.
+-- La contraseña se guarda como hash PBKDF2 con su sal, nunca en texto. Puede
+-- faltar en usuarios creados antes del login: no entran hasta que se les ponga.
+CREATE TABLE IF NOT EXISTS usuarios (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+perfil TEXT NOT NULL CHECK (perfil IN ('ADMIN', 'CD', 'SUCURSAL')),
+nombre_usuario TEXT NOT NULL UNIQUE COLLATE NOCASE,
+nombre_completo TEXT NOT NULL,
+ubicacion_id INTEGER REFERENCES ubicaciones(id),
+hash_contrasena TEXT,
+sal TEXT,
+activo INTEGER NOT NULL DEFAULT 1,
+CHECK ((perfil = 'ADMIN') = (ubicacion_id IS NULL))
+);
+
+-- Red de seguridad: el perfil tiene que coincidir con el tipo de la ubicación
+-- (un usuario CD en el CD, uno de sucursal en una sucursal). Los nombres son
+-- los mismos a propósito, así la regla es una simple comparación. El
+-- administrador no tiene ubicación (lo controla el CHECK de la tabla).
+CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_alta
+BEFORE INSERT ON usuarios
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+BEGIN
+    SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
+END;
+
+CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_cambio
+BEFORE UPDATE OF perfil, ubicacion_id ON usuarios
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+BEGIN
+    SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
+END;
+
+-- Sesiones abiertas con el login. Se guarda el hash del token (no el token):
+-- si alguien lee la base, no puede usarlo para entrar. Vencen solas.
+CREATE TABLE IF NOT EXISTS sesiones (
+token_hash TEXT PRIMARY KEY,
+usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+vence TEXT NOT NULL
+);
+
+
 -- Cantidad de cada producto en cada ubicación (CD o sucursal): una fila por
 -- par producto-ubicación. La cantidad nunca puede ser negativa. El stock
 -- mínimo no se repite acá: se toma de productos.stock_minimo.
@@ -85,7 +133,8 @@ stock_id INTEGER NOT NULL REFERENCES stock(id),
 fecha TEXT NOT NULL,
 cantidad INTEGER NOT NULL CHECK (cantidad <> 0),
 tipo TEXT NOT NULL CHECK (tipo IN ('COMPRA', 'DESPACHO', 'RECEPCION', 'VENTA', 'DEVOLUCION', 'AJUSTE')),
-referencia TEXT NOT NULL DEFAULT ''
+referencia TEXT NOT NULL DEFAULT '',
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE INDEX IF NOT EXISTS movimientos_stock_por_stock
@@ -109,6 +158,7 @@ subtotal INTEGER NOT NULL CHECK (subtotal > 0),
 total INTEGER NOT NULL CHECK (total > 0),
 vuelto INTEGER NOT NULL DEFAULT 0 CHECK (vuelto >= 0),
 nro_comprobante INTEGER NOT NULL CHECK (nro_comprobante > 0),
+usuario_id INTEGER REFERENCES usuarios(id),
 UNIQUE (sucursal_id, nro_comprobante)
 );
 
@@ -131,7 +181,8 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 venta_id INTEGER NOT NULL REFERENCES ventas(id),
 fecha TEXT NOT NULL,
 motivo TEXT NOT NULL,
-importe INTEGER NOT NULL CHECK (importe >= 0)
+importe INTEGER NOT NULL CHECK (importe >= 0),
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE TABLE IF NOT EXISTS detalles_devolucion (
@@ -164,7 +215,8 @@ CREATE TABLE IF NOT EXISTS ordenes_reposicion (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
-estado TEXT NOT NULL CHECK (estado IN ('ABIERTA', 'CERRADA'))
+estado TEXT NOT NULL CHECK (estado IN ('ABIERTA', 'CERRADA')),
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 -- Lo que pide cada sucursal. orden_id queda vacío hasta que se consolida.
@@ -173,7 +225,8 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 sucursal_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
 estado TEXT NOT NULL CHECK (estado IN ('PENDIENTE', 'CONSOLIDADO')),
-orden_id INTEGER REFERENCES ordenes_reposicion(id)
+orden_id INTEGER REFERENCES ordenes_reposicion(id),
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE TABLE IF NOT EXISTS detalles_pedido (
@@ -192,6 +245,7 @@ origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 destino_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
 estado TEXT NOT NULL CHECK (estado IN ('ABIERTO', 'CERRADO', 'EN_TRANSITO', 'VERIFICADO', 'VERIFICADO_CON_RECHAZOS')),
+usuario_id INTEGER REFERENCES usuarios(id),
 CHECK (origen_id <> destino_id),
 UNIQUE (orden_id, destino_id)
 );
@@ -222,7 +276,8 @@ bulto_id INTEGER NOT NULL REFERENCES bultos(id),
 fecha_hora TEXT NOT NULL,
 estado_anterior TEXT NOT NULL,
 estado_nuevo TEXT NOT NULL,
-observacion TEXT NOT NULL DEFAULT ''
+observacion TEXT NOT NULL DEFAULT '',
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE INDEX IF NOT EXISTS historial_bultos_por_bulto

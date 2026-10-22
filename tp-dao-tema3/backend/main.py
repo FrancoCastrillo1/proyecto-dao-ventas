@@ -4,8 +4,10 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.api import rutas_logistica, rutas_maestros, rutas_reportes, rutas_stock, rutas_ventas
-from backend.dominio.excepciones import DatoInvalido, EntidadDuplicada, ErrorDeNegocio, NoEncontrado
+from backend.api import rutas_logistica, rutas_maestros, rutas_reportes, rutas_stock, rutas_usuarios, rutas_ventas
+from backend.dominio.excepciones import (
+    DatoInvalido, EntidadDuplicada, ErrorDeNegocio, NoAutenticado, NoEncontrado, SinPermiso,
+)
 from backend.persistencia.conexion import crear_tablas
 
 crear_tablas()  # crea las tablas si no existen
@@ -17,6 +19,8 @@ CODIGOS_HTTP = {
     NoEncontrado: 404,
     EntidadDuplicada: 409,
     DatoInvalido: 400,
+    NoAutenticado: 401,
+    SinPermiso: 403,
 }
 
 
@@ -31,6 +35,8 @@ def salud():
     return {"ok": True}
 
 
+app.include_router(rutas_usuarios.router_auth)
+app.include_router(rutas_usuarios.router_usuarios)
 app.include_router(rutas_maestros.router)
 app.include_router(rutas_maestros.router_productos)
 app.include_router(rutas_maestros.router_proveedores)

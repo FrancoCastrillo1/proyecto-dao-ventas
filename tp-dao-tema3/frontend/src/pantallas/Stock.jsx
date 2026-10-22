@@ -1,6 +1,8 @@
 // Pantalla de Stock: existencias de cada ubicación, compra al CD (lo único que
 // mete mercadería desde afuera) y el libro de movimientos de cada producto.
 // A un local el stock le entra SOLO por bultos verificados (pantalla Envíos).
+// Un local ve solo su stock; quien ve toda la red elige la ubicación. Comprar,
+// solo quien tiene la capacidad (el CD), y entra a SU ubicación.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
@@ -9,6 +11,7 @@ import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
+import { puede } from "../componentes/Permisos.js";
 import { fecha } from "../formato.js";
 
 const COMPRA_VACIA = { producto_id: "", cantidad: "", referencia: "" };
@@ -19,7 +22,7 @@ const TIPO_MOVIMIENTO = {
   VENTA: "Venta", DEVOLUCION: "Devolución de un cliente", AJUSTE: "Ajuste manual",
 };
 
-export default function Stock({ irA }) {
+export default function Stock({ irA, puedeIr, usuario }) {
   const catalogos = useCatalogos();
   const [ubicacionId, setUbicacionId] = useState(null);
   const [existencias, setExistencias] = useState(null);  // null = cargando
@@ -30,10 +33,13 @@ export default function Stock({ irA }) {
   const { aviso, ejecutar, limpiar } = useAviso();
 
   const ubicacion = catalogos.ubicacion(ubicacionId);
+  const veTodaLaRed = puede(usuario, "ve_toda_la_red");
 
-  // Arranca mostrando el CD
+  // Arranca en la ubicación del usuario; el administrador (que no tiene), en el CD
   useEffect(() => {
-    if (ubicacionId === null && catalogos.ubicacionesActivas.length) {
+    if (ubicacionId !== null) return;
+    if (usuario.ubicacion_id) { setUbicacionId(usuario.ubicacion_id); return; }
+    if (catalogos.ubicacionesActivas.length) {
       const cd = catalogos.ubicacionesActivas.find((u) => u.puede_despachar) ?? catalogos.ubicacionesActivas[0];
       setUbicacionId(cd.id);
     }
@@ -55,16 +61,20 @@ export default function Stock({ irA }) {
 
   return (
     <section>
-      <Cabecera icono="📦" titulo="Stock" subtitulo="Cuánto hay de cada producto en cada lugar">
-        {/* Se pregunta por la capacidad (como el backend), no por el tipo */}
-        {ubicacion?.puede_despachar && <button onClick={() => setComprando(true)}>+ Registrar compra</button>}
+      <Cabecera icono="📦" titulo="Stock"
+        subtitulo={veTodaLaRed ? "Cuánto hay de cada producto en cada lugar" : `Lo que hay en ${ubicacion?.nombre ?? "tu local"}`}>
+        {/* Se pregunta por la capacidad del usuario (como el backend), no por su perfil */}
+        {puede(usuario, "puede_comprar") && ubicacionId === usuario.ubicacion_id &&
+          <button onClick={() => setComprando(true)}>+ Registrar compra</button>}
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
-      <div className="barra">
-        <Segmentado etiqueta="Ubicación" valor={ubicacionId} alCambiar={setUbicacionId}
-          opciones={catalogos.ubicacionesActivas.map((u) => ({ valor: u.id, texto: `${u.puede_despachar ? "🏭" : "🏬"} ${u.nombre}` }))} />
-      </div>
+      {veTodaLaRed && (
+        <div className="barra">
+          <Segmentado etiqueta="Ubicación" valor={ubicacionId} alCambiar={setUbicacionId}
+            opciones={catalogos.ubicacionesActivas.map((u) => ({ valor: u.id, texto: `${u.puede_despachar ? "🏭" : "🏬"} ${u.nombre}` }))} />
+        </div>
+      )}
       <div className="barra">
         <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar producto o código" />
         <Segmentado etiqueta="Mostrar" valor={filtro} alCambiar={setFiltro} opciones={[
@@ -76,7 +86,7 @@ export default function Stock({ irA }) {
       {ubicacion && !ubicacion.puede_despachar && (
         <p className="nota" style={{ marginBottom: 12 }}>
           A este local la mercadería le entra cuando verifica un envío del CD.{" "}
-          <button className="fantasma chico" onClick={() => irA("logistica")}>Ir a Envíos →</button>
+          {puedeIr("logistica") && <button className="fantasma chico" onClick={() => irA("logistica")}>Ir a Envíos →</button>}
         </p>
       )}
 
@@ -148,7 +158,7 @@ function CajonCompra({ ubicacion, catalogos, ejecutar, alCerrar, alGuardar }) {
   async function guardar(evento) {
     evento.preventDefault();
     const ok = await ejecutar(
-      () => api.crear("/stock/ingresar", { ubicacion_id: ubicacion.id, ...compra }),
+      () => api.crear("/stock/ingresar", compra),   // entra al CD del usuario
       `Compra registrada: entraron ${compra.cantidad} al ${ubicacion.nombre}`,
     );
     if (ok) alGuardar();

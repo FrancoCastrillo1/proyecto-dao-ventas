@@ -1,12 +1,16 @@
 # Endpoints de ventas: registrar ventas, cobros, comprobantes y devoluciones.
 # Llaman a ventas_service.
+# Permisos: vende, cotiza y devuelve un local, siempre en SU local (sale del
+# usuario, nunca del formulario). Las ventas y la caja de un local las ve ese
+# local o quien ve toda la red.
 # Acá NO va lógica de negocio ni acceso a la base.
 from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from backend.api.dependencias import LOGUEADO, exigir_que_sea_suyo, requiere, ubicacion_para_filtrar, usuario_actual
 from backend.servicios.ventas_service import VentasService
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
@@ -20,8 +24,7 @@ class ItemEntrada(BaseModel):
 
 
 class VentaEntrada(BaseModel):
-    sucursal_id: int
-    items: list[ItemEntrada]
+    items: list[ItemEntrada]                 # el local es el del usuario que vende
     medio_pago: str                          # EFECTIVO, DEBITO, TRANSFERENCIA o CREDITO
     monto_entregado: Decimal | None = None   # solo para efectivo: calcula el vuelto
 
@@ -103,19 +106,23 @@ def a_pares(items):
 
 
 # Tiene que ir antes que "/{id}": si no, FastAPI intenta leer "medios-pago" como un id
-@router.get("/medios-pago", response_model=list[MedioPagoSalida])
+@router.get("/medios-pago", response_model=list[MedioPagoSalida], dependencies=[LOGUEADO])
 def listar_medios_pago():
     return [MedioPagoSalida(nombre=m.nombre, porcentaje_ajuste=m.porcentaje_ajuste) for m in service.medios_pago()]
 
 
 @router.get("", response_model=list[VentaSalida])
-def listar_ventas(sucursal_id: int | None = None, desde: date | None = None, hasta: date | None = None):
+def listar_ventas(sucursal_id: int | None = None, desde: date | None = None, hasta: date | None = None,
+                  usuario=Depends(usuario_actual)):
+    sucursal_id = ubicacion_para_filtrar(usuario, sucursal_id)
     return [venta_a_salida(v) for v in service.listar(sucursal_id, desde, hasta)]
 
 
 @router.get("/{id}", response_model=VentaSalida)
-def obtener_venta(id: int):
-    return venta_a_salida(service.obtener(id))
+def obtener_venta(id: int, usuario=Depends(usuario_actual)):
+    venta = service.obtener(id)
+    exigir_que_sea_suyo(usuario, venta.sucursal_id, "Esa venta")
+    return venta_a_salida(venta)
 
 
 class LineaCotizacionSalida(BaseModel):
@@ -140,9 +147,9 @@ class CotizacionSalida(BaseModel):
 
 # Lo que costaría la venta, para mostrarlo antes de confirmar. No guarda nada.
 @router.post("/cotizar", response_model=CotizacionSalida)
-def cotizar_venta(datos: VentaEntrada):
+def cotizar_venta(datos: VentaEntrada, usuario=Depends(requiere("puede_vender"))):
     venta, disponible, alcanza_pago = service.cotizar(
-        datos.sucursal_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado,
+        usuario.ubicacion_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado,
     )
     lineas = [
         LineaCotizacionSalida(producto_id=d.producto_id, cantidad=d.cantidad, precio_unitario=d.precio_unitario,
@@ -158,14 +165,16 @@ def cotizar_venta(datos: VentaEntrada):
 
 
 @router.post("", response_model=VentaSalida, status_code=201)
-def registrar_venta(datos: VentaEntrada):
-    venta = service.vender(datos.sucursal_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado)
+def registrar_venta(datos: VentaEntrada, usuario=Depends(requiere("puede_vender"))):
+    venta = service.vender(usuario.ubicacion_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado,
+                           usuario.id)
     return venta_a_salida(venta)
 
 
 @router.post("/{id}/devoluciones", response_model=DevolucionSalida, status_code=201)
-def registrar_devolucion(id: int, datos: DevolucionEntrada):
-    return devolucion_a_salida(service.devolver(id, a_pares(datos.items), datos.motivo))
+def registrar_devolucion(id: int, datos: DevolucionEntrada, usuario=Depends(requiere("puede_vender"))):
+    exigir_que_sea_suyo(usuario, service.obtener(id).sucursal_id, "Esa venta")
+    return devolucion_a_salida(service.devolver(id, a_pares(datos.items), datos.motivo, usuario.id))
 
 
 # -------------------------------------------------------------------- Caja
@@ -188,7 +197,8 @@ class CajaSalida(BaseModel):
 
 
 @router_caja.get("/{sucursal_id}", response_model=CajaSalida)
-def ver_caja(sucursal_id: int, desde: date | None = None, hasta: date | None = None):
+def ver_caja(sucursal_id: int, desde: date | None = None, hasta: date | None = None, usuario=Depends(usuario_actual)):
+    exigir_que_sea_suyo(usuario, sucursal_id, "Esa caja")
     movimientos, por_medio = service.caja(sucursal_id, desde, hasta)
     return CajaSalida(
         sucursal_id=sucursal_id,

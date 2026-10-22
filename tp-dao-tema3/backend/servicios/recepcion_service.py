@@ -25,14 +25,14 @@ class RecepcionService:
             raise NoEncontrado(f"No se encontro el bulto {bulto_id}")
         return bulto
 
-    def recibir(self, bulto_id):
+    def recibir(self, bulto_id, usuario_id=None):
         # El State valida que el bulto esté En tránsito
         with self.bulto_dao.transaccion() as cx:
             bulto = self.obtener_bulto(bulto_id, cx)
             bulto.recibir()
-            return self.bulto_dao.guardar(cx, bulto)
+            return self.bulto_dao.guardar(cx, bulto, usuario_id)
 
-    def verificar(self, bulto_id, nro_leido, intacto):
+    def verificar(self, bulto_id, nro_leido, intacto, usuario_id=None):
         """Verifica el precinto del bulto. Devuelve (bulto, remito, ingreso):
         ingreso es True si con este bulto se completó el remito y se sumó el
         stock al local."""
@@ -50,7 +50,7 @@ class RecepcionService:
                     for detalle in verificado.items:
                         self.stock_service.ingresar(
                             remito.destino, detalle.producto, detalle.cantidad, TipoMovimiento.RECEPCION,
-                            f"Remito {remito.id_remito} · Bulto {verificado.id_bulto}", cx=cx,
+                            f"Remito {remito.id_remito} · Bulto {verificado.id_bulto}", cx=cx, usuario_id=usuario_id,
                         )
-            self.remito_dao.guardar(cx, remito)
+            self.remito_dao.guardar(cx, remito, usuario_id)
         return bulto, remito, ingreso

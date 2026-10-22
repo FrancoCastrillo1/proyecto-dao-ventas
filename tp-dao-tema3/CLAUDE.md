@@ -122,10 +122,10 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - El local de ventas, pedidos, recepción y reportes sale del usuario logueado, nunca del formulario.
 
 ### Paso 3: usuarios y perfiles (decidido el 20/10)
-- Primero los perfiles y después la autenticación. Mientras tanto, el usuario se identifica con el encabezado `X-Usuario` (provisorio: no se entrega así). Todas las rutas obtienen el usuario por una sola dependencia, `usuario_actual`; el login real cambia solo esa función.
-- `Usuario` abstracto con `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
+- Login con usuario y contraseña (`POST /auth/login` → token en `Authorization: Bearer`). Todas las rutas obtienen el usuario por una sola dependencia, `usuario_actual` (en `api/dependencias.py`). Hecho el 23/10.
+- `Usuario` abstracto con `UsuarioAdministrador` (sin ubicación), `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
 - El perfil tiene que coincidir con el tipo de ubicación (CD con el CD, local con una sucursal), validado en el dominio (`validar_ubicacion`), el service y un trigger.
-- Pertenencia: el CD ve toda la red (stock y reportes de cualquier ubicación); el local, solo lo suyo. Productos, categorías y ubicaciones los consultan los dos; proveedores, solo el CD.
+- Pertenencia: el administrador y el CD ven toda la red; el local, solo lo suyo (se controla en la api con `exigir_que_sea_suyo`). Productos, categorías y ubicaciones los consultan todos; proveedores, el administrador y el CD.
 - Baja lógica de usuarios con reactivar.
 - `usuario_id` en ventas, devoluciones, remitos, movimientos de stock e historial del bulto. En el historial lo graba el DAO con el usuario que le pasa el service (el patrón State no se toca).
 - Tests de rutas con `TestClient`, agregando `httpx` como dependencia de desarrollo.
@@ -134,4 +134,9 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Permisos: una dependencia por ruta que exige la capacidad (ej. `Depends(requiere("puede_vender"))`), no por router ni con decorador propio.
 - Acceso a algo de otro local: 403 con mensaje claro ("Ese remito no es de tu local"), no 404.
 - El perfil y la ubicación de un usuario no se modifican (igual que el tipo de una ubicación).
-- Para el paso de autenticación: contraseña con `hashlib.pbkdf2_hmac` y sal (iteraciones en `config.py`, menos en los tests); token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON (no formulario, para no sumar `python-multipart`); script para crear el primer usuario CD.
+- Autenticación: contraseña con `hashlib.pbkdf2_hmac` y sal (iteraciones en `config.py`, menos en los tests); token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON (no formulario, para no sumar `python-multipart`); `backend.datos.crear_admin` para el primer administrador. Seed: `admin`, `cd.central`, `centro`, `norte`, `sur`, contraseña `tpdao2026`.
+
+### Paso 3 del plan: front por perfil (decidido el 23/10)
+- Pantalla de login propia; el token en `sessionStorage`, manejado solo por `api.js`; un 401 con sesión abierta vuelve al login.
+- El menú se arma con las `capacidades` de `/auth/yo` (cada pantalla dice qué capacidad requiere); nada de `if perfil ==` en el front.
+- El local no se elige en el front: lo pone el back. Pantalla de Usuarios para el administrador.

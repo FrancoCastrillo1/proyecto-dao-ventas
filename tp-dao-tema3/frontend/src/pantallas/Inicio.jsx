@@ -1,11 +1,14 @@
 // Pantalla de Inicio: un resumen de lo que está pasando (ventas de hoy, pedidos
 // sin consolidar, envíos en camino, productos bajo mínimo). Cada indicador lleva
 // a la pantalla donde se resuelve. Si la base está vacía, dice cómo empezar.
+// Cada usuario ve solo lo que lleva a pantallas que puede usar, y los números
+// ya vienen filtrados por el back (un local ve solo lo suyo).
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import Cabecera from "../componentes/Cabecera.jsx";
 import { Cargando, Vacio } from "../componentes/Controles.jsx";
+import { puede } from "../componentes/Permisos.js";
 import { pesos } from "../formato.js";
 
 // Fecha de hoy en hora local (AAAA-MM-DD), para filtrar las ventas del día
@@ -14,7 +17,7 @@ function hoy() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function Inicio({ irA }) {
+export default function Inicio({ irA, puedeIr, usuario }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
 
@@ -45,7 +48,8 @@ export default function Inicio({ irA }) {
 
   return (
     <section>
-      <Cabecera icono="🏠" titulo="Inicio" subtitulo="Lo que está pasando hoy en el comercio" />
+      <Cabecera icono="🏠" titulo={`Hola, ${usuario.nombre_completo.split(" ")[0]}`}
+        subtitulo={usuario.ubicacion_nombre ? `Lo que está pasando hoy en ${usuario.ubicacion_nombre}` : "Lo que está pasando hoy en el comercio"} />
 
       {error && (
         <Vacio icono="🔌" titulo="No hay conexión con el sistema"
@@ -56,26 +60,34 @@ export default function Inicio({ irA }) {
       {datos && !datos.hayProductos && (
         <Vacio icono="🌱" titulo="Todavía no hay datos cargados"
           texto="Empezá por los productos y los locales. Para probar con datos de ejemplo, corré: .venv\Scripts\python -m backend.datos.seed --reiniciar"
-          accion="Cargar productos" alAccionar={() => irA("productos")} />
+          accion={puedeIr("productos") ? "Cargar productos" : undefined} alAccionar={() => irA("productos")} />
       )}
 
       {datos?.hayProductos && (<>
         <div className="indicadores">
           <Indicador tema="tema-durazno" icono="🛒" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
-            pie="Ir a vender →" alTocar={() => irA("ventas")} />
-          <Indicador tema="tema-cielo" icono="📝" valor={datos.pedidosPendientes} texto="pedidos de locales sin preparar"
-            pie="Ver envíos →" atencion={datos.pedidosPendientes > 0} alTocar={() => irA("logistica")} />
-          <Indicador tema="tema-cielo" icono="🚚" valor={datos.enCamino} texto={`envíos en camino · ${datos.armando} armándose`}
-            pie="Ver envíos →" alTocar={() => irA("logistica")} />
-          <Indicador tema="tema-menta" icono="⚠️" valor={datos.bajoMinimo} texto="faltantes para reponer, sumando todos los lugares"
+            pie={puedeIr("ventas") ? "Ir a vender →" : "Ver reportes →"} alTocar={() => irA(puedeIr("ventas") ? "ventas" : "reportes")} />
+          {puedeIr("logistica") && (<>
+            <Indicador tema="tema-cielo" icono="📝" valor={datos.pedidosPendientes}
+              texto={puede(usuario, "puede_preparar_envios") ? "pedidos de locales sin preparar" : "pedidos tuyos esperando al CD"}
+              pie="Ver envíos →" atencion={datos.pedidosPendientes > 0 && puede(usuario, "puede_preparar_envios")}
+              alTocar={() => irA("logistica")} />
+            <Indicador tema="tema-cielo" icono="🚚" valor={datos.enCamino} texto={`envíos en camino · ${datos.armando} armándose`}
+              pie="Ver envíos →" atencion={datos.enCamino > 0 && puede(usuario, "puede_recibir")} alTocar={() => irA("logistica")} />
+          </>)}
+          <Indicador tema="tema-menta" icono="⚠️" valor={datos.bajoMinimo}
+            texto={puede(usuario, "ve_toda_la_red") ? "faltantes para reponer, sumando todos los lugares" : "productos para reponer"}
             pie="Ver stock →" atencion={datos.bajoMinimo > 0} alTocar={() => irA("stock")} />
         </div>
 
         <h2 className="titulo-seccion">Accesos rápidos</h2>
         <div className="accesos">
-          <Acceso tema="tema-durazno" icono="🛒" titulo="Nueva venta" texto="Cobrar en un local" alTocar={() => irA("ventas")} />
-          <Acceso tema="tema-cielo" icono="🚚" titulo="Reponer un local" texto="Pedido, bultos y despacho" alTocar={() => irA("logistica")} />
-          <Acceso tema="tema-menta" icono="📦" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />
+          {puedeIr("ventas") && <Acceso tema="tema-durazno" icono="🛒" titulo="Nueva venta" texto="Cobrar en el local" alTocar={() => irA("ventas")} />}
+          {puede(usuario, "puede_pedir_reposicion") && <Acceso tema="tema-cielo" icono="📝" titulo="Pedir mercadería" texto="Y recibir lo que llega" alTocar={() => irA("logistica")} />}
+          {puede(usuario, "puede_preparar_envios") && <Acceso tema="tema-cielo" icono="🚚" titulo="Reponer los locales" texto="Pedidos, bultos y despacho" alTocar={() => irA("logistica")} />}
+          {puede(usuario, "puede_comprar") && <Acceso tema="tema-menta" icono="📦" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />}
+          {puedeIr("usuarios") && <Acceso tema="tema-manteca" icono="👤" titulo="Usuarios" texto="Quién entra y qué puede hacer" alTocar={() => irA("usuarios")} />}
+          {puedeIr("productos") && <Acceso tema="tema-manteca" icono="🧃" titulo="Productos y precios" texto="Catálogo, costos y mínimos" alTocar={() => irA("productos")} />}
           <Acceso tema="tema-rosa" icono="📊" titulo="Ver reportes" texto="Ventas, márgenes y mermas" alTocar={() => irA("reportes")} />
         </div>
       </>)}
