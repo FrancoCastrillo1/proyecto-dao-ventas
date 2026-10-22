@@ -1,170 +1,192 @@
-// Pantalla de Productos: alta, modificación, baja lógica, listado con filtro
-// por categoría y los proveedores de cada producto.
+// Pantalla de Productos: listado con buscador y filtro por categoría; alta y
+// edición en un panel lateral (que también muestra quién provee el producto),
+// baja lógica con confirmación y reactivación.
 // No se valida nada acá a propósito: los errores los muestra el backend.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
-import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
+import { textoBaja } from "../componentes/Bajas.jsx";
+import Cabecera from "../componentes/Cabecera.jsx";
+import Cajon from "../componentes/Cajon.jsx";
+import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
-import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
+import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
+import { pesos } from "../formato.js";
 
 const VACIO = { codigo: "", nombre: "", categoria_id: "", precio_venta: "", costo: "", stock_minimo: "0" };
 
-export default function Productos() {
-  const [productos, setProductos] = useState([]);
+export default function Productos({ irA }) {
+  const [productos, setProductos] = useState(null);  // null = cargando; trae también los dados de baja
   const [categorias, setCategorias] = useState([]);
-  const [filtroCategoria, setFiltroCategoria] = useState("");
-  const [form, setForm] = useState(VACIO);
-  const [editandoId, setEditandoId] = useState(null);
-  const [verBajas, setVerBajas] = useState(false);
-  const [proveedoresDe, setProveedoresDe] = useState(null); // { producto, proveedores }
+  const [busqueda, setBusqueda] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [verActivos, setVerActivos] = useState(true);
+  const [editando, setEditando] = useState(null);    // null = cerrado; {} = nuevo; producto = editar
   const { aviso, ejecutar, limpiar } = useAviso();
-  const parecidos = useParecidos();
+  const confirmacion = useConfirmacion();
 
   const cargar = () => ejecutar(async () => {
-    const parametros = new URLSearchParams({ incluir_bajas: verBajas });
-    if (filtroCategoria) parametros.set("categoria_id", filtroCategoria);
-    setProductos(await api.listar(`/productos?${parametros}`));
+    setProductos(await api.listar("/productos?incluir_bajas=true"));
     setCategorias(await api.listar("/categorias"));
   });
-  useEffect(() => { cargar(); }, [filtroCategoria, verBajas]);
+  useEffect(() => { cargar(); }, []);
 
-  const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? `#${id} (dada de baja)`;
+  const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? "(categoría de baja)";
+
+  function pedirBaja(p) {
+    confirmacion.pedir({ titulo: `¿Dar de baja «${p.nombre}»?`, textoConfirmar: "Dar de baja", peligro: true, detalle: textoBaja },
+      async () => {
+        if (await ejecutar(() => api.borrar(`/productos/${p.id}`), `«${p.nombre}» dado de baja`)) { setEditando(null); cargar(); }
+      });
+  }
+
+  async function reactivar(p) {
+    if (await ejecutar(() => api.accion(`/productos/${p.id}/reactivar`), `«${p.nombre}» vuelve a estar activo`)) cargar();
+  }
+
+  const deBaja = (productos ?? []).filter((p) => !p.activo).length;
+  const visibles = (productos ?? [])
+    .filter((p) => p.activo === verActivos)
+    .filter((p) => !categoria || p.categoria_id === Number(categoria))
+    .filter((p) => coincide(p.nombre, busqueda) || coincide(p.codigo, busqueda));
+
+  return (
+    <section>
+      <Cabecera icono="🧃" titulo="Productos" subtitulo="Lo que se compra, se reparte y se vende">
+        <button onClick={() => setEditando({})} disabled={categorias.length === 0}
+          title={categorias.length === 0 ? "Primero creá una categoría" : ""}>+ Nuevo producto</button>
+      </Cabecera>
+      <Aviso aviso={aviso} alCerrar={limpiar} />
+      <Confirmacion confirmacion={confirmacion} />
+
+      <div className="barra">
+        <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar por nombre o código" />
+        <select className="filtro" value={categoria} onChange={(e) => setCategoria(e.target.value)} aria-label="Categoría">
+          <option value="">Todas las categorías</option>
+          {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+        <Segmentado etiqueta="Mostrar" valor={verActivos} alCambiar={setVerActivos} opciones={[
+          { valor: true, texto: "Activos", contador: (productos?.length ?? 0) - deBaja },
+          { valor: false, texto: "De baja", contador: deBaja },
+        ]} />
+      </div>
+
+      {productos === null ? <Cargando /> : visibles.length === 0 ? (
+        busqueda || categoria ? <Vacio icono="🔍" titulo="Ningún producto coincide" texto="Probá con otra búsqueda u otra categoría." />
+          : !verActivos ? <Vacio icono="✨" titulo="No hay productos dados de baja" />
+            : categorias.length === 0
+              ? <Vacio icono="🏷️" titulo="Primero creá una categoría" texto="Todo producto pertenece a una categoría."
+                accion="Ir a Categorías" alAccionar={() => irA("categorias")} />
+              : <Vacio icono="🧃" titulo="Todavía no hay productos" accion="+ Nuevo producto" alAccionar={() => setEditando({})} />
+      ) : (
+        <div className="tarjeta-tabla">
+          <table>
+            <thead>
+              <tr><th>Producto</th><th>Categoría</th><th className="num">Precio</th><th className="num">Costo</th>
+                <th className="num">Ganancia</th><th className="num">Mínimo</th><th></th></tr>
+            </thead>
+            <tbody>
+              {visibles.map((p) => (
+                <tr key={p.id} className={p.activo ? "fila-clic" : "fila-baja"} onClick={p.activo ? () => setEditando(p) : undefined}>
+                  <td><strong>{p.nombre}</strong><span className="secundario-texto">{p.codigo}</span></td>
+                  <td>{nombreCategoria(p.categoria_id)}</td>
+                  <td className="num">{pesos(p.precio_venta)}</td>
+                  <td className="num">{pesos(p.costo)}</td>
+                  <td className={`num ${p.margen_unitario < 0 ? "negativo" : ""}`}>{pesos(p.margen_unitario)}</td>
+                  <td className="num">{p.stock_minimo}</td>
+                  <td><div className="acciones-fila">
+                    {p.activo
+                      ? <button className="fantasma chico">Editar</button>
+                      : <button className="secundario chico" onClick={() => reactivar(p)}>Reactivar</button>}
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editando && (
+        <CajonProducto producto={editando} categorias={categorias} ejecutar={ejecutar} irA={irA}
+          alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); cargar(); }}
+          alDarDeBaja={() => pedirBaja(editando)} />
+      )}
+    </section>
+  );
+}
+
+function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuardar, alDarDeBaja }) {
+  const nuevo = !producto.id;
+  const [form, setForm] = useState(nuevo ? VACIO : { ...producto, categoria_id: String(producto.categoria_id) });
+  const [proveedores, setProveedores] = useState(null);
+  const parecidos = useParecidos();
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
-  function cancelar() {
-    parecidos.descartar();
-    setEditandoId(null);
-    setForm(VACIO);
-  }
-
-  function editar(p) {
-    setEditandoId(p.id);
-    setForm({ ...p, categoria_id: String(p.categoria_id) });
-  }
+  useEffect(() => {
+    if (!nuevo) api.listar(`/productos/${producto.id}/proveedores`).then(setProveedores).catch(() => setProveedores([]));
+  }, []);
 
   // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
   function guardar(evento) {
     evento.preventDefault();
-    parecidos.verificar("/productos", { nombre: form.nombre }, editandoId, enviar);
-  }
-
-  async function enviar() {
-    const datos = {
-      nombre: form.nombre, categoria_id: form.categoria_id, precio_venta: form.precio_venta,
-      costo: form.costo, stock_minimo: form.stock_minimo,
-    };
-    // Al modificar no se manda el código: es la identidad del producto
-    const ok = editandoId
-      ? await ejecutar(() => api.modificar(`/productos/${editandoId}`, datos), "Producto modificado")
-      : await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos }), "Producto creado");
-    if (ok) { cancelar(); cargar(); }
-  }
-
-  async function darDeBaja(p) {
-    if (await ejecutar(() => api.borrar(`/productos/${p.id}`), `"${p.nombre}" dado de baja`)) cargar();
-  }
-
-  async function reactivar(p) {
-    if (await ejecutar(() => api.accion(`/productos/${p.id}/reactivar`), `"${p.nombre}" reactivado`)) cargar();
-  }
-
-  async function verProveedores(p) {
-    await ejecutar(async () => setProveedoresDe({ producto: p, proveedores: await api.listar(`/productos/${p.id}/proveedores`) }));
+    parecidos.verificar("/productos", { nombre: form.nombre }, producto.id, async () => {
+      const datos = {
+        nombre: form.nombre, categoria_id: form.categoria_id, precio_venta: form.precio_venta,
+        costo: form.costo, stock_minimo: form.stock_minimo,
+      };
+      // Al modificar no se manda el código: es la identidad del producto
+      const ok = nuevo
+        ? await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos }), `Producto «${form.nombre.trim()}» creado`)
+        : await ejecutar(() => api.modificar(`/productos/${producto.id}`, datos), "Cambios guardados");
+      if (ok) alGuardar();
+    });
   }
 
   return (
-    <section>
-      <EncabezadoPantalla id="productos" icono="🧃" titulo="Productos"
-        descripcion="Lo que se compra, se reparte y se vende. El código (SKU) identifica a cada producto y no se puede repetir."
-        pasos={[
-          "Completá código, nombre, categoría, precio de venta y costo. El margen se calcula solo.",
-          "El stock mínimo es la cantidad por debajo de la cual el producto aparece como faltante en los reportes.",
-          "Con «Proveedores» ves quién vende cada producto (se asignan desde la pestaña Proveedores).",
-        ]} />
-      <Aviso aviso={aviso} alCerrar={limpiar} />
-      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
-        alCancelar={parecidos.descartar} />
-
-      <form className="formulario" onSubmit={guardar}>
-        <label>Código (SKU)
-          <input value={form.codigo} onChange={cambiar("codigo")} disabled={!!editandoId}
-            placeholder="Hasta 20 letras (ej: BEB-001)"
-            title={editandoId ? "El código no se puede modificar" : ""} />
-        </label>
+    <Cajon titulo={nuevo ? "Nuevo producto" : producto.nombre} subtitulo={nuevo ? null : `Código ${producto.codigo}`} alCerrar={alCerrar}
+      pie={<>
+        {!nuevo && <button className="peligro izquierda" onClick={alDarDeBaja}>Dar de baja</button>}
+        <button className="secundario" onClick={alCerrar}>Cancelar</button>
+        <button type="submit" form="form-producto">{nuevo ? "Crear producto" : "Guardar"}</button>
+      </>}>
+      <form id="form-producto" className="campos" onSubmit={guardar}>
+        {nuevo && (
+          <label>Código (SKU)
+            <input autoFocus value={form.codigo} onChange={cambiar("codigo")} placeholder="Ej: BEB-001" />
+            <span className="ayuda-campo">Identifica al producto. No se puede repetir ni cambiar después.</span>
+          </label>
+        )}
         <label>Nombre<input value={form.nombre} onChange={cambiar("nombre")} placeholder="Ej: Coca-Cola 500ml" /></label>
         <label>Categoría
           <select value={form.categoria_id} onChange={cambiar("categoria_id")}>
-            <option value="">— elegir —</option>
+            <option value="">Elegí una categoría</option>
             {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
-        <label>Precio de venta
-          <input value={form.precio_venta} onChange={cambiar("precio_venta")} placeholder="Número > 0 (ej: 1500.50)" />
-        </label>
-        <label>Costo
-          <input value={form.costo} onChange={cambiar("costo")} placeholder="Número ≥ 0 (ej: 900)" />
-        </label>
-        <label>Stock mínimo
-          <input value={form.stock_minimo} onChange={cambiar("stock_minimo")} placeholder="Entero ≥ 0 (ej: 10)" />
-        </label>
-        <div className="acciones">
-          <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
-          {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}
+        <div className="campos-2">
+          <label>Precio de venta
+            <input type="number" min="0" step="0.01" value={form.precio_venta} onChange={cambiar("precio_venta")} placeholder="Ej: 1500" />
+          </label>
+          <label>Costo
+            <input type="number" min="0" step="0.01" value={form.costo} onChange={cambiar("costo")} placeholder="Ej: 900" />
+          </label>
         </div>
-      </form>
-
-      <div className="barra-filtro">
-        <CheckBajas valor={verBajas} alCambiar={setVerBajas} />
-        <label>Filtrar por categoría
-          <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
-            <option value="">Todas</option>
-            {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
+        <label>Stock mínimo
+          <input type="number" min="0" step="1" value={form.stock_minimo} onChange={cambiar("stock_minimo")} />
+          <span className="ayuda-campo">Si en algún lugar queda menos que esto, aparece como «Reponer».</span>
         </label>
-      </div>
+      </form>
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar} alCancelar={parecidos.descartar} />
 
-      <div className="tabla-scroll">
-        <table>
-          <thead>
-            <tr><th>Código</th><th>Nombre</th><th>Categoría</th><th className="num">Precio</th>
-              <th className="num">Costo</th><th className="num">Margen</th><th className="num">Stock mín.</th><th></th></tr>
-          </thead>
-          <tbody>
-            {productos.map((p) => (
-              <tr key={p.id} className={p.activo ? "" : "fila-baja"}>
-                <td><code>{p.codigo}</code></td>
-                <td>{p.nombre}{!p.activo && <EtiquetaBaja />}</td>
-                <td>{nombreCategoria(p.categoria_id)}</td>
-                <td className="num">${p.precio_venta.toFixed(2)}</td>
-                <td className="num">${p.costo.toFixed(2)}</td>
-                <td className={`num ${p.margen_unitario < 0 ? "negativo" : ""}`}>${p.margen_unitario.toFixed(2)}</td>
-                <td className="num">{p.stock_minimo}</td>
-                <td className="botones-fila">
-                  {p.activo ? (<>
-                    <button className="secundario" onClick={() => verProveedores(p)}>Proveedores</button>
-                    <button className="secundario" onClick={() => editar(p)}>Editar</button>
-                    <button className="peligro" onClick={() => darDeBaja(p)}>Dar de baja</button>
-                  </>) : <button onClick={() => reactivar(p)}>Reactivar</button>}
-                </td>
-              </tr>
-            ))}
-            {productos.length === 0 && <tr><td colSpan="8" className="vacio">No hay productos activos</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      {proveedoresDe && (
-        <div className="panel">
-          <h3>Proveedores de “{proveedoresDe.producto.nombre}”
-            <button className="boton-cerrar" onClick={() => setProveedoresDe(null)} aria-label="Cerrar">×</button>
-          </h3>
-          {proveedoresDe.proveedores.length === 0
-            ? <p className="vacio">Ningún proveedor activo lo provee. Se asigna desde la pestaña Proveedores.</p>
-            : <ul>{proveedoresDe.proveedores.map((pr) => <li key={pr.id}>{pr.razon_social} ({pr.cuit})</li>)}</ul>}
+      {!nuevo && (
+        <div className="seccion-cajon">
+          <h3>Quién lo vende</h3>
+          {proveedores === null ? <Cargando /> : proveedores.length === 0
+            ? <p className="nota">Ningún proveedor lo tiene asignado. <button className="fantasma chico" onClick={() => irA("proveedores")}>Asignar en Proveedores →</button></p>
+            : <ul className="lista-simple">{proveedores.map((pr) => <li key={pr.id}>{pr.razon_social} <span className="nota">· CUIT {pr.cuit}</span></li>)}</ul>}
         </div>
       )}
-    </section>
+    </Cajon>
   );
 }

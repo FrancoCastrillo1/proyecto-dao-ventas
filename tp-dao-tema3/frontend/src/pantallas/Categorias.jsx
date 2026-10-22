@@ -1,91 +1,117 @@
-// Pantalla de Categorías: alta, modificación, baja lógica y listado.
+// Pantalla de Categorías: listado con buscador, alta y edición en un panel
+// lateral, baja lógica (con confirmación) y reactivación.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
-import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
+import Cabecera from "../componentes/Cabecera.jsx";
+import Cajon from "../componentes/Cajon.jsx";
+import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
-import { CheckBajas, EtiquetaBaja } from "../componentes/Bajas.jsx";
+import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
+import { textoBaja } from "../componentes/Bajas.jsx";
 
 export default function Categorias() {
-  const [categorias, setCategorias] = useState([]);
-  const [nombre, setNombre] = useState("");
-  const [editandoId, setEditandoId] = useState(null);
-  const [verBajas, setVerBajas] = useState(false);
+  const [categorias, setCategorias] = useState(null);  // null = cargando; trae también las dadas de baja
+  const [busqueda, setBusqueda] = useState("");
+  const [verActivas, setVerActivas] = useState(true);
+  const [editando, setEditando] = useState(null);      // null = cerrado; {} = nueva; categoría = editar
   const { aviso, ejecutar, limpiar } = useAviso();
-  const parecidos = useParecidos();
+  const confirmacion = useConfirmacion();
 
-  const cargar = () => ejecutar(async () => setCategorias(await api.listar(`/categorias?incluir_bajas=${verBajas}`)));
-  useEffect(() => { cargar(); }, [verBajas]);
+  const cargar = () => ejecutar(async () => setCategorias(await api.listar("/categorias?incluir_bajas=true")));
+  useEffect(() => { cargar(); }, []);
 
-  function cancelar() {
-    parecidos.descartar();
-    setEditandoId(null);
-    setNombre("");
+  function pedirBaja(c) {
+    confirmacion.pedir({ titulo: `¿Dar de baja «${c.nombre}»?`, textoConfirmar: "Dar de baja", peligro: true, detalle: textoBaja },
+      async () => {
+        if (await ejecutar(() => api.borrar(`/categorias/${c.id}`), `«${c.nombre}» dada de baja`)) { setEditando(null); cargar(); }
+      });
   }
+
+  async function reactivar(c) {
+    if (await ejecutar(() => api.accion(`/categorias/${c.id}/reactivar`), `«${c.nombre}» vuelve a estar activa`)) cargar();
+  }
+
+  const deBaja = (categorias ?? []).filter((c) => !c.activo).length;
+  const visibles = (categorias ?? []).filter((c) => c.activo === verActivas && coincide(c.nombre, busqueda));
+
+  return (
+    <section>
+      <Cabecera icono="🏷️" titulo="Categorías" subtitulo="Agrupan los productos: Bebidas, Almacén, Limpieza…">
+        <button onClick={() => setEditando({})}>+ Nueva categoría</button>
+      </Cabecera>
+      <Aviso aviso={aviso} alCerrar={limpiar} />
+      <Confirmacion confirmacion={confirmacion} />
+
+      <div className="barra">
+        <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar categoría" />
+        <Segmentado etiqueta="Mostrar" valor={verActivas} alCambiar={setVerActivas} opciones={[
+          { valor: true, texto: "Activas", contador: (categorias?.length ?? 0) - deBaja },
+          { valor: false, texto: "De baja", contador: deBaja },
+        ]} />
+      </div>
+
+      {categorias === null ? <Cargando /> : visibles.length === 0 ? (
+        busqueda ? <Vacio icono="🔍" titulo={`Nada coincide con «${busqueda}»`} />
+          : verActivas ? <Vacio icono="🏷️" titulo="Todavía no hay categorías" texto="Creá la primera para poder cargar productos."
+            accion="+ Nueva categoría" alAccionar={() => setEditando({})} />
+            : <Vacio icono="✨" titulo="No hay categorías dadas de baja" />
+      ) : (
+        <div className="tarjeta-tabla">
+          <table>
+            <thead><tr><th>Nombre</th><th></th></tr></thead>
+            <tbody>
+              {visibles.map((c) => (
+                <tr key={c.id} className={c.activo ? "fila-clic" : "fila-baja"} onClick={c.activo ? () => setEditando(c) : undefined}>
+                  <td><strong>{c.nombre}</strong></td>
+                  <td><div className="acciones-fila">
+                    {c.activo
+                      ? <button className="fantasma chico">Editar</button>
+                      : <button className="secundario chico" onClick={() => reactivar(c)}>Reactivar</button>}
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editando && (
+        <CajonCategoria categoria={editando} ejecutar={ejecutar} alCerrar={() => setEditando(null)}
+          alGuardar={() => { setEditando(null); cargar(); }} alDarDeBaja={() => pedirBaja(editando)} />
+      )}
+    </section>
+  );
+}
+
+function CajonCategoria({ categoria, ejecutar, alCerrar, alGuardar, alDarDeBaja }) {
+  const [nombre, setNombre] = useState(categoria.nombre ?? "");
+  const parecidos = useParecidos();
+  const nueva = !categoria.id;
 
   // Antes de guardar se consulta si hay nombres parecidos ("¿es un duplicado?")
   function guardar(evento) {
     evento.preventDefault();
-    parecidos.verificar("/categorias", { nombre }, editandoId, enviar);
-  }
-
-  async function enviar() {
-    const ok = editandoId
-      ? await ejecutar(() => api.modificar(`/categorias/${editandoId}`, { nombre }), "Categoría modificada")
-      : await ejecutar(() => api.crear("/categorias", { nombre }), "Categoría creada");
-    if (ok) { cancelar(); cargar(); }
-  }
-
-  async function darDeBaja(categoria) {
-    if (await ejecutar(() => api.borrar(`/categorias/${categoria.id}`), `"${categoria.nombre}" dada de baja`)) cargar();
-  }
-
-  async function reactivar(categoria) {
-    if (await ejecutar(() => api.accion(`/categorias/${categoria.id}/reactivar`), `"${categoria.nombre}" reactivada`)) cargar();
+    parecidos.verificar("/categorias", { nombre }, categoria.id, async () => {
+      const ok = nueva
+        ? await ejecutar(() => api.crear("/categorias", { nombre }), `Categoría «${nombre.trim()}» creada`)
+        : await ejecutar(() => api.modificar(`/categorias/${categoria.id}`, { nombre }), "Cambios guardados");
+      if (ok) alGuardar();
+    });
   }
 
   return (
-    <section>
-      <EncabezadoPantalla id="categorias" icono="🏷️" titulo="Categorías"
-        descripcion="Agrupan los productos (Bebidas, Almacén, Limpieza...). Todo producto pertenece a una categoría."
-        pasos={[
-          "Escribí el nombre y tocá «Crear».",
-          "Para corregir un nombre tocá «Editar»; para dejar de usarla, «Dar de baja».",
-          "Lo dado de baja no se borra: se ve tildando «Mostrar dados de baja» y se puede «Reactivar».",
-        ]} />
-      <Aviso aviso={aviso} alCerrar={limpiar} />
-      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar}
-        alCancelar={parecidos.descartar} />
-
-      <form className="formulario" onSubmit={guardar}>
-        <label>Nombre<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Bebidas" /></label>
-        <div className="acciones">
-          <button type="submit">{editandoId ? "Guardar cambios" : "Crear"}</button>
-          {editandoId && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}
-        </div>
+    <Cajon titulo={nueva ? "Nueva categoría" : categoria.nombre} alCerrar={alCerrar}
+      pie={<>
+        {!nueva && <button className="peligro izquierda" onClick={alDarDeBaja}>Dar de baja</button>}
+        <button className="secundario" onClick={alCerrar}>Cancelar</button>
+        <button type="submit" form="form-categoria" disabled={!nombre.trim()}>{nueva ? "Crear" : "Guardar"}</button>
+      </>}>
+      <form id="form-categoria" className="campos" onSubmit={guardar}>
+        <label>Nombre<input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Bebidas" /></label>
       </form>
-
-      <div className="barra-filtro"><CheckBajas valor={verBajas} alCambiar={setVerBajas} /></div>
-
-      <table>
-        <thead><tr><th>Id</th><th>Nombre</th><th></th></tr></thead>
-        <tbody>
-          {categorias.map((c) => (
-            <tr key={c.id} className={c.activo ? "" : "fila-baja"}>
-              <td>{c.id}</td>
-              <td>{c.nombre}{!c.activo && <EtiquetaBaja />}</td>
-              <td className="botones-fila">
-                {c.activo ? (<>
-                  <button className="secundario" onClick={() => { setEditandoId(c.id); setNombre(c.nombre); }}>Editar</button>
-                  <button className="peligro" onClick={() => darDeBaja(c)}>Dar de baja</button>
-                </>) : <button onClick={() => reactivar(c)}>Reactivar</button>}
-              </td>
-            </tr>
-          ))}
-          {categorias.length === 0 && <tr><td colSpan="3" className="vacio">No hay categorías activas</td></tr>}
-        </tbody>
-      </table>
-    </section>
+      <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar} alCancelar={parecidos.descartar} />
+    </Cajon>
   );
 }
