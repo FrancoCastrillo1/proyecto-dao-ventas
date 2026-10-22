@@ -1,273 +1,397 @@
-// Pantalla de Logística: el circuito completo de reposición CD → sucursal.
-//   1. Pedido de una sucursal        2. El CD consolida pedidos en una orden
-//   3. Un remito por sucursal         4. Bultos: precintar, despachar, recibir, verificar
-// Cada bulto muestra solo las acciones de su estado (patrón State del backend),
-// y el backend igual rechaza cualquier transición inválida.
+// Pantalla de envíos CD → locales, como un tablero por etapas:
+//   Pedidos de locales → Armando en el CD → En camino → Entregados.
+// Cada tarjeta dice qué hay que hacer y al tocarla se abre el remito en un panel
+// lateral, donde cada bulto muestra sus pasos (patrón State a la vista) y solo
+// el botón del paso que sigue. El backend igual rechaza cualquier transición
+// inválida. Despachar y verificar no se pueden deshacer: piden confirmación.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
-import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
+import Cabecera from "../componentes/Cabecera.jsx";
+import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
-import Estado, { PROXIMO_PASO_BULTO } from "../componentes/Estado.jsx";
+import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
+import { Cargando } from "../componentes/Controles.jsx";
+import Estado, { PasosBulto } from "../componentes/Estado.jsx";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
 import { fecha } from "../formato.js";
+
+const ENTREGADOS = ["VERIFICADO", "VERIFICADO_CON_RECHAZOS"];
 
 export default function Logistica() {
   const catalogos = useCatalogos();
   const { aviso, ejecutar, limpiar } = useAviso();
-  const [pedidos, setPedidos] = useState([]);
+  const confirmacion = useConfirmacion();
+  const [pedidos, setPedidos] = useState(null);
   const [ordenes, setOrdenes] = useState([]);
-  const [remitos, setRemitos] = useState([]);
-  const [remitoAbierto, setRemitoAbierto] = useState(null);
-
-  // Formularios
-  const [sucursalPedido, setSucursalPedido] = useState("");
-  const [lineasPedido, setLineasPedido] = useState([{ ...LINEA_VACIA }]);
+  const [remitos, setRemitos] = useState(null);
   const [seleccionados, setSeleccionados] = useState([]);
+  const [remitoAbierto, setRemitoAbierto] = useState(null);
+  const [nuevoPedido, setNuevoPedido] = useState(false);
+  const [verTodosEntregados, setVerTodosEntregados] = useState(false);
 
   const cargar = () => ejecutar(async () => {
-    setPedidos(await api.listar("/pedidos"));
+    setPedidos(await api.listar("/pedidos?estado=PENDIENTE"));
     setOrdenes(await api.listar("/ordenes"));
-    const lista = await api.listar("/remitos");
+    const lista = [...(await api.listar("/remitos"))].reverse();  // los más nuevos primero
     setRemitos(lista);
     setRemitoAbierto((actual) => (actual ? lista.find((r) => r.id === actual.id) ?? null : null));
   });
   useEffect(() => { cargar(); }, []);
 
-  // Ejecuta una acción y, si sale bien, recarga todo
+  // Ejecuta una acción y, si sale bien, recarga todo. Devuelve si salió bien.
   async function accion(hacer, textoExito) {
-    if (await ejecutar(hacer, textoExito)) await cargar();
+    const ok = await ejecutar(hacer, textoExito);
+    if (ok) await cargar();
+    return ok;
   }
 
-  async function crearPedido(evento) {
-    evento.preventDefault();
-    await accion(() => api.crear("/pedidos", { sucursal_id: sucursalPedido, items: aItems(lineasPedido) }), "Pedido creado");
-    setLineasPedido([{ ...LINEA_VACIA }]);
-  }
-
-  async function crearOrden() {
-    await accion(() => api.crear("/ordenes", { pedido_ids: seleccionados }), "Pedidos consolidados en una orden");
+  // Consolida los pedidos elegidos en una orden y arma un remito por local, de una vez
+  async function preparar() {
+    const ok = await ejecutar(async () => {
+      const orden = await api.crear("/ordenes", { pedido_ids: seleccionados });
+      for (const destino of [...new Set(orden.pedidos.map((p) => p.sucursal_id))]) {
+        await api.crear("/remitos", { orden_id: orden.id, destino_id: destino });
+      }
+    }, "Listo: se armó un remito por local en «Armando en el CD»");
     setSeleccionados([]);
+    await cargar();
+    return ok;
   }
 
+  // Órdenes con algún local que todavía no tiene remito (por si algo quedó a medias)
+  const sinRemito = ordenes.flatMap((o) => [...new Set(o.pedidos.map((p) => p.sucursal_id))]
+    .filter((destino) => !(remitos ?? []).some((r) => r.orden_id === o.id && r.destino_id === destino))
+    .map((destino) => ({ orden: o, destino })));
+
+  const armando = (remitos ?? []).filter((r) => r.estado === "ABIERTO" || r.estado === "CERRADO");
+  const enCamino = (remitos ?? []).filter((r) => r.estado === "EN_TRANSITO");
+  const entregados = (remitos ?? []).filter((r) => ENTREGADOS.includes(r.estado));
   const alternar = (id) => setSeleccionados((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-  const pendientes = pedidos.filter((p) => p.estado === "PENDIENTE");
-  const tieneRemito = (ordenId, sucursalId) => remitos.some((r) => r.orden_id === ordenId && r.destino_id === sucursalId);
+  const resumen = (items) => items.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ");
 
   return (
     <section>
-      <EncabezadoPantalla id="logistica" icono="🚚" titulo="Logística"
-        descripcion="Cómo llega la mercadería del CD a los locales: en bultos cerrados con un precinto de seguridad que se revisa al llegar."
-        pasos={[
-          "La sucursal hace un pedido (paso 1).",
-          "El CD junta los pedidos pendientes en una orden (paso 2) y crea un remito por sucursal (paso 3).",
-          "En el remito se arman los bultos, se les pone el precinto y se despacha: ahí sale el stock del CD (paso 4).",
-          "En el local se recibe cada bulto y se verifica el precinto. Cuando se verifican todos, la mercadería queda para vender.",
-        ]} />
+      <Cabecera icono="🚚" titulo="Envíos a locales" subtitulo="La mercadería viaja del CD a los locales en bultos precintados">
+        <button onClick={() => setNuevoPedido(true)}>+ Nuevo pedido</button>
+      </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
+      <Confirmacion confirmacion={confirmacion} />
 
-      {/* ---------------------------------------------------------- 1. Pedido */}
-      <h3 className="paso"><span className="numero">1</span> La sucursal pide mercadería</h3>
-      <p className="descripcion-paso">Elegí la sucursal y qué productos necesita. El pedido queda pendiente hasta que el CD lo procese.</p>
-      <form className="formulario formulario-ancho" onSubmit={crearPedido}>
-        <label>Sucursal que pide
-          <select value={sucursalPedido} onChange={(e) => setSucursalPedido(e.target.value)}>
-            <option value="">— elegir —</option>
-            {catalogos.sucursales.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </label>
-        <LineasProductos lineas={lineasPedido} alCambiar={setLineasPedido} productos={catalogos.productosActivos} />
-        <div className="acciones"><button type="submit">Crear pedido</button></div>
-      </form>
-
-      {/* --------------------------------------------------- 2. Consolidación */}
-      <h3 className="paso"><span className="numero">2</span> El CD junta los pedidos en una orden</h3>
-      <p className="descripcion-paso">Tildá los pedidos pendientes que se van a preparar juntos y tocá «Consolidar». La orden dice cuánto de cada producto hay que juntar.</p>
-      <div className="tabla-scroll">
-        <table>
-          <thead><tr><th></th><th>Pedido</th><th>Sucursal</th><th>Fecha</th><th>Productos</th></tr></thead>
-          <tbody>
-            {pendientes.map((p) => (
-              <tr key={p.id}>
-                <td><input type="checkbox" checked={seleccionados.includes(p.id)} onChange={() => alternar(p.id)}
-                  aria-label={`Elegir pedido ${p.id}`} /></td>
-                <td>#{p.id}</td>
-                <td>{catalogos.nombreUbicacion(p.sucursal_id)}</td>
-                <td>{fecha(p.fecha)}</td>
-                <td>{p.items.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ")}</td>
-              </tr>
+      {remitos === null ? <Cargando /> : (
+        <div className="tablero">
+          {/* ------------------------------------------------ Pedidos */}
+          <div className="columna">
+            <div className="columna-titulo">📝 Pedidos de locales <span className="contador">{pedidos?.length ?? 0}</span></div>
+            <p className="columna-ayuda">Elegí los que vas a preparar juntos.</p>
+            {(pedidos ?? []).map((p) => (
+              <div key={p.id} className="ficha">
+                <label>
+                  <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={() => alternar(p.id)} />
+                  <span>
+                    <strong>{catalogos.nombreUbicacion(p.sucursal_id)}</strong>
+                    <span className="secundario-texto">Pedido #{p.id} · {fecha(p.fecha)}</span>
+                  </span>
+                </label>
+                <span className="ficha-detalle">{resumen(p.items)}</span>
+              </div>
             ))}
-            {pendientes.length === 0 && <tr><td colSpan="5" className="vacio">No hay pedidos pendientes</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div className="barra-filtro">
-        <button onClick={crearOrden} disabled={seleccionados.length === 0}>
-          Consolidar {seleccionados.length || ""} pedido{seleccionados.length === 1 ? "" : "s"} en una orden
-        </button>
-      </div>
+            {pedidos?.length === 0 && <p className="columna-vacia">No hay pedidos esperando.</p>}
+            {seleccionados.length > 0 && (
+              <button onClick={preparar}>Preparar {seleccionados.length} pedido{seleccionados.length === 1 ? "" : "s"} →</button>
+            )}
+          </div>
 
-      {/* ----------------------------------------------------- 3. Órdenes */}
-      <h3 className="paso"><span className="numero">3</span> Un remito por cada sucursal</h3>
-      <p className="descripcion-paso">El remito es el documento de envío: agrupa los bultos que viajan a una misma sucursal. Creá uno por cada sucursal de la orden.</p>
-      <div className="tabla-scroll">
-        <table>
-          <thead><tr><th>Orden</th><th>Fecha</th><th>Estado</th><th>A preparar</th><th>Remitos por sucursal</th></tr></thead>
-          <tbody>
-            {ordenes.map((o) => (
-              <tr key={o.id}>
-                <td>#{o.id}</td>
-                <td>{fecha(o.fecha)}</td>
-                <td><Estado valor={o.estado} /></td>
-                <td>{o.total_por_producto.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ")}</td>
-                <td className="botones-fila botones-izquierda">
-                  {[...new Set(o.pedidos.map((p) => p.sucursal_id))].map((sucursalId) => (
-                    tieneRemito(o.id, sucursalId)
-                      ? <span key={sucursalId} className="nota">✓ {catalogos.nombreUbicacion(sucursalId)}</span>
-                      : <button key={sucursalId} className="secundario"
-                          onClick={() => accion(() => api.crear("/remitos", { orden_id: o.id, destino_id: sucursalId }),
-                            "Remito creado")}>
-                          Remito para {catalogos.nombreUbicacion(sucursalId)}
-                        </button>
-                  ))}
-                </td>
-              </tr>
+          {/* ------------------------------------------- Armando en el CD */}
+          <div className="columna">
+            <div className="columna-titulo">📦 Armando en el CD <span className="contador">{armando.length + sinRemito.length}</span></div>
+            {sinRemito.map(({ orden, destino }) => (
+              <div key={`${orden.id}-${destino}`} className="ficha">
+                <div className="ficha-titulo">{catalogos.nombreUbicacion(destino)}<span className="numero-ficha">Orden #{orden.id}</span></div>
+                <span className="ficha-detalle">Falta crear el remito de este local.</span>
+                <button className="secundario chico"
+                  onClick={() => accion(() => api.crear("/remitos", { orden_id: orden.id, destino_id: destino }), "Remito creado")}>
+                  Crear remito
+                </button>
+              </div>
             ))}
-            {ordenes.length === 0 && <tr><td colSpan="5" className="vacio">Todavía no hay órdenes</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ----------------------------------------------------- 4. Remitos */}
-      <h3 className="paso"><span className="numero">4</span> Armar, precintar, despachar y recibir los bultos</h3>
-      <p className="descripcion-paso">Abrí un remito. Cada bulto muestra en qué estado está y qué hacer después. Pasá el mouse sobre un estado para ver qué significa.</p>
-      <div className="tabla-scroll">
-        <table>
-          <thead><tr><th>Remito</th><th>Orden</th><th>Destino</th><th>Estado</th><th className="num">Bultos</th><th></th></tr></thead>
-          <tbody>
-            {remitos.map((r) => (
-              <tr key={r.id} className={remitoAbierto?.id === r.id ? "fila-seleccionada" : ""}>
-                <td>#{r.id}</td>
-                <td>#{r.orden_id}</td>
-                <td>{catalogos.nombreUbicacion(r.destino_id)}</td>
-                <td><Estado valor={r.estado} /></td>
-                <td className="num">{r.bultos.length}</td>
-                <td className="botones-fila"><button className="secundario" onClick={() => setRemitoAbierto(r)}>Abrir</button></td>
-              </tr>
+            {armando.map((r) => (
+              <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
+                accion={siguienteEnArmado(r)} />
             ))}
-            {remitos.length === 0 && <tr><td colSpan="6" className="vacio">Todavía no hay remitos</td></tr>}
-          </tbody>
-        </table>
-      </div>
+            {armando.length + sinRemito.length === 0 && <p className="columna-vacia">Nada en preparación.</p>}
+          </div>
 
+          {/* --------------------------------------------------- En camino */}
+          <div className="columna">
+            <div className="columna-titulo">🚚 En camino <span className="contador">{enCamino.length}</span></div>
+            {enCamino.map((r) => {
+              const listos = r.bultos.filter((b) => ["VERIFICADO", "RECHAZADO"].includes(b.estado)).length;
+              return (
+                <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
+                  accion="Recibir y verificar →" progreso={listos / r.bultos.length}
+                  detalle={`${listos} de ${r.bultos.length} bultos revisados`} />
+              );
+            })}
+            {enCamino.length === 0 && <p className="columna-vacia">No hay envíos viajando.</p>}
+          </div>
+
+          {/* --------------------------------------------------- Entregados */}
+          <div className="columna">
+            <div className="columna-titulo">✅ Entregados <span className="contador">{entregados.length}</span></div>
+            {(verTodosEntregados ? entregados : entregados.slice(0, 4)).map((r) => {
+              const rechazados = r.bultos.filter((b) => b.estado === "RECHAZADO").length;
+              return (
+                <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
+                  accion="Ver detalle" detalle={rechazados ? `⚠ ${rechazados} bulto${rechazados === 1 ? "" : "s"} rechazado${rechazados === 1 ? "" : "s"}` : "Todo llegó bien"} />
+              );
+            })}
+            {entregados.length > 4 && (
+              <button className="fantasma chico" onClick={() => setVerTodosEntregados(!verTodosEntregados)}>
+                {verTodosEntregados ? "Ver menos" : `Ver los ${entregados.length}`}
+              </button>
+            )}
+            {entregados.length === 0 && <p className="columna-vacia">Todavía no se entregó nada.</p>}
+          </div>
+        </div>
+      )}
+
+      {nuevoPedido && (
+        <CajonNuevoPedido catalogos={catalogos} accion={accion} alCerrar={() => setNuevoPedido(false)} />
+      )}
       {remitoAbierto && (
-        <PanelRemito remito={remitoAbierto} catalogos={catalogos} accion={accion} alCerrar={() => setRemitoAbierto(null)} />
+        <CajonRemito key={remitoAbierto.id} remito={remitoAbierto} orden={ordenes.find((o) => o.id === remitoAbierto.orden_id)}
+          catalogos={catalogos} accion={accion} confirmacion={confirmacion} alCerrar={() => setRemitoAbierto(null)} />
       )}
     </section>
   );
 }
 
-// ------------------------------------------------------------ Panel del remito
+// Qué hay que hacer con un remito que se está armando
+function siguienteEnArmado(remito) {
+  if (remito.bultos.length === 0) return "Armar bultos →";
+  const sinPrecintar = remito.bultos.filter((b) => b.estado === "PREPARADO").length;
+  if (sinPrecintar > 0) return `Precintar ${sinPrecintar} bulto${sinPrecintar === 1 ? "" : "s"} →`;
+  return "Listo para despachar →";
+}
 
-function PanelRemito({ remito, catalogos, accion, alCerrar }) {
-  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
-  const abierto = remito.estado === "ABIERTO";
-
-  async function agregarBulto(evento) {
-    evento.preventDefault();
-    await accion(() => api.crear(`/remitos/${remito.id}/bultos`, { items: aItems(lineas) }), "Bulto armado (Preparado)");
-    setLineas([{ ...LINEA_VACIA }]);
-  }
-
+function FichaRemito({ remito, catalogos, alAbrir, accion, progreso, detalle }) {
   return (
-    <div className="panel">
-      <h3>Remito #{remito.id}: {catalogos.nombreUbicacion(remito.origen_id)} → {catalogos.nombreUbicacion(remito.destino_id)}
-        <Estado valor={remito.estado} />
-        <button className="boton-cerrar" onClick={alCerrar} aria-label="Cerrar">×</button>
-      </h3>
-
-      {abierto && (
-        <form className="formulario formulario-ancho" onSubmit={agregarBulto}>
-          <span className="nota">Armar un bulto (no se puede mandar algo que no se pidió ni más de lo pedido):</span>
-          <LineasProductos lineas={lineas} alCambiar={setLineas} productos={catalogos.productosActivos} />
-          <div className="acciones">
-            <button type="submit">Armar bulto</button>
-            <button type="button" className="secundario"
-              onClick={() => accion(() => api.accion(`/remitos/${remito.id}/despachar`), "Remito despachado: el stock salió del CD")}>
-              Despachar remito
-            </button>
-          </div>
-        </form>
-      )}
-
-      {remito.bultos.map((b) => <FilaBulto key={b.id} bulto={b} catalogos={catalogos} accion={accion} />)}
-      {remito.bultos.length === 0 && <p className="vacio">El remito todavía no tiene bultos</p>}
-    </div>
+    <button className="ficha" onClick={alAbrir}>
+      <div className="ficha-titulo">{catalogos.nombreUbicacion(remito.destino_id)}<span className="numero-ficha">Remito #{remito.id}</span></div>
+      <span className="ficha-detalle">
+        {detalle ?? `${remito.bultos.length} bulto${remito.bultos.length === 1 ? "" : "s"}`}
+      </span>
+      {progreso !== undefined && <div className="progreso"><span style={{ width: `${Math.round(progreso * 100)}%` }} /></div>}
+      <span className="ficha-accion">{accion}</span>
+    </button>
   );
 }
 
-// -------------------------------------------------------------- Un bulto
+// --------------------------------------------------------------- Nuevo pedido
 
-function FilaBulto({ bulto, catalogos, accion }) {
+function CajonNuevoPedido({ catalogos, accion, alCerrar }) {
+  const [sucursal, setSucursal] = useState("");
+  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
+
+  async function crear() {
+    if (await accion(() => api.crear("/pedidos", { sucursal_id: sucursal, items: aItems(lineas) }), "Pedido creado")) alCerrar();
+  }
+
+  return (
+    <Cajon titulo="Nuevo pedido de reposición" subtitulo="Un local le pide mercadería al CD" alCerrar={alCerrar}
+      pie={<>
+        <button className="secundario" onClick={alCerrar}>Cancelar</button>
+        <button onClick={crear} disabled={!sucursal || aItems(lineas).length === 0}>Crear pedido</button>
+      </>}>
+      <label>¿Qué local pide?
+        <select value={sucursal} onChange={(e) => setSucursal(e.target.value)}>
+          <option value="">Elegí un local</option>
+          {catalogos.sucursales.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+        </select>
+      </label>
+      <div className="seccion-cajon">
+        <h3>¿Qué necesita?</h3>
+        <LineasProductos lineas={lineas} alCambiar={setLineas} productos={catalogos.productosActivos} />
+      </div>
+    </Cajon>
+  );
+}
+
+// ------------------------------------------------------------ Detalle del remito
+
+// Lo que pidió el local destino en la orden, lo que ya va en los bultos y lo que falta
+function avanceDelRemito(remito, orden) {
+  const pedido = {};
+  for (const p of orden?.pedidos ?? []) {
+    if (p.sucursal_id !== remito.destino_id) continue;
+    for (const i of p.items) pedido[i.producto_id] = (pedido[i.producto_id] ?? 0) + i.cantidad;
+  }
+  const enviado = Object.fromEntries(remito.total_por_producto.map((i) => [i.producto_id, i.cantidad]));
+  return Object.keys(pedido).map((id) => ({
+    producto_id: Number(id), pedido: pedido[id], enviado: enviado[id] ?? 0, falta: pedido[id] - (enviado[id] ?? 0),
+  }));
+}
+
+function CajonRemito({ remito, orden, catalogos, accion, confirmacion, alCerrar }) {
+  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
+  const armando = remito.estado === "ABIERTO";
+  const avance = avanceDelRemito(remito, orden);
+  const faltante = avance.filter((a) => a.falta > 0);
+
+  async function armarBulto() {
+    if (await accion(() => api.crear(`/remitos/${remito.id}/bultos`, { items: aItems(lineas) }), "Bulto armado: ahora precintalo")) {
+      setLineas([{ ...LINEA_VACIA }]);
+    }
+  }
+
+  function despachar() {
+    confirmacion.pedir({
+      titulo: `¿Despachar a ${catalogos.nombreUbicacion(remito.destino_id)}?`,
+      textoConfirmar: "Despachar",
+      detalle: (<>
+        <p>Salen del CD {remito.bultos.length} bulto{remito.bultos.length === 1 ? "" : "s"} con:</p>
+        <ul>{remito.total_por_producto.map((i) => <li key={i.producto_id}>{i.cantidad} × {catalogos.nombreProducto(i.producto_id)}</li>)}</ul>
+        <p>El stock sale del CD en este momento. <strong>No se puede deshacer.</strong></p>
+      </>),
+    }, async () => { if (await accion(() => api.accion(`/remitos/${remito.id}/despachar`), "Despachado: el envío está en camino")) alCerrar(); });
+  }
+
+  const sinPrecintar = remito.bultos.filter((b) => b.estado === "PREPARADO").length;
+
+  return (
+    <Cajon ancho titulo={`${catalogos.nombreUbicacion(remito.origen_id)} → ${catalogos.nombreUbicacion(remito.destino_id)}`}
+      subtitulo={`Remito #${remito.id} · ${fecha(remito.fecha)}`} alCerrar={alCerrar}
+      pie={armando ? (<>
+        {remito.bultos.length === 0 && <span className="nota">Armá al menos un bulto para poder despachar.</span>}
+        {sinPrecintar > 0 && <span className="nota">Precintá todos los bultos para poder despachar.</span>}
+        <button onClick={despachar} disabled={remito.bultos.length === 0 || sinPrecintar > 0}>Despachar →</button>
+      </>) : <button className="secundario" onClick={alCerrar}>Cerrar</button>}>
+
+      <div><Estado valor={remito.estado} /></div>
+
+      {armando && avance.length > 0 && (
+        <div className="seccion-cajon">
+          <h3>Lo que pidió el local</h3>
+          <div className="tarjeta-tabla">
+            <table className="avance">
+              <thead><tr><th>Producto</th><th className="num">Pidió</th><th className="num">En bultos</th><th className="num">Falta</th></tr></thead>
+              <tbody>
+                {avance.map((a) => (
+                  <tr key={a.producto_id}>
+                    <td>{catalogos.nombreProducto(a.producto_id)}</td>
+                    <td className="num">{a.pedido}</td>
+                    <td className="num">{a.enviado}</td>
+                    <td className={`num ${a.falta > 0 ? "falta" : "completo"}`}>{a.falta > 0 ? a.falta : "✓"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {armando && faltante.length > 0 && (
+        <div className="seccion-cajon">
+          <h3>Armar un bulto</h3>
+          <div className="campos">
+            <LineasProductos lineas={lineas} alCambiar={setLineas} productos={catalogos.productosActivos} />
+            <div className="acciones-fila" style={{ justifyContent: "flex-start" }}>
+              <button className="secundario" onClick={() => setLineas(faltante.map((a) => ({ producto_id: String(a.producto_id), cantidad: String(a.falta) })))}>
+                Cargar lo que falta
+              </button>
+              <button onClick={armarBulto} disabled={aItems(lineas).length === 0}>Armar bulto</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="seccion-cajon">
+        <h3>Bultos ({remito.bultos.length})</h3>
+        <div className="campos">
+          {remito.bultos.map((b) => <Bulto key={b.id} bulto={b} catalogos={catalogos} accion={accion} confirmacion={confirmacion} />)}
+          {remito.bultos.length === 0 && <p className="vacio-chico">Todavía no hay bultos. Armá el primero con «Cargar lo que falta».</p>}
+        </div>
+      </div>
+    </Cajon>
+  );
+}
+
+// ------------------------------------------------------------------- Un bulto
+
+function Bulto({ bulto, catalogos, accion, confirmacion }) {
   const [precinto, setPrecinto] = useState("");
   const [leido, setLeido] = useState("");
-  const [intacto, setIntacto] = useState(true);
+  const [sano, setSano] = useState(null);  // sin respuesta hasta que se elige
   const [verHistorial, setVerHistorial] = useState(false);
 
-  async function verificar() {
-    await accion(
-      () => api.crear(`/bultos/${bulto.id}/verificar`, { nro_leido: leido, intacto }),
-      "Verificación registrada (el stock entra al local cuando se termina de verificar todo el remito)",
-    );
+  function verificar() {
+    confirmacion.pedir({
+      titulo: `¿Verificar el bulto #${bulto.id}?`,
+      textoConfirmar: "Verificar",
+      peligro: !sano,
+      detalle: (<>
+        <p>Precinto leído: <code>{leido.trim()}</code> · ¿Llegó sano?: <strong>{sano ? "Sí" : "No"}</strong></p>
+        <p>Si el número no es el que se puso en el CD o el precinto no llegó sano, el bulto queda <strong>Rechazado</strong> y
+          su mercadería no se vende. <strong>No se puede deshacer.</strong></p>
+      </>),
+    }, () => accion(() => api.crear(`/bultos/${bulto.id}/verificar`, { nro_leido: leido, intacto: sano }),
+      "Bulto revisado (la mercadería entra al local cuando se revisan todos los bultos)"));
   }
 
   return (
     <div className="bulto">
       <div className="bulto-cabecera">
         <strong>Bulto #{bulto.id}</strong>
-        <Estado valor={bulto.estado} />
-        {bulto.nro_precinto && <span className="nota">Precinto: <code>{bulto.nro_precinto}</code></span>}
-        {bulto.habilita_venta && <span className="nota">✓ habilita venta</span>}
-        <span className="nota">{bulto.items.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ")}</span>
-      </div>
-
-      <p className="pista">👉 {PROXIMO_PASO_BULTO[bulto.estado]}</p>
-
-      {/* Solo las acciones del estado actual */}
-      <div className="bulto-acciones">
-        {bulto.estado === "PREPARADO" && (<>
-          <input value={precinto} onChange={(e) => setPrecinto(e.target.value)} placeholder="Nº de precinto (ej: P-001)" />
-          <button onClick={() => accion(() => api.crear(`/bultos/${bulto.id}/precintar`, { nro_precinto: precinto }), "Bulto precintado")}>
-            Precintar
-          </button>
-        </>)}
-        {bulto.estado === "EN_TRANSITO" && (
-          <button onClick={() => accion(() => api.accion(`/bultos/${bulto.id}/recibir`), "Bulto recibido en la sucursal")}>
-            Recibir en la sucursal
-          </button>
-        )}
-        {bulto.estado === "RECIBIDO" && (<>
-          <input value={leido} onChange={(e) => setLeido(e.target.value)} placeholder="Precinto leído al recibir" />
-          <label className="check-bajas">
-            <input type="checkbox" checked={intacto} onChange={(e) => setIntacto(e.target.checked)} /> Precinto intacto
-          </label>
-          <button onClick={verificar}>Verificar</button>
-        </>)}
-        <button className="secundario" onClick={() => setVerHistorial(!verHistorial)}>
-          {verHistorial ? "Ocultar historial" : "Ver historial"}
+        {bulto.nro_precinto && <span className="nota">Precinto <code>{bulto.nro_precinto}</code></span>}
+        <button className="fantasma chico" style={{ marginLeft: "auto" }} onClick={() => setVerHistorial(!verHistorial)}>
+          {verHistorial ? "Ocultar historial" : "Historial"}
         </button>
       </div>
+      <PasosBulto estado={bulto.estado} />
+      <span className="bulto-contenido">{bulto.items.map((i) => `${i.cantidad} × ${catalogos.nombreProducto(i.producto_id)}`).join(", ")}</span>
+
+      {bulto.estado === "PREPARADO" && (
+        <div className="bulto-accion">
+          <label>Número del precinto que le pusiste
+            <input value={precinto} onChange={(e) => setPrecinto(e.target.value)} placeholder="Ej: P-001" />
+          </label>
+          <button onClick={() => accion(() => api.crear(`/bultos/${bulto.id}/precintar`, { nro_precinto: precinto }), "Bulto precintado")}
+            disabled={precinto.trim() === ""}>Precintar</button>
+        </div>
+      )}
+      {bulto.estado === "EN_TRANSITO" && (
+        <div className="bulto-accion">
+          <span className="nota" style={{ flex: 1 }}>¿Llegó al local?</span>
+          <button onClick={() => accion(() => api.accion(`/bultos/${bulto.id}/recibir`), "Bulto recibido: ahora revisá el precinto")}>
+            Marcar como recibido
+          </button>
+        </div>
+      )}
+      {bulto.estado === "RECIBIDO" && (
+        <div className="bulto-accion">
+          <label>Número que se lee en el precinto
+            <input value={leido} onChange={(e) => setLeido(e.target.value)} placeholder="Copialo del precinto" />
+          </label>
+          <div>
+            <span className="ayuda-campo">¿Llegó sano?</span>
+            <div className="opciones-si-no">
+              <button className={sano === true ? "" : "secundario"} onClick={() => setSano(true)}>Sí</button>
+              <button className={sano === false ? "peligro-lleno" : "secundario"} onClick={() => setSano(false)}>No</button>
+            </div>
+          </div>
+          <button onClick={verificar} disabled={leido.trim() === "" || sano === null}>Verificar</button>
+        </div>
+      )}
 
       {verHistorial && (
         <ol className="historial">
           {bulto.historial.map((h, i) => (
-            <li key={i}>
-              <span className="nota">{fecha(h.fecha_hora)}</span> {h.estado_anterior.replaceAll("_", " ")} → <Estado valor={h.estado_nuevo} />
-              {h.observacion && <em> · {h.observacion}</em>}
-            </li>
+            <li key={i}>{fecha(h.fecha_hora)} · {h.estado_anterior.replaceAll("_", " ").toLowerCase()} → <Estado valor={h.estado_nuevo} />
+              {h.observacion && <em> · {h.observacion}</em>}</li>
           ))}
-          {bulto.historial.length === 0 && <li className="vacio">Recién armado: todavía no cambió de estado</li>}
+          {bulto.historial.length === 0 && <li>Recién armado.</li>}
         </ol>
       )}
     </div>

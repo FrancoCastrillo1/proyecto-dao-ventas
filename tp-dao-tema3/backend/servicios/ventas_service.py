@@ -4,7 +4,7 @@
 from datetime import datetime, time, timedelta
 
 from backend.dominio.dinero import CERO
-from backend.dominio.excepciones import DatoInvalido, NoEncontrado, StockInsuficiente
+from backend.dominio.excepciones import DatoInvalido, NoEncontrado, PagoInsuficiente, StockInsuficiente
 from backend.dominio.medios_pago import MEDIOS_PAGO, crear_medio_pago
 from backend.dominio.stock import TipoMovimiento, validar_ubicacion_para
 from backend.dominio.ventas import Venta
@@ -41,21 +41,46 @@ class VentasService:
             raise NoEncontrado(f"No se encontro la venta {venta_id}")
         return venta
 
-    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None):
-        """items: pares (producto_id, cantidad). Primero se arma y se cobra la
-        venta en memoria (el dominio valida todo); recién después se abre la
-        transacción que guarda la venta, descuenta el stock y registra la caja.
-        Si un producto no alcanza, no se guarda nada."""
+    def armar_venta(self, sucursal_id, items, medio_pago):
+        """Arma la venta en memoria con todas las reglas del dominio, sin
+        cobrarla ni guardarla. La usan vender() y cotizar(), así las dos
+        calculan exactamente igual. Devuelve (venta, medio, nombres)."""
         # Solo se vende en una sucursal activa: la misma regla que usa el stock
         validar_ubicacion_para(TipoMovimiento.VENTA, self.obtener_ubicacion(sucursal_id))
         medio = crear_medio_pago(medio_pago)
-
         venta = Venta(sucursal_id)
         nombres = {}
         for producto_id, cantidad in items:
             producto = self.obtener_producto(producto_id)
             nombres[producto.id] = producto.nombre
             venta.agregar_item(producto, cantidad)
+        return venta, medio, nombres
+
+    def cotizar(self, sucursal_id, items, medio_pago, monto_entregado=None):
+        """Lo que costaría la venta, para mostrarlo ANTES de confirmar: mismo
+        cálculo que vender() (Strategy del medio de pago), pero sin guardar
+        nada ni mover stock ni caja. Si el monto entregado no alcanza no falla:
+        devuelve alcanza_pago=False, porque el cajero puede estar tipeándolo.
+        Devuelve (venta cobrada, {producto_id: disponible en el local}, alcanza_pago)."""
+        venta, medio, _ = self.armar_venta(sucursal_id, items, medio_pago)
+        alcanza_pago = True
+        try:
+            venta.cobrar(medio, monto_entregado)
+        except PagoInsuficiente:
+            # El dominio no llegó a cobrar: se cotiza sin el monto entregado
+            alcanza_pago = False
+            venta.cobrar(medio)
+        disponible = {
+            d.producto_id: self.stock_service.obtener(sucursal_id, d.producto_id).cantidad for d in venta.detalles
+        }
+        return venta, disponible, alcanza_pago
+
+    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None):
+        """items: pares (producto_id, cantidad). Primero se arma y se cobra la
+        venta en memoria (el dominio valida todo); recién después se abre la
+        transacción que guarda la venta, descuenta el stock y registra la caja.
+        Si un producto no alcanza, no se guarda nada."""
+        venta, medio, nombres = self.armar_venta(sucursal_id, items, medio_pago)
         venta.cobrar(medio, monto_entregado)
 
         with self.dao.transaccion() as cx:

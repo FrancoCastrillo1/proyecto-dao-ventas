@@ -1,41 +1,41 @@
-// Pantalla de Inicio: explica qué hace el sistema a alguien que nunca lo usó y
-// muestra los primeros pasos en orden. Cada paso se tilda solo consultando la
-// api (¿hay productos?, ¿hay stock en el CD?, ...) y tiene un botón que lleva
-// a la pantalla donde se hace.
+// Pantalla de Inicio: un resumen de lo que está pasando (ventas de hoy, pedidos
+// sin consolidar, envíos en camino, productos bajo mínimo). Cada indicador lleva
+// a la pantalla donde se resuelve. Si la base está vacía, dice cómo empezar.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
+import Cabecera from "../componentes/Cabecera.jsx";
+import { Cargando, Vacio } from "../componentes/Controles.jsx";
+import { pesos } from "../formato.js";
 
-const AREAS = [
-  { clave: "stock", icono: "📦", titulo: "Stock", tema: "tema-menta",
-    texto: "Cuánto hay de cada producto en el CD y en cada local. Acá se cargan las compras al CD." },
-  { clave: "logistica", icono: "🚚", titulo: "Logística", tema: "tema-cielo",
-    texto: "Llevar mercadería del CD a los locales en bultos precintados, y controlarlos cuando llegan." },
-  { clave: "ventas", icono: "🛒", titulo: "Ventas", tema: "tema-durazno",
-    texto: "Vender en un local, cobrar con distintos medios de pago y registrar devoluciones." },
-  { clave: "reportes", icono: "📊", titulo: "Reportes", tema: "tema-rosa",
-    texto: "Ventas por período, productos más vendidos, faltantes, mermas y tiempos de entrega." },
-];
+// Fecha de hoy en hora local (AAAA-MM-DD), para filtrar las ventas del día
+function hoy() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function Inicio({ irA }) {
-  const [estado, setEstado] = useState(null);
+  const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const productos = await api.listar("/productos");
-        const ubicaciones = await api.listar("/ubicaciones");
-        const cd = ubicaciones.find((u) => u.puede_despachar);
-        const stockCd = cd ? await api.listar(`/stock/${cd.id}`) : [];
-        const remitos = await api.listar("/remitos");
-        const ventas = await api.listar("/ventas");
-        setEstado({
-          maestros: productos.length > 0,
-          ubicaciones: Boolean(cd) && ubicaciones.some((u) => u.puede_vender),
-          compras: stockCd.some((s) => s.cantidad > 0),
-          reposicion: remitos.some((r) => r.estado.startsWith("VERIFICADO")),
-          ventas: ventas.length > 0,
+        const [productos, pedidos, remitos, ventasHoy, existencias] = await Promise.all([
+          api.listar("/productos"),
+          api.listar("/pedidos?estado=PENDIENTE"),
+          api.listar("/remitos"),
+          api.obtener(`/reportes/ventas?desde=${hoy()}&hasta=${hoy()}&agrupar=total`),
+          api.obtener("/reportes/existencias?solo_bajo_minimo=true"),
+        ]);
+        setDatos({
+          hayProductos: productos.length > 0,
+          pedidosPendientes: pedidos.length,
+          armando: remitos.filter((r) => r.estado === "ABIERTO").length,
+          enCamino: remitos.filter((r) => r.estado === "EN_TRANSITO").length,
+          ventasHoy: ventasHoy.cantidad_ventas,
+          ingresoHoy: ventasHoy.total_neto,
+          bajoMinimo: existencias.filas.length,
         });
       } catch (e) {
         setError(e.message);
@@ -43,67 +43,62 @@ export default function Inicio({ irA }) {
     })();
   }, []);
 
-  const pasos = [
-    { hecho: estado?.maestros, ir: "productos", titulo: "Cargá categorías y productos",
-      texto: "Primero las categorías (ej: Bebidas) y después los productos, con su precio, costo y stock mínimo." },
-    { hecho: estado?.ubicaciones, ir: "ubicaciones", titulo: "Creá el Centro de Distribución y las sucursales",
-      texto: "Hay un solo CD (de donde sale la mercadería) y uno o más locales que venden." },
-    { hecho: estado?.compras, ir: "stock", titulo: "Comprá mercadería para el CD",
-      texto: "En Stock, elegí el CD y registrá una compra. Es la única forma de que entre mercadería al sistema." },
-    { hecho: estado?.reposicion, ir: "logistica", titulo: "Llevá mercadería a un local",
-      texto: "En Logística: el local pide, el CD arma bultos precintados, los despacha y el local los verifica al recibirlos." },
-    { hecho: estado?.ventas, ir: "ventas", titulo: "Vendé en un local",
-      texto: "Solo se puede vender lo que llegó en bultos verificados. Probá distintos medios de pago." },
-    { hecho: false, ir: "reportes", titulo: "Mirá los reportes",
-      texto: "Con ventas y entregas hechas, los reportes muestran ingresos, márgenes, faltantes y mermas." },
-  ];
-
   return (
-    <section className="tema-lavanda">
-      <div className="encabezado-pantalla">
-        <div className="titulo">
-          <span className="icono" aria-hidden="true">🏠</span>
-          <h2>Bienvenido</h2>
-        </div>
-        <p className="descripcion">
-          Este sistema maneja un comercio con varios <strong>locales</strong> que reciben mercadería de un{" "}
-          <strong>Centro de Distribución (CD)</strong>. La mercadería viaja en bultos cerrados con un precinto de
-          seguridad: solo se puede vender cuando el local revisa el precinto y confirma que llegó bien.
-        </p>
-      </div>
+    <section>
+      <Cabecera icono="🏠" titulo="Inicio" subtitulo="Lo que está pasando hoy en el comercio" />
 
-      <div className="areas">
-        {AREAS.map((a) => (
-          <div key={a.clave} className={`area ${a.tema}`}>
-            <h3><span aria-hidden="true">{a.icono}</span> {a.titulo}</h3>
-            <p>{a.texto}</p>
-            <button className="secundario" onClick={() => irA(a.clave)}>Ir a {a.titulo}</button>
-          </div>
-        ))}
-      </div>
-
-      <h3>Primeros pasos</h3>
       {error && (
-        <div className="aviso aviso-error" role="alert">
-          <strong>No hay conexión con el backend.</strong>
-          <span>Levantalo con <code>.venv\Scripts\python -m uvicorn backend.main:app --reload</code> y recargá la página.</span>
-        </div>
+        <Vacio icono="🔌" titulo="No hay conexión con el sistema"
+          texto="El backend no está corriendo. Levantalo con: .venv\Scripts\python -m uvicorn backend.main:app --reload" />
       )}
-      <ol className="checklist">
-        {pasos.map((p, i) => (
-          <li key={p.titulo} className={p.hecho ? "hecho" : ""}>
-            <span className="marca" aria-label={p.hecho ? "Hecho" : `Paso ${i + 1}`}>{p.hecho ? "✓" : i + 1}</span>
-            <span className="texto"><strong>{p.titulo}</strong>{p.texto}</span>
-            <button className={p.hecho ? "secundario" : ""} onClick={() => irA(p.ir)}>{p.hecho ? "Ver" : "Empezar"}</button>
-          </li>
-        ))}
-      </ol>
+      {!error && datos === null && <Cargando />}
 
-      <div className="aviso aviso-advertencia consejo">
-        <strong>¿Querés probar con datos de ejemplo?</strong>
-        <span>Corré <code>.venv\Scripts\python -m backend.datos.seed --reiniciar</code> (borra la base local y carga
-          productos, locales, entregas y ventas de prueba) y recargá la página.</span>
-      </div>
+      {datos && !datos.hayProductos && (
+        <Vacio icono="🌱" titulo="Todavía no hay datos cargados"
+          texto="Empezá por los productos y los locales. Para probar con datos de ejemplo, corré: .venv\Scripts\python -m backend.datos.seed --reiniciar"
+          accion="Cargar productos" alAccionar={() => irA("productos")} />
+      )}
+
+      {datos?.hayProductos && (<>
+        <div className="indicadores">
+          <Indicador tema="tema-durazno" icono="🛒" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
+            pie="Ir a vender →" alTocar={() => irA("ventas")} />
+          <Indicador tema="tema-cielo" icono="📝" valor={datos.pedidosPendientes} texto="pedidos de locales sin preparar"
+            pie="Ver envíos →" atencion={datos.pedidosPendientes > 0} alTocar={() => irA("logistica")} />
+          <Indicador tema="tema-cielo" icono="🚚" valor={datos.enCamino} texto={`envíos en camino · ${datos.armando} armándose`}
+            pie="Ver envíos →" alTocar={() => irA("logistica")} />
+          <Indicador tema="tema-menta" icono="⚠️" valor={datos.bajoMinimo} texto="faltantes para reponer, sumando todos los lugares"
+            pie="Ver stock →" atencion={datos.bajoMinimo > 0} alTocar={() => irA("stock")} />
+        </div>
+
+        <h2 className="titulo-seccion">Accesos rápidos</h2>
+        <div className="accesos">
+          <Acceso tema="tema-durazno" icono="🛒" titulo="Nueva venta" texto="Cobrar en un local" alTocar={() => irA("ventas")} />
+          <Acceso tema="tema-cielo" icono="🚚" titulo="Reponer un local" texto="Pedido, bultos y despacho" alTocar={() => irA("logistica")} />
+          <Acceso tema="tema-menta" icono="📦" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />
+          <Acceso tema="tema-rosa" icono="📊" titulo="Ver reportes" texto="Ventas, márgenes y mermas" alTocar={() => irA("reportes")} />
+        </div>
+      </>)}
     </section>
+  );
+}
+
+function Indicador({ tema, icono, valor, texto, pie, atencion, alTocar }) {
+  return (
+    <button className={`indicador ${tema} ${atencion ? "atencion" : ""}`} onClick={alTocar}>
+      <span className="indicador-icono" aria-hidden="true">{icono}</span>
+      <strong>{valor}</strong>
+      <span>{texto}</span>
+      <span className="indicador-pie">{pie}</span>
+    </button>
+  );
+}
+
+function Acceso({ tema, icono, titulo, texto, alTocar }) {
+  return (
+    <button className={`acceso ${tema}`} onClick={alTocar}>
+      <span className="indicador-icono" aria-hidden="true">{icono}</span>
+      <span>{titulo}<small>{texto}</small></span>
+    </button>
   );
 }

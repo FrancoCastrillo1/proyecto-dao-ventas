@@ -12,6 +12,13 @@ export function fecha(texto) {
   return new Date(texto).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 }
 
+// Nombre para mostrar de cada medio de pago (en la base se guarda el código)
+const MEDIOS = { EFECTIVO: "Efectivo", DEBITO: "Débito", CREDITO: "Crédito", TRANSFERENCIA: "Transferencia" };
+
+export function nombreMedio(codigo) {
+  return MEDIOS[codigo?.toUpperCase()] ?? codigo;
+}
+
 export function porcentaje(valor) {
   return valor === null || valor === undefined ? "—" : `${valor.toLocaleString("es-AR")} %`;
 }
