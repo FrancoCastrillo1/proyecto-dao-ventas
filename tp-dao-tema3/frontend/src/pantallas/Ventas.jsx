@@ -1,140 +1,251 @@
-// Pantalla de Ventas: vender (uno o más productos) con un medio de pago,
-// ver el comprobante, devolver productos de una venta registrada y ver la caja
-// de cada local. Los medios de pago y sus recargos/descuentos vienen del
-// backend (patrón Strategy): el front no los conoce.
+// Pantalla de Ventas, como un punto de venta: se elige el local, se tocan los
+// productos para sumarlos al ticket y se cobra con un medio de pago. El total
+// lo calcula el back mientras se arma el ticket (POST /ventas/cotizar), con el
+// mismo cálculo que la venta real (Strategy de medios de pago): el front no
+// conoce los descuentos. Abajo: las ventas del local, su caja y las devoluciones.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
-import EncabezadoPantalla from "../componentes/EncabezadoPantalla.jsx";
+import Cabecera from "../componentes/Cabecera.jsx";
+import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
+import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
-import { fecha, pesos } from "../formato.js";
+import { fecha, nombreMedio, pesos } from "../formato.js";
 
-export default function Ventas() {
+export default function Ventas({ irA }) {
   const catalogos = useCatalogos();
   const { aviso, ejecutar, limpiar } = useAviso();
   const [medios, setMedios] = useState([]);
-  const [ventas, setVentas] = useState([]);
-  const [caja, setCaja] = useState(null);
-  const [sucursal, setSucursal] = useState("");
-  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
+  const [sucursal, setSucursal] = useState(null);
+  const [stock, setStock] = useState({});          // producto_id → cantidad en el local
+  const [busqueda, setBusqueda] = useState("");
+  const [carrito, setCarrito] = useState([]);      // [{ producto_id, cantidad }]
   const [medio, setMedio] = useState("");
   const [entregado, setEntregado] = useState("");
-  const [ultima, setUltima] = useState(null);
+  const [cotizacion, setCotizacion] = useState(null);
+  const [errorCotizacion, setErrorCotizacion] = useState(null);
+  const [ventas, setVentas] = useState(null);
+  const [caja, setCaja] = useState(null);
+  const [comprobante, setComprobante] = useState(null);
   const [abierta, setAbierta] = useState(null);
 
   const locales = catalogos.ubicacionesActivas.filter((u) => u.puede_vender);
 
   useEffect(() => { ejecutar(async () => setMedios(await api.listar("/ventas/medios-pago"))); }, []);
+  // Arranca con el primer local
+  useEffect(() => { if (sucursal === null && locales.length) setSucursal(locales[0].id); }, [locales.length]);
 
-  const cargar = () => ejecutar(async () => {
-    const lista = await api.listar(`/ventas${sucursal ? `?sucursal_id=${sucursal}` : ""}`);
-    setVentas([...lista].reverse());
-    setAbierta((actual) => (actual ? lista.find((v) => v.id === actual.id) ?? null : null));
-    setCaja(sucursal ? await api.obtener(`/caja/${sucursal}`) : null);
+  const cargarLocal = () => sucursal && ejecutar(async () => {
+    const existencias = await api.listar(`/stock/${sucursal}`);
+    setStock(Object.fromEntries(existencias.map((e) => [e.producto_id, e.cantidad])));
+    setVentas([...(await api.listar(`/ventas?sucursal_id=${sucursal}`))].reverse());
+    setCaja(await api.obtener(`/caja/${sucursal}`));
   });
-  useEffect(() => { cargar(); }, [sucursal]);
+  useEffect(() => { setVentas(null); setCarrito([]); cargarLocal(); }, [sucursal]);
 
-  async function vender(evento) {
-    evento.preventDefault();
+  // ------------------------------------------------------------- Ticket
+  function sumar(productoId, cuanto) {
+    setCarrito((actual) => {
+      const linea = actual.find((l) => l.producto_id === productoId);
+      if (!linea) return cuanto > 0 ? [...actual, { producto_id: productoId, cantidad: cuanto }] : actual;
+      return actual
+        .map((l) => (l.producto_id === productoId ? { ...l, cantidad: l.cantidad + cuanto } : l))
+        .filter((l) => l.cantidad > 0);
+    });
+  }
+
+  // Cotización en vivo: medio segundo después del último cambio
+  const datosVenta = {
+    sucursal_id: sucursal, items: carrito, medio_pago: medio,
+    monto_entregado: medio === "EFECTIVO" && entregado !== "" ? entregado : null,
+  };
+  const clave = JSON.stringify(datosVenta);
+  useEffect(() => {
+    setErrorCotizacion(null);
+    if (!sucursal || carrito.length === 0 || !medio) { setCotizacion(null); return undefined; }
+    const temporizador = setTimeout(async () => {
+      try {
+        setCotizacion(await api.crear("/ventas/cotizar", datosVenta));
+      } catch (error) {
+        setCotizacion(null);
+        setErrorCotizacion(error.message);
+      }
+    }, 400);
+    return () => clearTimeout(temporizador);
+  }, [clave]);
+
+  async function cobrar() {
     let venta = null;
-    const ok = await ejecutar(async () => {
-      venta = await api.crear("/ventas", {
-        sucursal_id: sucursal, items: aItems(lineas), medio_pago: medio,
-        monto_entregado: medio === "EFECTIVO" && entregado !== "" ? entregado : null,
-      });
-    }, "Venta registrada");
-    if (ok) {
-      setUltima(venta);
-      setLineas([{ ...LINEA_VACIA }]);
+    if (await ejecutar(async () => { venta = await api.crear("/ventas", datosVenta); }, "Venta registrada")) {
+      setComprobante(venta);
+      setCarrito([]);
       setEntregado("");
-      cargar();
+      cargarLocal();
     }
   }
 
-  const etiquetaMedio = (m) => {
-    const ajuste = m.porcentaje_ajuste;
-    return `${m.nombre}${ajuste < 0 ? ` (${ajuste}% descuento)` : ajuste > 0 ? ` (+${ajuste}% recargo)` : ""}`;
-  };
+  const productosVisibles = catalogos.productosActivos.filter((p) => coincide(`${p.codigo} ${p.nombre}`, busqueda));
+  const subtotalLista = carrito.reduce((suma, l) => suma + l.cantidad * (catalogos.productos.find((p) => p.id === l.producto_id)?.precio_venta ?? 0), 0);
+
+  if (catalogos.productos.length && locales.length === 0) {
+    return (
+      <section>
+        <Cabecera icono="🛒" titulo="Vender" subtitulo="Cobrar en un local" />
+        <Vacio icono="🏬" titulo="No hay locales" texto="Para vender hace falta al menos un local activo."
+          accion="Crear un local" alAccionar={() => irA("ubicaciones")} />
+      </section>
+    );
+  }
 
   return (
     <section>
-      <EncabezadoPantalla id="ventas" icono="🛒" titulo="Ventas"
-        descripcion="Venta al público en un local. Solo se puede vender lo que hay en el local (lo que llegó en bultos verificados)."
-        pasos={[
-          "Elegí la sucursal, agregá los productos con su cantidad y el medio de pago.",
-          "Cada medio tiene su descuento o recargo (se ve al elegirlo). En efectivo podés poner con cuánto paga para calcular el vuelto.",
-          "Al vender se muestra el comprobante. Con «Ver / devolver» se registra una devolución: el producto vuelve al local y se reintegra el dinero.",
-        ]} />
+      <Cabecera icono="🛒" titulo="Vender" subtitulo="Tocá los productos para sumarlos al ticket y cobrá" />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
-      <form className="formulario formulario-ancho" onSubmit={vender}>
-        <label>Sucursal
-          <select value={sucursal} onChange={(e) => setSucursal(e.target.value)}>
-            <option value="">— elegir —</option>
-            {locales.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </label>
-        <LineasProductos lineas={lineas} alCambiar={setLineas} productos={catalogos.productosActivos} />
-        <label>Medio de pago
-          <select value={medio} onChange={(e) => setMedio(e.target.value)}>
-            <option value="">— elegir —</option>
-            {medios.map((m) => <option key={m.nombre} value={m.nombre}>{etiquetaMedio(m)}</option>)}
-          </select>
-        </label>
-        {medio === "EFECTIVO" && (
-          <label>Monto entregado (opcional, para el vuelto)
-            <input value={entregado} onChange={(e) => setEntregado(e.target.value)} placeholder="Ej: 5000" />
-          </label>
-        )}
-        <div className="acciones"><button type="submit">Vender</button></div>
-      </form>
+      <div className="barra">
+        <Segmentado etiqueta="Local" valor={sucursal} alCambiar={setSucursal}
+          opciones={locales.map((u) => ({ valor: u.id, texto: u.nombre }))} />
+      </div>
 
-      {ultima && (
-        <div className="panel comprobante">
-          <h3>Comprobante {ultima.comprobante}
-            <button className="boton-cerrar" onClick={() => setUltima(null)} aria-label="Cerrar">×</button>
-          </h3>
-          <DetalleVenta venta={ultima} catalogos={catalogos} />
+      <div className="punto-venta">
+        {/* ----------------------------------------------- Productos */}
+        <div className="catalogo-venta">
+          <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar producto por nombre o código" />
+          <div className="grilla-productos">
+            {productosVisibles.map((p) => {
+              const hay = stock[p.id] ?? 0;
+              const enTicket = carrito.find((l) => l.producto_id === p.id)?.cantidad ?? 0;
+              return (
+                <button key={p.id} className="producto-venta" onClick={() => sumar(p.id, 1)} disabled={hay === 0}
+                  title={hay === 0 ? "No hay stock en este local" : "Sumar al ticket"}>
+                  <strong>{p.nombre}</strong>
+                  <span className="precio">{pesos(p.precio_venta)}</span>
+                  <span className={`stock ${hay === 0 ? "sin" : hay - enTicket < 5 ? "poco" : ""}`}>
+                    {hay === 0 ? "Sin stock" : `Hay ${hay}`}{enTicket > 0 && ` · ${enTicket} en el ticket`}
+                  </span>
+                </button>
+              );
+            })}
+            {productosVisibles.length === 0 && <p className="vacio-chico">No hay productos que coincidan con “{busqueda}”.</p>}
+          </div>
         </div>
-      )}
 
+        {/* -------------------------------------------------- Ticket */}
+        <div className="ticket">
+          <div className="ticket-cabecera">
+            <strong>Ticket</strong>
+            {carrito.length > 0 && <button className="fantasma chico" onClick={() => setCarrito([])}>Vaciar</button>}
+          </div>
+          <div className="ticket-items">
+            {carrito.length === 0 && <p className="vacio-chico">Tocá un producto para empezar.</p>}
+            {carrito.map((l) => {
+              const linea = cotizacion?.lineas.find((x) => x.producto_id === l.producto_id);
+              return (
+                <div key={l.producto_id} className="item-ticket">
+                  <span>
+                    <span className="nombre">{catalogos.nombreProducto(l.producto_id)}</span>
+                    {linea && !linea.alcanza && <span className="aviso-stock">Solo hay {linea.disponible}</span>}
+                  </span>
+                  <span className="cantidad-control">
+                    <button onClick={() => sumar(l.producto_id, -1)} aria-label="Uno menos">−</button>
+                    <span>{l.cantidad}</span>
+                    <button onClick={() => sumar(l.producto_id, 1)} aria-label="Uno más">+</button>
+                  </span>
+                  <span className="num">{linea ? pesos(linea.subtotal) : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="ticket-pago">
+            <div className="medios" role="radiogroup" aria-label="Medio de pago">
+              {medios.map((m) => (
+                <button key={m.nombre} role="radio" aria-checked={medio === m.nombre}
+                  className={`medio ${medio === m.nombre ? "activo" : ""}`} onClick={() => setMedio(m.nombre)}>
+                  {nombreMedio(m.nombre)}
+                  <small>{m.porcentaje_ajuste < 0 ? `${m.porcentaje_ajuste}% desc.` : m.porcentaje_ajuste > 0 ? `+${m.porcentaje_ajuste}% recargo` : "precio de lista"}</small>
+                </button>
+              ))}
+            </div>
+            {medio === "EFECTIVO" && (
+              <label>¿Con cuánto paga?
+                <input value={entregado} onChange={(e) => setEntregado(e.target.value)} placeholder="Opcional, para calcular el vuelto" inputMode="decimal" />
+              </label>
+            )}
+
+            {cotizacion ? (<>
+              <div className="renglon"><span>Subtotal</span><span>{pesos(cotizacion.subtotal)}</span></div>
+              {cotizacion.porcentaje_ajuste !== 0 && (
+                <div className="renglon">
+                  <span>{cotizacion.porcentaje_ajuste < 0 ? "Descuento" : "Recargo"} {Math.abs(cotizacion.porcentaje_ajuste)}%</span>
+                  <span>{pesos(cotizacion.total - cotizacion.subtotal)}</span>
+                </div>
+              )}
+              <div className="renglon total"><span>Total</span><span>{pesos(cotizacion.total)}</span></div>
+              {cotizacion.vuelto > 0 && <div className="renglon vuelto"><span>Vuelto</span><span>{pesos(cotizacion.vuelto)}</span></div>}
+              {!cotizacion.alcanza_pago && <p className="atencion-texto">Con lo que entrega no alcanza.</p>}
+            </>) : (
+              carrito.length > 0 && (
+                <div className="renglon total"><span>Total</span><span>{medio ? "…" : pesos(subtotalLista)}</span></div>
+              )
+            )}
+            {errorCotizacion && <p className="atencion-texto">{errorCotizacion}</p>}
+            {carrito.length > 0 && !medio && <p className="nota">Elegí cómo paga.</p>}
+          </div>
+
+          <div className="ticket-pie">
+            <button className="grande" onClick={cobrar}
+              disabled={carrito.length === 0 || !medio || !cotizacion || !cotizacion.hay_stock || !cotizacion.alcanza_pago}>
+              {cotizacion ? `Cobrar ${pesos(cotizacion.total)}` : "Cobrar"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ----------------------------------------- Ventas y caja del local */}
+      <h2 className="titulo-seccion espacio-arriba">Ventas de {catalogos.nombreUbicacion(sucursal)}</h2>
       {caja && (
         <div className="tarjetas">
           {Object.entries(caja.por_medio).map(([nombre, importe]) => (
-            <div key={nombre} className="tarjeta"><span>{nombre}</span><strong>{pesos(importe)}</strong></div>
+            <div key={nombre} className="tarjeta"><span>{nombreMedio(nombre)}</span><strong>{pesos(importe)}</strong></div>
           ))}
-          <div className="tarjeta tarjeta-total"><span>Caja de {catalogos.nombreUbicacion(caja.sucursal_id)}</span>
-            <strong>{pesos(caja.saldo)}</strong></div>
+          <div className="tarjeta destacada"><span>Caja total</span><strong>{pesos(caja.saldo)}</strong></div>
+        </div>
+      )}
+      {ventas === null && <Cargando />}
+      {ventas?.length === 0 && <Vacio icono="🧾" titulo="Este local todavía no vendió nada" texto="Las ventas que cobres aparecen acá." />}
+      {ventas?.length > 0 && (
+        <div className="tarjeta-tabla">
+          <table>
+            <thead><tr><th>Comprobante</th><th>Fecha</th><th>Pago</th><th className="num">Total</th><th className="num">Devuelto</th><th></th></tr></thead>
+            <tbody>
+              {ventas.map((v) => (
+                <tr key={v.id}>
+                  <td><code>{v.comprobante}</code></td>
+                  <td>{fecha(v.fecha)}</td>
+                  <td>{nombreMedio(v.medio_pago)}</td>
+                  <td className="num">{pesos(v.total)}</td>
+                  <td className="num">{v.total_reintegrado ? pesos(v.total_reintegrado) : "—"}</td>
+                  <td><div className="acciones-fila"><button className="secundario chico" onClick={() => setAbierta(v)}>Ver</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <div className="tabla-scroll">
-        <table>
-          <thead>
-            <tr><th>Comprobante</th><th>Fecha</th><th>Sucursal</th><th>Medio</th>
-              <th className="num">Total</th><th className="num">Reintegrado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {ventas.map((v) => (
-              <tr key={v.id} className={abierta?.id === v.id ? "fila-seleccionada" : ""}>
-                <td><code>{v.comprobante}</code></td>
-                <td>{fecha(v.fecha)}</td>
-                <td>{catalogos.nombreUbicacion(v.sucursal_id)}</td>
-                <td>{v.medio_pago}</td>
-                <td className="num">{pesos(v.total)}</td>
-                <td className="num">{v.total_reintegrado ? pesos(v.total_reintegrado) : "—"}</td>
-                <td className="botones-fila"><button className="secundario" onClick={() => setAbierta(v)}>Ver / devolver</button></td>
-              </tr>
-            ))}
-            {ventas.length === 0 && <tr><td colSpan="7" className="vacio">No hay ventas{sucursal ? " en esta sucursal" : ""}</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {comprobante && (
+        <Cajon titulo={`Comprobante ${comprobante.comprobante}`} subtitulo={`${catalogos.nombreUbicacion(comprobante.sucursal_id)} · ${fecha(comprobante.fecha)}`}
+          alCerrar={() => setComprobante(null)} pie={<button onClick={() => setComprobante(null)}>Listo</button>}>
+          <DetalleVenta venta={comprobante} catalogos={catalogos} />
+        </Cajon>
+      )}
 
       {abierta && (
-        <PanelVenta venta={abierta} catalogos={catalogos} ejecutar={ejecutar} alCambiar={cargar} alCerrar={() => setAbierta(null)} />
+        <CajonVenta key={abierta.id} venta={abierta} catalogos={catalogos} ejecutar={ejecutar}
+          alCambiar={async () => { await cargarLocal(); setAbierta(null); }} alCerrar={() => setAbierta(null)} />
       )}
     </section>
   );
@@ -143,63 +254,71 @@ export default function Ventas() {
 function DetalleVenta({ venta, catalogos }) {
   return (
     <>
-      <table>
-        <thead><tr><th>Producto</th><th className="num">Cantidad</th><th className="num">Precio</th><th className="num">Subtotal</th></tr></thead>
-        <tbody>
-          {venta.detalles.map((d) => (
-            <tr key={d.producto_id}>
-              <td>{catalogos.nombreProducto(d.producto_id)}</td>
-              <td className="num">{d.cantidad}</td>
-              <td className="num">{pesos(d.precio_unitario)}</td>
-              <td className="num">{pesos(d.subtotal)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="totales">
-        Subtotal {pesos(venta.subtotal)} · {venta.medio_pago} ({venta.porcentaje_ajuste}%) · <strong>Total {pesos(venta.total)}</strong>
-        {venta.vuelto > 0 && <> · Vuelto {pesos(venta.vuelto)}</>}
-      </p>
+      <div className="tarjeta-tabla">
+        <table>
+          <thead><tr><th>Producto</th><th className="num">Cant.</th><th className="num">Precio</th><th className="num">Subtotal</th></tr></thead>
+          <tbody>
+            {venta.detalles.map((d) => (
+              <tr key={d.producto_id}>
+                <td>{catalogos.nombreProducto(d.producto_id)}</td>
+                <td className="num">{d.cantidad}</td>
+                <td className="num">{pesos(d.precio_unitario)}</td>
+                <td className="num">{pesos(d.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="campos">
+        <div className="renglon"><span>Subtotal</span><span>{pesos(venta.subtotal)}</span></div>
+        <div className="renglon"><span>Pago: {nombreMedio(venta.medio_pago)} ({venta.porcentaje_ajuste}%)</span><span>{pesos(venta.total - venta.subtotal)}</span></div>
+        <div className="renglon total"><span>Total</span><span>{pesos(venta.total)}</span></div>
+        {venta.vuelto > 0 && <div className="renglon vuelto"><span>Vuelto</span><span>{pesos(venta.vuelto)}</span></div>}
+      </div>
     </>
   );
 }
 
-function PanelVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar }) {
+function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar }) {
   const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
   const [motivo, setMotivo] = useState("");
   const vendidos = venta.detalles.map((d) => catalogos.productos.find((p) => p.id === d.producto_id)).filter(Boolean);
 
-  async function devolver(evento) {
-    evento.preventDefault();
+  async function devolver() {
     const ok = await ejecutar(
       () => api.crear(`/ventas/${venta.id}/devoluciones`, { items: aItems(lineas), motivo }),
-      "Devolución registrada: el stock volvió al local y se reintegró el dinero",
+      "Devolución registrada: el producto volvió al local y se reintegró el dinero",
     );
-    if (ok) { setLineas([{ ...LINEA_VACIA }]); setMotivo(""); alCambiar(); }
+    if (ok) alCambiar();
   }
 
   return (
-    <div className="panel">
-      <h3>Venta {venta.comprobante} · {catalogos.nombreUbicacion(venta.sucursal_id)}
-        <button className="boton-cerrar" onClick={alCerrar} aria-label="Cerrar">×</button>
-      </h3>
+    <Cajon titulo={`Venta ${venta.comprobante}`} subtitulo={fecha(venta.fecha)} alCerrar={alCerrar}
+      pie={<>
+        <button className="secundario" onClick={alCerrar}>Cerrar</button>
+        <button onClick={devolver}>Registrar devolución</button>
+      </>}>
       <DetalleVenta venta={venta} catalogos={catalogos} />
 
       {venta.devoluciones.length > 0 && (
-        <ul>
-          {venta.devoluciones.map((d) => (
-            <li key={d.id}>{fecha(d.fecha)} · {d.motivo} · {pesos(d.importe)} · {d.detalles.map((x) =>
-              `${x.cantidad} × ${catalogos.nombreProducto(x.producto_id)}`).join(", ")}</li>
-          ))}
-        </ul>
+        <div className="seccion-cajon">
+          <h3>Devoluciones anteriores</h3>
+          <ul className="lista-simple">
+            {venta.devoluciones.map((d) => (
+              <li key={d.id}>{fecha(d.fecha)} · {d.motivo} · {pesos(d.importe)} · {d.detalles.map((x) =>
+                `${x.cantidad} × ${catalogos.nombreProducto(x.producto_id)}`).join(", ")}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      <form className="formulario formulario-ancho" onSubmit={devolver}>
-        <span className="nota">Devolver productos de esta venta:</span>
-        <LineasProductos lineas={lineas} alCambiar={setLineas} productos={vendidos} />
-        <label>Motivo<input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej: Producto vencido" /></label>
-        <div className="acciones"><button type="submit">Registrar devolución</button></div>
-      </form>
-    </div>
+      <div className="seccion-cajon">
+        <h3>Devolver productos</h3>
+        <div className="campos">
+          <LineasProductos lineas={lineas} alCambiar={setLineas} productos={vendidos} />
+          <label>Motivo<input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej: Producto vencido" /></label>
+        </div>
+      </div>
+    </Cajon>
   );
 }

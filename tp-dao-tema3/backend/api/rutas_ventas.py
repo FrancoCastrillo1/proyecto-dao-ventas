@@ -118,6 +118,45 @@ def obtener_venta(id: int):
     return venta_a_salida(service.obtener(id))
 
 
+class LineaCotizacionSalida(BaseModel):
+    producto_id: int
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+    disponible: int     # cuánto hay en el local
+    alcanza: bool       # si el stock alcanza para esta línea
+
+
+class CotizacionSalida(BaseModel):
+    subtotal: float          # precio de lista
+    medio_pago: str
+    porcentaje_ajuste: float
+    total: float             # lo que se cobraría, con el descuento o recargo
+    vuelto: float
+    alcanza_pago: bool       # en efectivo: si el monto entregado cubre el total
+    hay_stock: bool          # si alcanzan todas las líneas
+    lineas: list[LineaCotizacionSalida]
+
+
+# Lo que costaría la venta, para mostrarlo antes de confirmar. No guarda nada.
+@router.post("/cotizar", response_model=CotizacionSalida)
+def cotizar_venta(datos: VentaEntrada):
+    venta, disponible, alcanza_pago = service.cotizar(
+        datos.sucursal_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado,
+    )
+    lineas = [
+        LineaCotizacionSalida(producto_id=d.producto_id, cantidad=d.cantidad, precio_unitario=d.precio_unitario,
+                              subtotal=d.subtotal, disponible=disponible[d.producto_id],
+                              alcanza=d.cantidad <= disponible[d.producto_id])
+        for d in venta.detalles
+    ]
+    return CotizacionSalida(
+        subtotal=venta.subtotal, medio_pago=venta.pago.medio.nombre, porcentaje_ajuste=venta.pago.porcentaje_ajuste,
+        total=venta.total, vuelto=venta.pago.vuelto, alcanza_pago=alcanza_pago,
+        hay_stock=all(linea.alcanza for linea in lineas), lineas=lineas,
+    )
+
+
 @router.post("", response_model=VentaSalida, status_code=201)
 def registrar_venta(datos: VentaEntrada):
     venta = service.vender(datos.sucursal_id, a_pares(datos.items), datos.medio_pago, datos.monto_entregado)
