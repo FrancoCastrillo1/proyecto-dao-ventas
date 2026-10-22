@@ -20,6 +20,9 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 - 8 ventas y 2 devoluciones.
 
 **Cómo está armada la pantalla:**
+
+- Desde el paso 3 se entra con usuario y contraseña. Usuarios del seed (contraseña de todos: `tpdao2026`): `admin` (Administrador), `cd.central` (CD), `centro`, `norte` y `sur` (un usuario por local).
+- Cada perfil ve solo sus pantallas: el administrador maneja los datos, el CD prepara los envíos y cada local pide, recibe y vende. Arriba del menú dice quién entró, con el botón **Salir**.
 - A la izquierda está el menú. "Operación" es el día a día; "Datos" son los maestros.
 - Arriba a la derecha de cada pantalla está el botón de lo principal que se hace ahí (`+ Nuevo…`).
 - Crear, editar o ver el detalle de algo abre un **panel a la derecha**. Se cierra con la ×, con Escape o tocando afuera.
@@ -27,7 +30,32 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ---
 
+## 0. Entrar con cada perfil (paso 3)
+
+- [ ] **0.1 Hacé:** abrí la app.
+  **Debería:** aparecer solo la pantalla "Entrar", sin menú.
+- [ ] **0.2 Hacé:** entrá con `norte` y la contraseña `otra-clave`.
+  **Debería:** salir "Usuario o contraseña incorrectos" (no dice cuál de los dos está mal) y borrarse la contraseña.
+- [ ] **0.3 Hacé:** entrá con `norte` / `tpdao2026`.
+  **Debería:** decir "Hola, Nico" y "Lo que está pasando hoy en Sucursal Norte". Menú: Inicio, Vender, Envíos, Stock, Reportes (sin Datos).
+- [ ] **0.4 Hacé:** recargá la página (F5).
+  **Debería:** seguir adentro. Cerrá la pestaña, abrí otra en http://localhost:5173: tiene que pedir entrar de nuevo.
+- [ ] **0.5 Hacé:** "Salir" y entrá con `cd.central`.
+  **Debería:** menú Inicio, Envíos, Stock, Reportes (sin Vender ni Datos).
+- [ ] **0.6 Hacé:** "Salir" y entrá con `admin`.
+  **Debería:** menú Inicio, Stock, Reportes y todo "Datos", incluido **Usuarios** (sin Vender ni Envíos).
+- [ ] **0.7 Hacé:** como `admin`, Usuarios → "+ Nuevo usuario" → Local, Sucursal Sur, "Pablo Pérez", usuario `pablo.sur`, contraseña `clave-de-pablo` → Crear usuario.
+  **Debería:** salir "Usuario «pablo.sur» creado: ya puede entrar". Después, entrar como `pablo.sur` funciona.
+- [ ] **0.8 Hacé:** como `admin`, abrí a Pablo → "Cambiar la contraseña" con `corta`.
+  **Debería:** salir que tiene que tener al menos 8 caracteres.
+- [ ] **0.9 Hacé:** como `admin`, dale de baja a Pablo y probá entrar como `pablo.sur`.
+  **Debería:** "Usuario o contraseña incorrectos". En "De baja" se lo puede reactivar.
+- [ ] **0.10 Hacé:** como `admin`, abrite a vos misma (dice "Vos") → "Dar de baja".
+  **Debería:** salir que no se puede dar de baja al único administrador activo.
+
 ## 1. Inicio
+
+> Entrá como `admin`: es el que ve todos los indicadores.
 
 - [ CHECK] **1.1 Hacé:** abrí la app.
   **Debería:** verse 4 tarjetas con números (ventas de hoy, pedidos sin preparar, envíos en camino, faltantes para reponer) y abajo 4 accesos rápidos.
@@ -38,6 +66,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
   **Debería:** aparecer "No hay conexión con el sistema", con el comando para levantarlo.
 
 ## 2. Locales y CD (Datos → Locales y CD)
+
+> Entrá como `admin`.
 
 - [ CHECK] **2.1 Hacé:** entrá a la pantalla.
   **Debería:** verse *CD Central* con la etiqueta "Despacha", y los 3 locales con "Vende" y "Recibe". (esto igual hay que cambiarlo porque tendriamos que manejar los perfiles de sucursales y de cd)
@@ -62,6 +92,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ## 3. Categorías y productos (Datos)
 
+> Entrá como `admin`.
+
 - [ check] **3.1 Hacé:** en Categorías, "+ Nueva categoría" → "lacteos" → Crear.
   **Debería:** salir un error de que ya existe (*Lácteos*), aunque no tenga tilde ni mayúscula. (si deja esta bien, pero aparece error 409, un usuario normal no va a entender que es error 409)
 - [check ] **3.2 Hacé:** escribí "lim" en el buscador.
@@ -81,6 +113,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ## 4. Proveedores (Datos → Proveedores)
 
+> Entrá como `admin`.
+
 - [check ] **4.1 Hacé:** "+ Nuevo proveedor" con CUIT `20-12345678-5`. (funciona pero de vuelta, primero no explica q esta mal, y ademas tira el numero del codigo 400 que un usuario no sabe q es )
   **Debería:** salir un error de CUIT inválido (el dígito verificador no da). 
 - [check ] **4.2 Hacé:** lo mismo con `20-12345678-6`. (funciona pero de vuelta,tira el numero del codigo 400 que un usuario no sabe q es)
@@ -94,6 +128,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
   **Debería:** volver al desplegable.
 
 ## 5. Pedido de un local y preparación (Operación → Envíos a locales)
+
+> Desde el paso 3: el pedido lo hace el **local** (entrá como `norte`, ya no se elige el local) y el que lo prepara es el **CD** (`cd.central`).
 
 La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercadería:
 **Pedidos de locales → Armando en el CD → En camino → Entregados**.
@@ -115,6 +151,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   (funciona pero como vnego diciendo habria que ir manejando esto en perfiles diferentes)
 
 ## 6. Bultos con remito y precinto (Envíos, columna "Armando en el CD")
+
+> Entrá como `cd.central`.
 
 - [ check ] **6.1 Hacé:** tocá la tarjeta de *Sucursal Norte*.
   **Debería:** abrirse el remito, con una tabla "Lo que pidió el local": Lavandina, Pidió 10, En bultos 0, Falta 10. 
@@ -140,6 +178,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ## 7. Despacho
 
+> Entrá como `cd.central`.
+
 - [check ] **7.1 Hacé:** antes de despachar, en Stock → *CD Central*, anotá cuántas *Lavandina 1L* hay.
   **Debería:** verse un número (llamalo X).
 - [check ] **7.2 Hacé:** volvé al remito y tocá "Despachar →".
@@ -150,6 +190,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** haber X − 10 Lavandinas. En "Ver movimientos" aparece "Despacho a un local −6" y "−4".
 
 ## 8. Recepción verificando el precinto
+
+> Recibe y verifica **el local destino**: entrá como `sur` (8.1 a 8.4) y como `norte` (8.5 y 8.6). El CD ve el envío pero no tiene los botones de recibir.
 
 - [ check] **8.1 Hacé:** abrí la tarjeta de *Sucursal Sur* en "En camino" (es la del seed).
   **Debería:** verse su bulto en **En camino**, con el botón "Marcar como recibido".
@@ -170,6 +212,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** aparecer el bulto rechazado en "Qué se perdió", con su valor.
 
 ## 9. Ventas, cobro, comprobante y devoluciones (Operación → Vender)
+
+> Entrá como `sur`: vende en su local, ya no se elige (la 9.1 no aplica).
 
 - [ ] **9.1 Hacé:** entrá a Vender y elegí *Sucursal Sur* arriba.
   **Debería:** verse los productos como tarjetas con precio y "Hay N". Los que no tienen stock aparecen apagados con "Sin stock" y no se pueden tocar.
@@ -198,6 +242,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ## 10. Stock (Operación → Stock)
 
+> Como `cd.central` o `admin` se elige la ubicación; como un local, ves solo el tuyo. "+ Registrar compra" aparece solo para `cd.central`.
+
 - [ ] **10.1 Hacé:** cambiá de ubicación con los botones de arriba.
   **Debería:** que "+ Registrar compra" aparezca **solo** en *CD Central*. En un local aparece "A este local la mercadería le entra cuando verifica un envío del CD" con el enlace a Envíos.
 - [ ] **10.2 Hacé:** en un local, tocá "Bajo el mínimo".
@@ -206,6 +252,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** salir "Compra registrada: entraron 50 al CD Central"; el número sube y en "Ver movimientos" aparece "Compra a proveedor +50".
 
 ## 11. Reportes (Operación → Reportes)
+
+> Como `admin` o `cd.central` se ve toda la red; como un local, solo lo tuyo (no aparece el filtro de local).
 
 - [ ] **11.1 Hacé:** recorré las 5 pestañas.
   **Debería:** cambiar el subtítulo con la pregunta que responde cada reporte, y verse tarjetas con totales y una tabla.

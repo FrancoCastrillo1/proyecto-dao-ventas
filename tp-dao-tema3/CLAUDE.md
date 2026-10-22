@@ -135,3 +135,8 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Acceso a algo de otro local: 403 con mensaje claro ("Ese remito no es de tu local"), no 404.
 - El perfil y la ubicación de un usuario no se modifican (igual que el tipo de una ubicación).
 - Autenticación: contraseña con `hashlib.pbkdf2_hmac` y sal (iteraciones en `config.py`, menos en los tests); token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON (no formulario, para no sumar `python-multipart`); `backend.datos.crear_admin` para el primer administrador. Seed: `admin`, `cd.central`, `centro`, `norte`, `sur`, contraseña `tpdao2026`.
+
+### Paso 3 del plan: front por perfil (decidido el 23/10)
+- Pantalla de login propia; el token en `sessionStorage`, manejado solo por `api.js`; un 401 con sesión abierta vuelve al login.
+- El menú se arma con las `capacidades` de `/auth/yo` (cada pantalla dice qué capacidad requiere); nada de `if perfil ==` en el front.
+- El local no se elige en el front: lo pone el back. Pantalla de Usuarios para el administrador.

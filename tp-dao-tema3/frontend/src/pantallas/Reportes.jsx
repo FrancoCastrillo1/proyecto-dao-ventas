@@ -1,12 +1,14 @@
 // Pantalla de Reportes: los 5 reportes del backend (/reportes/...) con sus
 // filtros. Cada cambio de filtro vuelve a consultar solo. Las cuentas las hace
-// el backend; acá solo se muestran.
+// el backend; acá solo se muestran. Un local ve solo los suyos (lo filtra el
+// back), así que no se le muestra el filtro de local.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
+import { puede } from "../componentes/Permisos.js";
 import { Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import { fecha, nombreMedio, pesos, porcentaje } from "../formato.js";
 
@@ -20,7 +22,7 @@ const REPORTES = [
 
 const FILTROS_INICIALES = { desde: "", hasta: "", sucursal_id: "", ubicacion_id: "", agrupar: "dia", limite: "10", solo_bajo_minimo: false };
 
-export default function Reportes() {
+export default function Reportes({ usuario }) {
   const catalogos = useCatalogos();
   const { aviso, ejecutar, limpiar } = useAviso();
   const [clave, setClave] = useState("ventas");
@@ -28,6 +30,7 @@ export default function Reportes() {
   const [datos, setDatos] = useState(null);
 
   const reporte = REPORTES.find((r) => r.valor === clave);
+  const veTodaLaRed = puede(usuario, "ve_toda_la_red");
   const cambiar = (campo) => (e) => setFiltros({ ...filtros, [campo]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const hayFiltros = filtros.desde || filtros.hasta || filtros.sucursal_id || filtros.ubicacion_id || filtros.solo_bajo_minimo;
 
@@ -61,7 +64,7 @@ export default function Reportes() {
           <label>Desde<input type="date" value={filtros.desde} onChange={cambiar("desde")} /></label>
           <label>Hasta<input type="date" value={filtros.hasta} onChange={cambiar("hasta")} /></label>
         </>)}
-        {reporte.sucursal && (
+        {reporte.sucursal && veTodaLaRed && (
           <label>Local
             <select value={filtros.sucursal_id} onChange={cambiar("sucursal_id")}>
               <option value="">Todos los locales</option>
@@ -70,12 +73,14 @@ export default function Reportes() {
           </label>
         )}
         {reporte.ubicacion && (<>
-          <label>Ubicación
-            <select value={filtros.ubicacion_id} onChange={cambiar("ubicacion_id")}>
-              <option value="">Todas</option>
-              {catalogos.ubicacionesActivas.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </select>
-          </label>
+          {veTodaLaRed && (
+            <label>Ubicación
+              <select value={filtros.ubicacion_id} onChange={cambiar("ubicacion_id")}>
+                <option value="">Todas</option>
+                {catalogos.ubicacionesActivas.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </label>
+          )}
           <label className="check">
             <input type="checkbox" checked={filtros.solo_bajo_minimo} onChange={cambiar("solo_bajo_minimo")} /> Solo lo que falta reponer
           </label>

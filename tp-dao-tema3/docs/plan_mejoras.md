@@ -21,6 +21,10 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
   - Bulto: al armarlo, ofrecer solo los productos que pidió el local.
   - Proveedor: crear un producto desde "Productos que vende".
   - Títulos más grandes en todo el front.
+  - Notas de la prueba del paso 3 (23/10):
+    - **CD:** no le sirven las ventas ni los reportes de ventas (solo envía y despacha). Que vea reportes de logística, por ejemplo los locales que más devuelven o rechazan mercadería. Se junta con el paso 9 (reportes por perfil).
+    - **CD, compras:** al registrar una compra, poder adjuntar el PDF de la factura. Se junta con el paso 8 (compras a proveedores).
+    - **Local, stock:** que "Reponer" sea un botón que abra el pedido al CD ya cargado con lo que falta (hasta el mínimo). Se junta con el paso 10 (reposición sugerida).
 - [x] ~~**2. Usuarios y perfiles en el back.** Que el back separe las funciones de cada perfil y registre quién hizo cada operación.~~
   - Administrador (sin ubicación): locales, CD, productos, categorías, proveedores y usuarios; ve los reportes de toda la red. No opera.
   - Local: pedir reposición, ver sus pedidos y remitos, recibir y verificar los bultos de su local, vender, devolver, caja, ver su stock y el catálogo, reportes de su local.
@@ -33,7 +37,8 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
     - [x] c) `UsuarioService` y `AuthService` (PBKDF2 con sal, token con vencimiento, logout), dependencia `usuario_actual` y rutas `/auth` y `/usuarios`.
     - [x] d) Permisos en todas las rutas (`requiere(...)`), pertenencia (403 "Ese remito no es de tu local"), `usuario_id` grabado en cada operación y tests con un cliente de cada perfil.
     - [x] e) Seed con `admin`, `cd.central`, `centro`, `norte` y `sur` (contraseña `tpdao2026`), y `backend.datos.crear_admin` para el primer administrador de una base vacía.
-- [ ] **3. Front por perfil.** Pantalla de login, y que cada perfil (administrador, CD, local) vea solo sus pantallas, sin elegir el local a mano. Opciones: cómo es la entrada, dónde se guarda la sesión y cómo se arma el menú.
+- [x] ~~**3. Front por perfil.** Pantalla de login, y que cada perfil (administrador, CD, local) vea solo sus pantallas, sin elegir el local a mano.~~
+  - Hecho el 23/10 en la rama `feature/usuarios`: login, menú por capacidades, Vender/Envíos/Stock/Reportes según el perfil, pantalla de Usuarios. Probado de punta a punta en Chrome con los tres perfiles (sección 0 de `docs/recorrido_front.md`).
 - [ ] **4. Reglas del producto y filtros.** Restringir lo que se puede cargar como producto y buscar productos con filtros. Opciones: qué reglas (varias) y cómo filtrar.
 - [ ] **5. Comprobante descargable** de cada venta y nota de crédito de cada devolución. Un local solo descarga los suyos. Opciones: formato y librería.
 - [ ] **6. Bandeja de tareas y transporte.** Inicio muestra los pendientes de cada perfil y lleva a la pantalla donde se resuelve cada uno; el CD registra el transporte de cada remito al despacharlo. Opciones: qué tareas mostrar a cada perfil (varias) y qué datos del transporte guardar.
@@ -64,6 +69,13 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el Administrador. El CD solo opera.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
+
+### Paso 3: front por perfil (decidido el 23/10)
+- **Entrada:** pantalla de login propia; sin sesión no se ve nada más. Si el back responde 401 con una sesión abierta (venció o la cerraron), el front vuelve solo al login y dice por qué.
+- **Sesión:** el token se guarda en `sessionStorage` (sobrevive a recargar, se borra al cerrar la pestaña). Lo maneja solo `api.js`, que lo manda en `Authorization: Bearer` en cada pedido.
+- **Menú:** cada pantalla dice qué capacidad necesita (`requiere`) y se muestran las que el usuario tiene, según `capacidades` de `/auth/yo`. Ningún `if perfil ==` en el front; el back igual controla todo (403).
+- El local ya no se elige en Vender ni en el pedido: lo pone el back. Stock y Reportes muestran el selector de ubicación solo a quien ve toda la red.
+- Pantalla de **Usuarios** para el administrador: alta (perfil, dónde trabaja, contraseña), nombre, cambio de contraseña, baja y reactivar. El CD se asigna solo (hay uno).
 
 ### Paso 1b: arreglos de usabilidad (decidido el 22/10)
 - Acciones irreversibles (despachar, verificar, dar de baja): panel de confirmación dentro de la página con el resumen de lo que va a pasar (componente `Confirmacion`), no `confirm()` nativo.

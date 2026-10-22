@@ -74,10 +74,37 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.88em; bac
 .item-menu.activo .icono-menu { background: white; }
 .contenido { padding: 28px 32px 80px; max-width: 1240px; width: 100%; }
 
+/* Quién entró, arriba del menú */
+.quien-soy {
+  display: flex; align-items: center; gap: 10px; padding: 10px; margin: 0 0 6px;
+  background: var(--fondo); border-radius: 12px;
+}
+.quien-soy > div { flex: 1; min-width: 0; }
+.quien-soy { align-items: flex-start; }
+.quien-soy strong { display: block; font-size: 0.9rem; line-height: 1.25; }
+.quien-soy > div span { display: block; font-size: 0.78rem; color: var(--texto-suave); line-height: 1.3; margin-top: 2px; }
+.quien-soy button { padding: 2px 0; margin-top: 4px; font-size: 0.82rem; justify-content: flex-start; }
+.quien-soy button:hover { background: none; text-decoration: underline; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: var(--primario-suave); color: var(--primario); font-weight: 800;
+}
+
+/* Login */
+.pantalla-login { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--fondo); }
+.tarjeta-login {
+  width: 100%; max-width: 380px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 18px;
+  padding: 28px; box-shadow: var(--sombra-alta); display: flex; flex-direction: column; gap: 16px;
+}
+.tarjeta-login .marca { padding: 0; }
+.tarjeta-login h1 { font-size: 1.4rem; }
+.tarjeta-login .aviso { margin: 0; }
+
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }
   .lateral { position: static; height: auto; display: flex; gap: 4px; overflow-x: auto; padding: 10px; border-right: none; border-bottom: 1px solid var(--borde); }
-  .marca, .grupo-menu-titulo { display: none; }
+  .lateral .marca, .grupo-menu-titulo, .quien-soy strong, .quien-soy > div span, .avatar { display: none; }
+  .quien-soy { margin: 0; padding: 4px; }
   .grupo-menu { margin: 0; display: flex; gap: 4px; }
   .item-menu { white-space: nowrap; width: auto; }
   .contenido { padding: 18px 14px 80px; }
@@ -125,6 +152,9 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; accent-
 .ayuda-campo { font-weight: 400; font-size: 0.82rem; color: var(--texto-tenue); }
 .etiqueta-campo { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
 .opciones-grandes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.opciones-grandes.tres { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 560px) { .opciones-grandes.tres { grid-template-columns: 1fr; } }
+.espacio-arriba-chico { margin-top: 6px; }
 .opcion-grande {
   background: white; color: var(--texto); border: 1.5px solid var(--borde-fuerte); border-radius: 12px; padding: 12px;
   flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; font-weight: 400;
