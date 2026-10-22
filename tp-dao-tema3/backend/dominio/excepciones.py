@@ -21,3 +21,9 @@ class StockInsuficiente(ErrorDeNegocio):
 
 class PagoInsuficiente(ErrorDeNegocio):
     pass
+
+class NoAutenticado(ErrorDeNegocio):
+    """No se sabe quién es: no entró, se equivocó de contraseña o venció la sesión."""
+
+class SinPermiso(ErrorDeNegocio):
+    """Se sabe quién es, pero su perfil no puede hacer eso o no es de su local."""

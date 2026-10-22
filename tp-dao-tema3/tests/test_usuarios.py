@@ -5,11 +5,19 @@ import pytest
 
 from backend.dominio.excepciones import DatoInvalido
 from backend.dominio.maestros import CentroDistribucion, Sucursal
-from backend.dominio.usuarios import Usuario, UsuarioCD, UsuarioSucursal, crear_usuario
+from backend.dominio.usuarios import (
+    Usuario, UsuarioAdministrador, UsuarioCD, UsuarioSucursal, crear_usuario, validar_contrasena,
+)
 
 CD = CentroDistribucion("CD Central", "Ruta 9", id=1)
 LOCAL = Sucursal("Local Centro", "Calle 1", id=2)
 OTRO_LOCAL = Sucursal("Local Norte", "Calle 2", id=3)
+
+
+def un_admin(**cambios):
+    datos = dict(nombre_usuario="admin", nombre_completo="Dora Admin")
+    datos.update(cambios)
+    return UsuarioAdministrador(**datos)
 
 
 def un_cd(**cambios):
@@ -36,7 +44,8 @@ CAPACIDADES = ["puede_gestionar_maestros", "puede_comprar", "puede_preparar_envi
 
 
 @pytest.mark.parametrize("usuario, permitidas", [
-    (un_cd(), {"puede_gestionar_maestros", "puede_comprar", "puede_preparar_envios", "ve_toda_la_red"}),
+    (un_admin(), {"puede_gestionar_maestros", "ve_toda_la_red"}),
+    (un_cd(), {"puede_comprar", "puede_preparar_envios", "ve_toda_la_red"}),
     (una_sucursal(), {"puede_pedir_reposicion", "puede_recibir", "puede_vender"}),
 ])
 def test_cada_perfil_tiene_sus_funciones_y_ninguna_mas(usuario, permitidas):
@@ -45,15 +54,23 @@ def test_cada_perfil_tiene_sus_funciones_y_ninguna_mas(usuario, permitidas):
 
 
 def test_ningun_perfil_hace_lo_del_otro():
-    # El reparto es excluyente: lo que hace el CD no lo hace la sucursal y viceversa
-    for capacidad in CAPACIDADES:
-        assert not (getattr(un_cd(), capacidad)() and getattr(una_sucursal(), capacidad)()), capacidad
+    # Lo que se HACE está repartido sin repetir: administrar, abastecer y vender.
+    # Ver toda la red no es una tarea: la comparten el administrador y el CD.
+    tareas = [c for c in CAPACIDADES if c != "ve_toda_la_red"]
+    perfiles = [un_admin(), un_cd(), una_sucursal()]
+    for capacidad in tareas:
+        assert sum(getattr(p, capacidad)() for p in perfiles) == 1, capacidad
+
+
+@pytest.mark.parametrize("usuario, puede", [(un_admin(), True), (un_cd(), True), (una_sucursal(), False)])
+def test_proveedores_los_ve_quien_los_administra_o_les_compra(usuario, puede):
+    assert usuario.puede_consultar_proveedores() is puede
 
 
 # ------------------------------------------------------------- Pertenencia
 
-def test_el_cd_ve_toda_la_red():
-    usuario = un_cd()
+@pytest.mark.parametrize("usuario", [un_admin(), un_cd()])
+def test_el_administrador_y_el_cd_ven_toda_la_red(usuario):
     assert all(usuario.puede_ver_ubicacion(u.id) for u in (CD, LOCAL, OTRO_LOCAL))
 
 
@@ -78,6 +95,19 @@ def test_cada_perfil_pertenece_al_tipo_de_ubicacion_que_corresponde():
 def test_perfil_y_ubicacion_incompatibles(usuario, ubicacion):
     with pytest.raises(DatoInvalido, match="no puede pertenecer"):
         usuario.validar_ubicacion(ubicacion)
+
+
+def test_el_administrador_no_pertenece_a_ninguna_ubicacion():
+    admin = un_admin()
+    assert admin.ubicacion_id is None
+    assert not admin.trabaja_en_una_ubicacion()
+    with pytest.raises(DatoInvalido):
+        admin.validar_ubicacion(CD)
+
+
+def test_al_administrador_no_se_le_puede_asignar_ubicacion():
+    with pytest.raises(DatoInvalido, match="ninguna ubicación"):
+        un_admin(ubicacion_id=CD.id)
 
 
 def test_ubicacion_dada_de_baja():
@@ -135,10 +165,31 @@ def test_la_fabrica_arma_la_clase_segun_el_perfil(perfil, clase):
     assert usuario.perfil == perfil.strip().upper()
 
 
-@pytest.mark.parametrize("perfil", ["ADMIN", "", None])
+def test_la_fabrica_arma_un_administrador_sin_ubicacion():
+    usuario = crear_usuario("admin", "dora", "Dora Admin")
+    assert type(usuario) is UsuarioAdministrador
+    assert usuario.ubicacion_id is None
+
+
+@pytest.mark.parametrize("perfil", ["GERENTE", "", None])
 def test_la_fabrica_rechaza_perfiles_invalidos(perfil):
     with pytest.raises(DatoInvalido, match="Perfil"):
         crear_usuario(perfil, "ana.cd", "Ana López", 1)
+
+
+# -------------------------------------------------------------- Contraseña
+
+def test_contrasena_valida():
+    assert validar_contrasena("secreta123") == "secreta123"
+
+
+@pytest.mark.parametrize("contrasena, mensaje", [
+    ("", "al menos 8"), (None, "al menos 8"), ("corta", "al menos 8"),
+    ("x" * 101, "más de 100"), (" secreta123", "espacios"), ("secreta123 ", "espacios"),
+])
+def test_contrasenas_invalidas(contrasena, mensaje):
+    with pytest.raises(DatoInvalido, match=mensaje):
+        validar_contrasena(contrasena)
 
 
 # ------------------------------------------------------------- Baja lógica

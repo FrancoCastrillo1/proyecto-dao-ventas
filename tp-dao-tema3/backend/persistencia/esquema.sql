@@ -67,34 +67,51 @@ CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo
 ON ubicaciones (tipo) WHERE tipo = 'CD' AND activo = 1;
 
 -- ================================================================= Usuarios
--- Cada usuario pertenece a una ubicación y su perfil define qué puede hacer
--- (UsuarioCD o UsuarioSucursal en el dominio; "perfil" decide la clase al leer).
--- El nombre de usuario es único sin distinguir mayúsculas. Baja lógica.
+-- El perfil define qué puede hacer cada usuario (UsuarioAdministrador,
+-- UsuarioCD o UsuarioSucursal en el dominio; "perfil" decide la clase al leer).
+-- El CD y las sucursales pertenecen a una ubicación; el administrador, a
+-- ninguna. El nombre de usuario es único sin distinguir mayúsculas. Baja lógica.
+-- La contraseña se guarda como hash PBKDF2 con su sal, nunca en texto. Puede
+-- faltar en usuarios creados antes del login: no entran hasta que se les ponga.
 CREATE TABLE IF NOT EXISTS usuarios (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
-perfil TEXT NOT NULL CHECK (perfil IN ('CD', 'SUCURSAL')),
+perfil TEXT NOT NULL CHECK (perfil IN ('ADMIN', 'CD', 'SUCURSAL')),
 nombre_usuario TEXT NOT NULL UNIQUE COLLATE NOCASE,
 nombre_completo TEXT NOT NULL,
-ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id),
-activo INTEGER NOT NULL DEFAULT 1
+ubicacion_id INTEGER REFERENCES ubicaciones(id),
+hash_contrasena TEXT,
+sal TEXT,
+activo INTEGER NOT NULL DEFAULT 1,
+CHECK ((perfil = 'ADMIN') = (ubicacion_id IS NULL))
 );
 
 -- Red de seguridad: el perfil tiene que coincidir con el tipo de la ubicación
 -- (un usuario CD en el CD, uno de sucursal en una sucursal). Los nombres son
--- los mismos a propósito, así la regla es una simple comparación.
+-- los mismos a propósito, así la regla es una simple comparación. El
+-- administrador no tiene ubicación (lo controla el CHECK de la tabla).
 CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_alta
 BEFORE INSERT ON usuarios
-WHEN (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
 BEGIN
     SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
 END;
 
 CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_cambio
 BEFORE UPDATE OF perfil, ubicacion_id ON usuarios
-WHEN (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
 BEGIN
     SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
 END;
+
+-- Sesiones abiertas con el login. Se guarda el hash del token (no el token):
+-- si alguien lee la base, no puede usarlo para entrar. Vencen solas.
+CREATE TABLE IF NOT EXISTS sesiones (
+token_hash TEXT PRIMARY KEY,
+usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+vence TEXT NOT NULL
+);
 
 
 -- Cantidad de cada producto en cada ubicación (CD o sucursal): una fila por

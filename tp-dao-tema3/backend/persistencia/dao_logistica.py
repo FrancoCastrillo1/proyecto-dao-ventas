@@ -47,10 +47,10 @@ class PedidoDAO(DAOBase):
         pedido.items = [DetallePedido(d["producto_id"], d["cantidad"]) for d in detalles]
         return pedido
 
-    def crear(self, cx, pedido):
+    def crear(self, cx, pedido, usuario_id=None):
         cur = cx.execute(
-            "INSERT INTO pedidos_reposicion (sucursal_id, fecha, estado, orden_id) VALUES (?, ?, ?, ?)",
-            (pedido.local, a_texto(pedido.fecha), pedido.estado, pedido.orden_id),
+            "INSERT INTO pedidos_reposicion (sucursal_id, fecha, estado, orden_id, usuario_id) VALUES (?, ?, ?, ?, ?)",
+            (pedido.local, a_texto(pedido.fecha), pedido.estado, pedido.orden_id, usuario_id),
         )
         pedido.id_pedido = cur.lastrowid
         cx.executemany(
@@ -98,10 +98,10 @@ class OrdenDAO(DAOBase):
         orden.pedidos = self.pedido_dao.listar(orden_id=fila["id"], cx=cx)
         return orden
 
-    def crear(self, cx, orden):
+    def crear(self, cx, orden, usuario_id=None):
         cur = cx.execute(
-            "INSERT INTO ordenes_reposicion (origen_id, fecha, estado) VALUES (?, ?, ?)",
-            (orden.origen, a_texto(orden.fecha), orden.estado),
+            "INSERT INTO ordenes_reposicion (origen_id, fecha, estado, usuario_id) VALUES (?, ?, ?, ?)",
+            (orden.origen, a_texto(orden.fecha), orden.estado, usuario_id),
         )
         orden.id_orden = cur.lastrowid
         return orden
@@ -143,10 +143,12 @@ class BultoDAO(DAOBase):
         ]
         return bulto
 
-    def guardar(self, cx, bulto):
+    def guardar(self, cx, bulto, usuario_id=None):
         """Inserta o actualiza el bulto. Los detalles se reemplazan (solo
         cambian mientras está Preparado). Del historial se insertan solo los
-        registros nuevos: los que ya estaban no se tocan (la base lo prohíbe)."""
+        registros nuevos: los que ya estaban no se tocan (la base lo prohíbe).
+        usuario_id es quién hizo el cambio de estado: lo graba el DAO y no el
+        patrón State, que no sabe de usuarios."""
         if bulto.id_bulto is None:
             cur = cx.execute(
                 "INSERT INTO bultos (remito_id, nro_precinto, estado) VALUES (?, ?, ?)",
@@ -167,9 +169,9 @@ class BultoDAO(DAOBase):
             "SELECT COUNT(*) FROM historial_bultos WHERE bulto_id = ?", (bulto.id_bulto,)
         ).fetchone()[0]
         cx.executemany(
-            "INSERT INTO historial_bultos (bulto_id, fecha_hora, estado_anterior, estado_nuevo, observacion) "
-            "VALUES (?, ?, ?, ?, ?)",
-            [(bulto.id_bulto, a_texto(r.fecha_hora), r.estado_anterior, r.estado_nuevo, r.observacion)
+            "INSERT INTO historial_bultos (bulto_id, fecha_hora, estado_anterior, estado_nuevo, observacion, usuario_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [(bulto.id_bulto, a_texto(r.fecha_hora), r.estado_anterior, r.estado_nuevo, r.observacion, usuario_id)
              for r in bulto.historial[guardados:]],
         )
         return bulto
@@ -204,20 +206,20 @@ class RemitoDAO(DAOBase):
         remito.bultos = self.bulto_dao.listar_por_remito(fila["id"], cx)
         return remito
 
-    def crear(self, cx, remito):
+    def crear(self, cx, remito, usuario_id=None):
         cur = cx.execute(
-            "INSERT INTO remitos (orden_id, origen_id, destino_id, fecha, estado) VALUES (?, ?, ?, ?, ?)",
-            (remito.orden_id, remito.origen, remito.destino, a_texto(remito.fecha), remito.estado),
+            "INSERT INTO remitos (orden_id, origen_id, destino_id, fecha, estado, usuario_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (remito.orden_id, remito.origen, remito.destino, a_texto(remito.fecha), remito.estado, usuario_id),
         )
         remito.id_remito = cur.lastrowid
         return remito
 
     # Guarda el estado del remito y el de todos sus bultos
-    def guardar(self, cx, remito):
+    def guardar(self, cx, remito, usuario_id=None):
         cx.execute("UPDATE remitos SET estado = ? WHERE id = ?", (remito.estado, remito.id_remito))
         for bulto in remito.bultos:
             bulto.remito_id = remito.id_remito
-            self.bulto_dao.guardar(cx, bulto)
+            self.bulto_dao.guardar(cx, bulto, usuario_id)
         return remito
 
     def obtener(self, id, cx=None):

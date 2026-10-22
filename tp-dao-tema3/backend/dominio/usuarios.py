@@ -1,9 +1,10 @@
-# Usuarios del sistema y sus perfiles: UsuarioCD y UsuarioSucursal (herencia,
-# igual que Ubicacion). Cada perfil responde QUÉ PUEDE HACER: las rutas y los
-# services preguntan por la capacidad (usuario.puede_vender()), nunca comparan
-# el perfil con un if.
-# Acá NO va nada de base de datos ni de cómo se identifica al usuario (login,
-# sesiones): eso es de los services y de la api.
+# Usuarios del sistema y sus perfiles: UsuarioAdministrador, UsuarioCD y
+# UsuarioSucursal (herencia, igual que Ubicacion). Cada perfil responde QUÉ
+# PUEDE HACER: las rutas y los services preguntan por la capacidad
+# (usuario.puede_vender()), nunca comparan el perfil con un if.
+# También va acá el formato de una contraseña válida.
+# Acá NO va nada de base de datos ni de cómo se identifica al usuario (hash de
+# la contraseña, login, sesiones): eso es de los services y de la api.
 import re
 from abc import ABC, abstractmethod
 
@@ -13,13 +14,29 @@ from backend.dominio.maestros import convertir_a_entero
 # Nombre de usuario: minúsculas, números, punto, guion y guion bajo (ej: "ana.lopez")
 FORMATO_NOMBRE_USUARIO = re.compile(r"^[a-z0-9._-]{3,30}$")
 
+LARGO_MINIMO_CONTRASENA = 8
+
+
+def validar_contrasena(contrasena):
+    """Solo el formato: que sea lo bastante larga. Guardarla (con hash) y
+    compararla en el login es del service."""
+    contrasena = contrasena or ""
+    if len(contrasena) < LARGO_MINIMO_CONTRASENA:
+        raise DatoInvalido(f"La contraseña tiene que tener al menos {LARGO_MINIMO_CONTRASENA} caracteres")
+    if len(contrasena) > 100:
+        raise DatoInvalido("La contraseña no puede tener más de 100 caracteres")
+    if contrasena != contrasena.strip():
+        raise DatoInvalido("La contraseña no puede empezar ni terminar con espacios")
+    return contrasena
+
 
 class Usuario(ABC):
-    """Una persona que usa el sistema. Pertenece a UNA ubicación (el CD o una
-    sucursal) y su perfil define qué funciones tiene. Por defecto no puede
-    nada: cada perfil redefine solo sus capacidades."""
+    """Una persona que usa el sistema. Los perfiles que operan pertenecen a UNA
+    ubicación (el CD o una sucursal); el administrador, a ninguna. El perfil
+    define qué funciones tiene: por defecto no puede nada y cada perfil
+    redefine solo sus capacidades."""
 
-    def __init__(self, nombre_usuario, nombre_completo, ubicacion_id, id=None, activo=True):
+    def __init__(self, nombre_usuario, nombre_completo, ubicacion_id=None, id=None, activo=True):
         self.id = id
         self.nombre_usuario = nombre_usuario
         self.nombre_completo = nombre_completo
@@ -67,12 +84,22 @@ class Usuario(ABC):
 
     @ubicacion_id.setter
     def ubicacion_id(self, valor):
+        if not self.trabaja_en_una_ubicacion():
+            if valor not in (None, ""):
+                raise DatoInvalido("El administrador no pertenece a ninguna ubicación")
+            self._ubicacion_id = None
+            return
         valor = convertir_a_entero(valor, "id de ubicación")
         if valor <= 0:
             raise DatoInvalido("El usuario tiene que pertenecer a una ubicación")
         self._ubicacion_id = valor
 
     # ---------------------------------------------- A qué ubicación pertenece
+
+    def trabaja_en_una_ubicacion(self):
+        """Los perfiles que operan (CD y sucursal) pertenecen a una ubicación;
+        el administrador no: maneja los datos de toda la red."""
+        return True
 
     def validar_ubicacion(self, ubicacion):
         """Que la ubicación exista y esté activa lo controla el service (necesita
@@ -98,6 +125,10 @@ class Usuario(ABC):
     def puede_gestionar_maestros(self):
         """Productos, categorías, proveedores, ubicaciones y usuarios."""
         return False
+
+    def puede_consultar_proveedores(self):
+        """Ver los proveedores y qué productos vende cada uno."""
+        return self.puede_gestionar_maestros() or self.puede_comprar()
 
     def puede_comprar(self):
         """Registrar compras a proveedores (ingreso de stock al CD)."""
@@ -134,17 +165,34 @@ class Usuario(ABC):
         return f"{self.perfil}: ({self.id}, {self.nombre_usuario})"
 
 
+class UsuarioAdministrador(Usuario):
+    # Maneja los datos de la red (locales, CD, productos, proveedores, usuarios)
+    # y ve sus reportes, pero no opera: no compra, no despacha, no vende
+    @property
+    def perfil(self):
+        return "ADMIN"
+
+    def trabaja_en_una_ubicacion(self):
+        return False
+
+    def puede_pertenecer_a(self, ubicacion):
+        return False
+
+    def puede_gestionar_maestros(self):
+        return True
+
+    def ve_toda_la_red(self):
+        return True
+
+
 class UsuarioCD(Usuario):
-    # Trabaja en el Centro de Distribución: administra todo y abastece a la red
+    # Trabaja en el Centro de Distribución: compra y abastece a la red
     @property
     def perfil(self):
         return "CD"
 
     def puede_pertenecer_a(self, ubicacion):
         return ubicacion.puede_despachar()
-
-    def puede_gestionar_maestros(self):
-        return True
 
     def puede_comprar(self):
         return True
@@ -177,10 +225,10 @@ class UsuarioSucursal(Usuario):
 
 # Fábrica simple, igual que TIPOS_UBICACION: el único lugar que sabe qué clase
 # corresponde a cada perfil. La usan el DAO (al leer) y el service (al crear).
-PERFILES = {"CD": UsuarioCD, "SUCURSAL": UsuarioSucursal}
+PERFILES = {"ADMIN": UsuarioAdministrador, "CD": UsuarioCD, "SUCURSAL": UsuarioSucursal}
 
 
-def crear_usuario(perfil, nombre_usuario, nombre_completo, ubicacion_id, id=None, activo=True):
+def crear_usuario(perfil, nombre_usuario, nombre_completo, ubicacion_id=None, id=None, activo=True):
     clase = PERFILES.get((perfil or "").strip().upper())
     if clase is None:
         raise DatoInvalido(f"Perfil '{perfil}' inválido. Opciones: {', '.join(PERFILES)}")

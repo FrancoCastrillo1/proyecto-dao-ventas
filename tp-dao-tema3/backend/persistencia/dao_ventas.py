@@ -50,13 +50,14 @@ class VentaDAO:
         ).fetchone()
         return fila[0]
 
-    def crear(self, cx, venta):
+    def crear(self, cx, venta, usuario_id=None):
         pago = venta.pago
         cur = cx.execute(
             "INSERT INTO ventas (sucursal_id, fecha, medio_pago, porcentaje_ajuste, subtotal, total, vuelto, "
-            "nro_comprobante) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "nro_comprobante, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (venta.sucursal_id, a_texto(venta.fecha), pago.medio.nombre, str(pago.porcentaje_ajuste),
-             a_centavos(venta.subtotal), a_centavos(pago.monto), a_centavos(pago.vuelto), venta.comprobante.numero),
+             a_centavos(venta.subtotal), a_centavos(pago.monto), a_centavos(pago.vuelto), venta.comprobante.numero,
+             usuario_id),
         )
         venta.id = cur.lastrowid
         cx.executemany(
@@ -67,10 +68,11 @@ class VentaDAO:
         )
         return venta
 
-    def crear_devolucion(self, cx, devolucion):
+    def crear_devolucion(self, cx, devolucion, usuario_id=None):
         cur = cx.execute(
-            "INSERT INTO devoluciones (venta_id, fecha, motivo, importe) VALUES (?, ?, ?, ?)",
-            (devolucion.venta_id, a_texto(devolucion.fecha), devolucion.motivo, a_centavos(devolucion.importe)),
+            "INSERT INTO devoluciones (venta_id, fecha, motivo, importe, usuario_id) VALUES (?, ?, ?, ?, ?)",
+            (devolucion.venta_id, a_texto(devolucion.fecha), devolucion.motivo, a_centavos(devolucion.importe),
+             usuario_id),
         )
         devolucion.id = cur.lastrowid
         cx.executemany(

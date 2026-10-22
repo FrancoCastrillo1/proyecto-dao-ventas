@@ -2,6 +2,8 @@
 # los pedidos en una orden, arma un remito por destino con sus bultos, los
 # precinta y los despacha (ahí se descuenta el stock del CD).
 # La recepción en el local NO va acá, va en recepcion_service.py.
+# Cada operación recibe usuario_id (quién la hizo) y lo pasa al DAO; qué
+# usuario puede hacer qué lo controla la api.
 # Acá NO va SQL (usa dao_logistica) ni nada de endpoints.
 from backend.dominio.excepciones import DatoInvalido, EntidadDuplicada, NoEncontrado, StockInsuficiente
 from backend.dominio.logistica import Bulto, OrdenReposicion, PedidoReposicion, Remito
@@ -56,14 +58,14 @@ class ReposicionService:
 
     # ---------------------------------------------------------------- Pedidos
 
-    def crear_pedido(self, sucursal_id, items):
+    def crear_pedido(self, sucursal_id, items, usuario_id=None):
         self.validar_sucursal(sucursal_id)
         self.validar_items(items)
         pedido = PedidoReposicion(None, sucursal_id)
         for producto_id, cantidad in items:
             pedido.agregar_item(producto_id, cantidad)
         with self.pedido_dao.transaccion() as cx:
-            return self.pedido_dao.crear(cx, pedido)
+            return self.pedido_dao.crear(cx, pedido, usuario_id)
 
     def obtener_pedido(self, id):
         pedido = self.pedido_dao.obtener(id)
@@ -76,7 +78,7 @@ class ReposicionService:
 
     # ---------------------------------------------------------------- Órdenes
 
-    def crear_orden(self, pedido_ids):
+    def crear_orden(self, pedido_ids, usuario_id=None):
         """Consolida pedidos PENDIENTES en una orden del CD activo. La orden
         queda CERRADA: fija lo que el CD tiene que preparar."""
         if not pedido_ids:
@@ -97,7 +99,7 @@ class ReposicionService:
         orden.cerrar()
 
         with self.orden_dao.transaccion() as cx:
-            self.orden_dao.crear(cx, orden)
+            self.orden_dao.crear(cx, orden, usuario_id)
             for pedido in orden.pedidos:
                 pedido.orden_id = orden.id_orden
                 self.pedido_dao.actualizar(cx, pedido)
@@ -114,7 +116,7 @@ class ReposicionService:
 
     # ---------------------------------------------------------------- Remitos
 
-    def crear_remito(self, orden_id, destino_id):
+    def crear_remito(self, orden_id, destino_id, usuario_id=None):
         """Un remito por cada sucursal de la orden. Va del CD de la orden a una
         sucursal que haya pedido algo en esa orden."""
         orden = self.obtener_orden(orden_id)
@@ -129,7 +131,7 @@ class ReposicionService:
 
         remito = Remito(None, orden.origen, destino_id, orden_id)
         with self.remito_dao.transaccion() as cx:
-            return self.remito_dao.crear(cx, remito)
+            return self.remito_dao.crear(cx, remito, usuario_id)
 
     def obtener_remito(self, id, cx=None):
         remito = self.remito_dao.obtener(id, cx)
@@ -152,7 +154,7 @@ class ReposicionService:
 
     # ----------------------------------------------------------------- Bultos
 
-    def agregar_bulto(self, remito_id, items):
+    def agregar_bulto(self, remito_id, items, usuario_id=None):
         """Arma un bulto nuevo (Preparado) dentro del remito. No se puede
         mandar algo que la sucursal no pidió ni más de lo que pidió."""
         productos = self.validar_items(items)
@@ -178,7 +180,7 @@ class ReposicionService:
         remito.agregar_bulto(bulto)  # el dominio valida que el remito siga abierto
         bulto.remito_id = remito.id_remito
         with self.bulto_dao.transaccion() as cx:
-            return self.bulto_dao.guardar(cx, bulto)
+            return self.bulto_dao.guardar(cx, bulto, usuario_id)
 
     def obtener_bulto(self, id):
         bulto = self.bulto_dao.obtener(id)
@@ -186,18 +188,18 @@ class ReposicionService:
             raise NoEncontrado(f"No se encontro el bulto {id}")
         return bulto
 
-    def precintar(self, bulto_id, nro_precinto):
+    def precintar(self, bulto_id, nro_precinto, usuario_id=None):
         bulto = self.obtener_bulto(bulto_id)
         otro = self.bulto_dao.obtener_por_precinto((nro_precinto or "").strip())
         if otro and otro.id_bulto != bulto_id:
             raise EntidadDuplicada(f"El precinto '{nro_precinto.strip()}' ya está usado en el bulto {otro.id_bulto}")
         bulto.precintar(nro_precinto)  # el State valida el estado y que no esté vacío
         with self.bulto_dao.transaccion() as cx:
-            return self.bulto_dao.guardar(cx, bulto)
+            return self.bulto_dao.guardar(cx, bulto, usuario_id)
 
     # --------------------------------------------------------------- Despacho
 
-    def despachar(self, remito_id):
+    def despachar(self, remito_id, usuario_id=None):
         """Sale el remito del CD: todos los bultos pasan a EN_TRANSITO y se
         descuenta del CD lo que llevan (decisión del grupo: al despachar, no al
         preparar). Si un producto no alcanza no se despacha nada."""
@@ -209,9 +211,9 @@ class ReposicionService:
                     try:
                         self.stock_service.egresar(
                             remito.origen, detalle.producto, detalle.cantidad, TipoMovimiento.DESPACHO,
-                            f"Remito {remito.id_remito} · Bulto {bulto.id_bulto}", cx=cx,
+                            f"Remito {remito.id_remito} · Bulto {bulto.id_bulto}", cx=cx, usuario_id=usuario_id,
                         )
                     except StockInsuficiente as error:
                         nombre = self.producto_dao.obtener_por_id(detalle.producto).nombre
                         raise StockInsuficiente(f"{nombre} (bulto {bulto.id_bulto}): {error}") from error
-            return self.remito_dao.guardar(cx, remito)
+            return self.remito_dao.guardar(cx, remito, usuario_id)

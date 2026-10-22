@@ -21,18 +21,19 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
   - Bulto: al armarlo, ofrecer solo los productos que pidió el local.
   - Proveedor: crear un producto desde "Productos que vende".
   - Títulos más grandes en todo el front.
-- [ ] **2. Usuarios y perfiles en el back.** Que el back separe las funciones de cada perfil y registre quién hizo cada operación.
+- [x] ~~**2. Usuarios y perfiles en el back.** Que el back separe las funciones de cada perfil y registre quién hizo cada operación.~~
   - Administrador (sin ubicación): locales, CD, productos, categorías, proveedores y usuarios; ve los reportes de toda la red. No opera.
   - Local: pedir reposición, ver sus pedidos y remitos, recibir y verificar los bultos de su local, vender, devolver, caja, ver su stock y el catálogo, reportes de su local.
   - CD: compras, consolidar pedidos, armar y precintar bultos, remitos, despachar, stock del CD, reportes de toda la red.
   - Opciones a dar: cómo modelar el perfil, cómo autenticar y guardar la sesión, y dónde controlar los permisos.
-  - **Estado (22/10): empezado en la rama `feature/usuarios`.**
+  - **Hecho el 23/10 en la rama `feature/usuarios` (681 tests).** Ojo: desde acá todas las rutas piden token, así que el front no anda hasta el paso 3.
     - [x] a) Dominio: `Usuario` abstracto con `UsuarioCD` y `UsuarioSucursal`, capacidades, `validar_ubicacion`, `puede_ver_ubicacion`, fábrica `crear_usuario`, baja y reactivación (commit `98be82d`).
     - [x] b) Tabla `usuarios`, triggers de perfil, `usuario_id` en las 7 tablas de operaciones, migración y `UsuarioDAO` (commit `a27e1c1`). Probado con la base real.
-    - [ ] c) Service de usuarios, dependencia `usuario_actual` y rutas `/usuarios` y `/auth/yo`.
-    - [ ] d) Permisos en las rutas, pertenencia en los services, `usuario_id` grabado en cada operación y tests con un cliente de cada perfil.
-    - [ ] e) Seed: un usuario CD y uno por local.
-- [ ] **3. Front por perfil.** Una pantalla de entrada con los dos perfiles, y que cada perfil vea solo sus pantallas, sin elegir el local a mano. Opciones: cómo es la entrada, dónde se guarda la sesión y cómo se arma el menú.
+    - [x] a') Tercer perfil: `UsuarioAdministrador` sin ubicación; los maestros pasan del CD al administrador. La tabla `usuarios` se reconstruye (migración) para admitirlo y guardar la contraseña.
+    - [x] c) `UsuarioService` y `AuthService` (PBKDF2 con sal, token con vencimiento, logout), dependencia `usuario_actual` y rutas `/auth` y `/usuarios`.
+    - [x] d) Permisos en todas las rutas (`requiere(...)`), pertenencia (403 "Ese remito no es de tu local"), `usuario_id` grabado en cada operación y tests con un cliente de cada perfil.
+    - [x] e) Seed con `admin`, `cd.central`, `centro`, `norte` y `sur` (contraseña `tpdao2026`), y `backend.datos.crear_admin` para el primer administrador de una base vacía.
+- [ ] **3. Front por perfil.** Pantalla de login, y que cada perfil (administrador, CD, local) vea solo sus pantallas, sin elegir el local a mano. Opciones: cómo es la entrada, dónde se guarda la sesión y cómo se arma el menú.
 - [ ] **4. Reglas del producto y filtros.** Restringir lo que se puede cargar como producto y buscar productos con filtros. Opciones: qué reglas (varias) y cómo filtrar.
 - [ ] **5. Comprobante descargable** de cada venta y nota de crédito de cada devolución. Un local solo descarga los suyos. Opciones: formato y librería.
 - [ ] **6. Bandeja de tareas y transporte.** Inicio muestra los pendientes de cada perfil y lleva a la pantalla donde se resuelve cada uno; el CD registra el transporte de cada remito al despacharlo. Opciones: qué tareas mostrar a cada perfil (varias) y qué datos del transporte guardar.
@@ -79,15 +80,16 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - Filtros y búsqueda en el navegador sobre la lista completa (son pocos datos); los reportes se vuelven a consultar solos al cambiar un filtro.
 - Avisos arriba al centro (abajo a la derecha tapaban el panel lateral). Recargar la lista después de una acción ya no borra el "✓ Listo".
 
-### Paso 2: usuarios y perfiles (decidido el 20/10, letras a y b ya hechas)
-- **Modelo del perfil:** `Usuario` abstracto con `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
+### Paso 2: usuarios y perfiles (decidido el 20/10; administrador y login, el 23/10)
+- **Modelo del perfil:** `Usuario` abstracto con `UsuarioAdministrador`, `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
 - El perfil se llama `SUCURSAL` en el código (igual que el tipo de ubicación; en pantalla dice "Local"). El perfil tiene que coincidir con el tipo de la ubicación: validado en el dominio (`validar_ubicacion`), el service y un trigger.
 - El perfil y la ubicación de un usuario no se modifican. Baja lógica de usuarios con reactivar.
-- **Pertenencia:** el CD ve toda la red (stock y reportes de cualquier ubicación); el local, solo lo suyo. Productos, categorías y ubicaciones los consultan los dos; proveedores, solo el CD.
+- **Administrador:** no pertenece a ninguna ubicación (`trabaja_en_una_ubicacion()` da False; CHECK en la base). Maneja maestros y usuarios y ve toda la red, pero no opera. No se puede dar de baja al último administrador activo.
+- **Pertenencia:** el administrador y el CD ven toda la red (stock y reportes de cualquier ubicación); el local, solo lo suyo. Productos, categorías y ubicaciones los consultan todos; proveedores, el administrador y el CD (`puede_consultar_proveedores`).
 - **Quién hizo cada operación:** `usuario_id` en pedidos (quién pidió), órdenes (quién consolidó), remitos (quién lo armó), historial del bulto, movimientos de stock, ventas y devoluciones. En el historial lo graba el DAO con el usuario que le pasa el service (el patrón State no se toca).
-- **Dónde se controlan los permisos:** una dependencia de FastAPI por ruta que exige la capacidad (ej. `Depends(requiere("puede_vender"))`); la pertenencia la controla el service. Algo de otro local responde 403 con mensaje claro.
-- **Identificación:** primero los perfiles y después la autenticación. Mientras tanto, el usuario se identifica con el encabezado `X-Usuario` (provisorio). Todas las rutas obtienen el usuario por una sola dependencia, `usuario_actual`; cambiar cómo se identifica toca solo esa función.
+- **Dónde se controlan los permisos:** una dependencia de FastAPI por ruta que exige la capacidad (ej. `Depends(requiere("puede_vender"))`), en `api/dependencias.py`. La pertenencia también se controla en la api (`exigir_que_sea_suyo`), preguntándole al usuario `puede_ver_ubicacion()`: los services reciben solo el `usuario_id` para grabarlo. Algo de otro local responde 403 con mensaje claro.
+- **Identificación:** login con usuario y contraseña (`POST /auth/login`), que devuelve un token; las rutas lo reciben en `Authorization: Bearer <token>`. Todas obtienen el usuario por una sola dependencia, `usuario_actual`. (El encabezado provisorio `X-Usuario` no se llegó a usar.)
 - Tests de rutas con `TestClient`, agregando `httpx` como dependencia de desarrollo.
-- Previsto para la autenticación (a revisar, ver nota): contraseña con `hashlib.pbkdf2_hmac` y sal; token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON; script para crear el primer usuario CD.
-
-> **A revisar en el paso 2:** la decisión general "al entrar se elige el perfil y, si es Local, cuál de los locales" sugiere una entrada **sin usuario ni contraseña**, que se parece más a la identificación provisoria que al login con PBKDF2 que estaba previsto. Hay que confirmar cuál de las dos queda antes de la letra c).
+- **Autenticación:** contraseña con `hashlib.pbkdf2_hmac` (SHA-256) y sal al azar, guardada como `iteraciones$hash` (300.000 iteraciones en `config.py`, 1.000 en los tests); token opaco con `secrets.token_urlsafe` del que se guarda solo el hash, con vencimiento de 10 horas; login con JSON; un único mensaje "Usuario o contraseña incorrectos" para no revelar qué usuarios existen. Dar de baja o cambiar la contraseña cierra las sesiones del usuario.
+- El local del pedido, la venta y la compra sale del usuario: si el formulario manda otro, se ignora. En listados y reportes, un local que pide otro local recibe 403.
+- Usuarios de una base de antes del login quedan sin contraseña y no entran hasta que el administrador les ponga una.
