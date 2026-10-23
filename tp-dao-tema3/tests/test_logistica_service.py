@@ -164,9 +164,11 @@ def test_pedido_vacio(e):
 
 
 def test_pedido_de_un_producto_dado_de_baja(e):
-    e.productos.dar_de_baja(e.agua.id)
+    # Uno sin stock: con stock no se puede dar de baja
+    jugo = e.productos.crear("BEB-3", "Jugo", e.coca.categoria_id, 800, 400)
+    e.productos.dar_de_baja(jugo.id)
     with pytest.raises(DatoInvalido, match="dado de baja"):
-        e.repo.crear_pedido(e.centro.id, [(e.agua.id, 1)])
+        e.repo.crear_pedido(e.centro.id, [(jugo.id, 1)])
 
 
 def test_pedido_de_una_sucursal_dada_de_baja(e):

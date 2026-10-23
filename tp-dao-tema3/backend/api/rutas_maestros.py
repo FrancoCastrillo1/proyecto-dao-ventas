@@ -7,7 +7,9 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from backend.api.dependencias import ADMINISTRADOR, LOGUEADO, requiere
+from backend.api.dependencias import ADMINISTRADOR, LOGUEADO, MENSAJES_SIN_PERMISO, requiere, usuario_actual
+from backend.dominio.excepciones import SinPermiso
+from backend.dominio.maestros import FiltroProductos
 from backend.servicios.maestros_service import CategoriaService, ProductoService, ProveedorService, UbicacionService
 
 PROVEEDORES = Depends(requiere("puede_consultar_proveedores"))
@@ -120,9 +122,18 @@ def producto_a_salida(producto):
     )
 
 
-@router_productos.get("", response_model=list[ProductoSalida], dependencies=[LOGUEADO])
-def listar_productos(categoria_id: int | None = None, incluir_bajas: bool = False):
-    return [producto_a_salida(p) for p in producto_service.listar(categoria_id, incluir_bajas)]
+# Búsqueda con filtros (todos opcionales): el dominio valida los valores
+# (FiltroProductos), el service que la categoría y el proveedor existan, y el
+# DAO arma el SQL. Filtrar por proveedor revela quién vende qué: solo para
+# quien puede ver los proveedores.
+@router_productos.get("", response_model=list[ProductoSalida])
+def listar_productos(texto: str | None = None, categoria_id: int | None = None, proveedor_id: int | None = None,
+                     precio_desde: float | None = None, precio_hasta: float | None = None,
+                     incluir_bajas: bool = False, usuario=Depends(usuario_actual)):
+    if proveedor_id is not None and not usuario.puede_consultar_proveedores():
+        raise SinPermiso(MENSAJES_SIN_PERMISO["puede_consultar_proveedores"])
+    filtro = FiltroProductos(texto, categoria_id, proveedor_id, precio_desde, precio_hasta, incluir_bajas)
+    return [producto_a_salida(p) for p in producto_service.buscar(filtro)]
 
 
 @router_productos.get("/parecidos", response_model=list[Parecido], dependencies=[ADMINISTRADOR])

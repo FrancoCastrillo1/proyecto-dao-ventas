@@ -116,12 +116,12 @@ def test_parecidos_no_incluye_dados_de_baja(db):
     assert service.parecidos("Bebida") == []
 
 
-def test_productos_parecidos_incluye_nombres_identicos(db):
+def test_productos_parecidos_avisa_los_parecidos_pero_no_los_identicos(db):
     categoria = CategoriaService(CategoriaDAO(db)).crear("Bebidas")
     service = ProductoService(ProductoDAO(db), CategoriaDAO(db))
     service.crear("BEB-001", "Coca 500ml", categoria.id, 1500, 900)
-    # el nombre de producto puede repetirse, pero conviene avisar
-    assert [p.codigo for p in service.parecidos("Coca 500ml")] == ["BEB-001"]
+    # El idéntico no se avisa: el alta lo rechaza (dos activos no se llaman igual)
+    assert service.parecidos("COCA 500ml") == []
     assert [p.codigo for p in service.parecidos("coca 500 ml")] == ["BEB-001"]
     assert service.parecidos("Agua 1L") == []
 

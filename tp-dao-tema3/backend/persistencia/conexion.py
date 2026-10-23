@@ -41,7 +41,7 @@ def crear_tablas(db_path=DB_PATH):
 # IF NOT EXISTS no toca tablas existentes, así que si la tabla ya está pero le
 # falta la columna, se agrega y se completa con los datos que ya había.
 # Corre ANTES del esquema: el esquema crea índices sobre estas columnas.
-COLUMNAS_NORMALIZADAS = {"categorias": "nombre", "ubicaciones": "nombre"}
+COLUMNAS_NORMALIZADAS = {"categorias": "nombre", "ubicaciones": "nombre", "productos": "nombre"}
 
 # Tablas de operaciones que registran QUIÉN las hizo. Las filas que ya existían
 # quedan con usuario_id vacío: se hicieron antes de que hubiera usuarios.
@@ -87,6 +87,22 @@ def migrar(cx):
                     f"UPDATE {tabla} SET nombre_normalizado = ? WHERE id = ?",
                     (normalizar_texto(fila[origen]), fila["id"]),
                 )
+            if tabla == "productos":
+                desempatar_nombres_de_productos(cx)
+
+
+def desempatar_nombres_de_productos(cx):
+    # Antes los productos podían repetir el nombre. El índice único nuevo no se
+    # podría crear si quedan dos activos iguales, así que a todos menos al
+    # primero se les agrega su código al nombre ("Agua 1L" → "Agua 1L (BEB-009)").
+    filas = cx.execute("SELECT id, codigo, nombre, nombre_normalizado FROM productos WHERE activo = 1 ORDER BY id").fetchall()
+    vistos = set()
+    for fila in filas:
+        if fila["nombre_normalizado"] in vistos:
+            nombre = f"{fila['nombre']} ({fila['codigo']})"
+            cx.execute("UPDATE productos SET nombre = ?, nombre_normalizado = ? WHERE id = ?",
+                       (nombre, normalizar_texto(nombre), fila["id"]))
+        vistos.add(fila["nombre_normalizado"])
 
 
 def completar_migracion(cx):

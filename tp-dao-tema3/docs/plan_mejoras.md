@@ -39,7 +39,8 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
     - [x] e) Seed con `admin`, `cd.central`, `centro`, `norte` y `sur` (contraseña `tpdao2026`), y `backend.datos.crear_admin` para el primer administrador de una base vacía.
 - [x] ~~**3. Front por perfil.** Pantalla de login, y que cada perfil (administrador, CD, local) vea solo sus pantallas, sin elegir el local a mano.~~
   - Hecho el 23/10 en la rama `feature/usuarios`: login, menú por capacidades, Vender/Envíos/Stock/Reportes según el perfil, pantalla de Usuarios. Probado de punta a punta en Chrome con los tres perfiles (sección 0 de `docs/recorrido_front.md`).
-- [ ] **4. Reglas del producto y filtros.** Restringir lo que se puede cargar como producto y buscar productos con filtros. Opciones: qué reglas (varias) y cómo filtrar.
+- [x] ~~**4. Reglas del producto y filtros.** Restringir lo que se puede cargar como producto y buscar productos con filtros.~~
+  - Hecho el 23/10 en la rama `feature/productos` (sale de `feature/usuarios`): nombre sin repetir entre activos, no dar de baja con stock, y `GET /productos` con filtros (texto, categoría, proveedor, rango de precio). 717 tests.
 - [ ] **5. Comprobante descargable** de cada venta y nota de crédito de cada devolución. Un local solo descarga los suyos. Opciones: formato y librería.
 - [ ] **6. Bandeja de tareas y transporte.** Inicio muestra los pendientes de cada perfil y lleva a la pantalla donde se resuelve cada uno; el CD registra el transporte de cada remito al despacharlo. Opciones: qué tareas mostrar a cada perfil (varias) y qué datos del transporte guardar.
 - [ ] **7. Cierre para el 29/10:** diagrama de clases, diagrama de estados del bulto, `docs/guia_oral.md` y `docs/presentacion_preliminar.md` actualizados con las decisiones nuevas, y README con los usuarios de prueba. Opciones: cómo armar los diagramas. Al final, correr todos los tests y levantar todo desde cero con el seed.
@@ -69,6 +70,12 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el Administrador. El CD solo opera.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
+
+### Paso 4: reglas del producto y filtros (decidido el 23/10)
+- **Nombre sin repetir:** dos productos ACTIVOS no se llaman igual (sin mayúsculas, tildes ni espacios de más). Dominio: `Producto.nombre_normalizado`; service: `validar_nombre_libre` al crear, modificar y reactivar; base: índice único parcial `productos_nombre_activo` (`WHERE activo = 1`). Uno dado de baja libera el nombre; lo parecido sigue siendo solo un aviso. La migración agrega el código al nombre de los repetidos que ya hubiera.
+- **No dar de baja con stock:** dominio: `Producto.dar_de_baja(unidades_en_stock)` rechaza si son más de 0; service: cuenta el stock en todas las ubicaciones; base: trigger `productos_no_se_dan_de_baja_con_stock`.
+- **Filtros en el back con un objeto filtro:** `FiltroProductos` (dominio) valida los valores (montos no negativos, "desde" no mayor que "hasta"); `ProductoService.buscar` controla que la categoría y el proveedor existan; `ProductoDAO.buscar` arma el SQL. Filtros: texto (nombre o código), categoría, proveedor y rango de precio. Filtrar por proveedor exige `puede_consultar_proveedores` (un local recibe 403).
+- Descartado: formato obligatorio del código, "bajo costo solo en liquidación" (el reporte de margen ya muestra la pérdida), Specification (filtraría en memoria) y filtros de situación o bajo mínimo (ya los cubren Stock y los reportes).
 
 ### Paso 3: front por perfil (decidido el 23/10)
 - **Entrada:** pantalla de login propia; sin sesión no se ve nada más. Si el back responde 401 con una sesión abierta (venció o la cerraron), el front vuelve solo al login y dice por qué.

@@ -106,10 +106,10 @@ def test_codigo_duplicado_sin_distinguir_mayusculas(service, categoria):
         crear(service, categoria, codigo="beb-001", nombre="Otro")
 
 
-def test_mismo_nombre_con_otro_codigo_esta_permitido(service, categoria):
-    crear(service, categoria, codigo="BEB-001")
-    crear(service, categoria, codigo="BEB-002")
-    assert len(service.listar()) == 2
+def test_dos_productos_activos_no_pueden_llamarse_igual(service, categoria):
+    crear(service, categoria, codigo="BEB-001", nombre="Coca 500ml")
+    with pytest.raises(EntidadDuplicada, match="Ya existe el producto 'Coca 500ml' \(código BEB-001\)"):
+        crear(service, categoria, codigo="BEB-002", nombre="  COCA   500ML ")
 
 
 def test_categoria_inexistente(service, categoria):

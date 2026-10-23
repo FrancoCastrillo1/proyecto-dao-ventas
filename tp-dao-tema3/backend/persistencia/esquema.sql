@@ -21,12 +21,19 @@ CREATE TABLE IF NOT EXISTS productos (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 codigo TEXT NOT NULL UNIQUE COLLATE NOCASE,
 nombre TEXT NOT NULL,
+nombre_normalizado TEXT,
 categoria_id INTEGER NOT NULL REFERENCES categorias(id),
 precio_venta REAL NOT NULL CHECK (precio_venta > 0),
 costo REAL NOT NULL CHECK (costo >= 0),
 stock_minimo INTEGER NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- Dos productos ACTIVOS no pueden llamarse igual (sin mayúsculas, tildes ni
+-- espacios de más; nombre_normalizado lo completa el DAO). Uno dado de baja no
+-- cuenta: su nombre se puede volver a usar. Índice aparte por la migración.
+CREATE UNIQUE INDEX IF NOT EXISTS productos_nombre_activo
+ON productos (nombre_normalizado) WHERE activo = 1;
 
 -- El CUIT es el identificador del proveedor: se guarda solo con los 11 dígitos.
 CREATE TABLE IF NOT EXISTS proveedores (
@@ -124,6 +131,17 @@ ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
 UNIQUE (producto_id, ubicacion_id)
 );
+
+-- Red de seguridad: un producto con stock en alguna ubicación no se da de baja
+-- (quedaría mercadería que no aparece en ninguna lista). Va después de la
+-- tabla stock porque la consulta.
+CREATE TRIGGER IF NOT EXISTS productos_no_se_dan_de_baja_con_stock
+BEFORE UPDATE OF activo ON productos
+WHEN NEW.activo = 0 AND OLD.activo = 1
+ AND EXISTS (SELECT 1 FROM stock WHERE producto_id = NEW.id AND cantidad > 0)
+BEGIN
+    SELECT RAISE(ABORT, 'No se puede dar de baja un producto que todavía tiene stock');
+END;
 
 -- Libro de movimientos: solo se insertan filas, nunca se modifican ni se
 -- borran. La cantidad lleva signo (positiva entra, negativa sale).

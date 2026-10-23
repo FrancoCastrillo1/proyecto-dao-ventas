@@ -140,3 +140,8 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Pantalla de login propia; el token en `sessionStorage`, manejado solo por `api.js`; un 401 con sesión abierta vuelve al login.
 - El menú se arma con las `capacidades` de `/auth/yo` (cada pantalla dice qué capacidad requiere); nada de `if perfil ==` en el front.
 - El local no se elige en el front: lo pone el back. Pantalla de Usuarios para el administrador.
+
+### Paso 4 del plan: reglas del producto y filtros (decidido el 23/10)
+- Dos productos activos no se llaman igual (nombre normalizado; índice único parcial). Uno de baja libera el nombre.
+- Un producto con stock no se da de baja (dominio con el dato, service que cuenta, trigger en la base).
+- `GET /productos` filtra en el back con `FiltroProductos` (dominio): texto, categoría, proveedor (solo quien ve proveedores) y rango de precio.

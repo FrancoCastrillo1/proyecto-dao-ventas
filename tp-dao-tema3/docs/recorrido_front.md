@@ -111,6 +111,23 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 - [Check] **3.8 Hacé:** tocá la fila de *Aceite de Girasol*.
   **Debería:** abrirse el panel sin el campo código (el código va en el subtítulo y no se cambia), y abajo "Quién lo vende" con *Mayorista Norte SA*.
 
+## 3b. Reglas del producto y filtros (paso 4)
+
+> Entrá como `admin` → Productos.
+
+- [ ] **3b.1 Hacé:** escribí "lác" en el buscador.
+  **Debería:** quedar *Leche Entera 1L* y *Yogur Bebible 1L (promo)* (busca sin importar tildes, en el nombre y en el código).
+- [ ] **3b.2 Hacé:** "Limpiar filtros", elegí el proveedor *Mayorista Norte SA* y poné "Precio desde" 2000.
+  **Debería:** quedar *Aceite de Girasol 1.5L* y *Arroz Largo Fino 1kg*.
+- [ ] **3b.3 Hacé:** poné "Precio desde" 5000 y "Precio hasta" 1000.
+  **Debería:** salir que el precio «desde» no puede ser mayor que el «hasta».
+- [ ] **3b.4 Hacé:** "+ Nuevo producto" con código `TST-001` y nombre `agua MINERAL 1.5l`.
+  **Debería:** salir "Ya existe el producto 'Agua Mineral 1.5L' (código BEB-002)": dos productos activos no se llaman igual.
+- [ ] **3b.5 Hacé:** abrí *Aceite de Girasol 1.5L* → "Dar de baja" → confirmá.
+  **Debería:** salir "No se puede dar de baja 'Aceite de Girasol 1.5L': todavía quedan … unidades en stock". Sigue en "Activos".
+- [ ] **3b.6 Hacé:** creá un producto `TST-002` "Producto de prueba" (sin stock) y dalo de baja. Después creá otro `TST-003` con el mismo nombre.
+  **Debería:** dejar las dos cosas: un producto de baja libera su nombre. Si intentás reactivar `TST-002`, sale que el nombre ya lo usa otro.
+
 ## 4. Proveedores (Datos → Proveedores)
 
 > Entrá como `admin`.
