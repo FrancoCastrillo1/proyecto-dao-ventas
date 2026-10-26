@@ -21,12 +21,19 @@ CREATE TABLE IF NOT EXISTS productos (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 codigo TEXT NOT NULL UNIQUE COLLATE NOCASE,
 nombre TEXT NOT NULL,
+nombre_normalizado TEXT,
 categoria_id INTEGER NOT NULL REFERENCES categorias(id),
 precio_venta REAL NOT NULL CHECK (precio_venta > 0),
 costo REAL NOT NULL CHECK (costo >= 0),
 stock_minimo INTEGER NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
 activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- Dos productos ACTIVOS no pueden llamarse igual (sin mayúsculas, tildes ni
+-- espacios de más; nombre_normalizado lo completa el DAO). Uno dado de baja no
+-- cuenta: su nombre se puede volver a usar. Índice aparte por la migración.
+CREATE UNIQUE INDEX IF NOT EXISTS productos_nombre_activo
+ON productos (nombre_normalizado) WHERE activo = 1;
 
 -- El CUIT es el identificador del proveedor: se guarda solo con los 11 dígitos.
 CREATE TABLE IF NOT EXISTS proveedores (
@@ -66,6 +73,54 @@ ON ubicaciones (nombre_normalizado);
 CREATE UNIQUE INDEX IF NOT EXISTS un_solo_cd_activo
 ON ubicaciones (tipo) WHERE tipo = 'CD' AND activo = 1;
 
+-- ================================================================= Usuarios
+-- El perfil define qué puede hacer cada usuario (UsuarioAdministrador,
+-- UsuarioCD o UsuarioSucursal en el dominio; "perfil" decide la clase al leer).
+-- El CD y las sucursales pertenecen a una ubicación; el administrador, a
+-- ninguna. El nombre de usuario es único sin distinguir mayúsculas. Baja lógica.
+-- La contraseña se guarda como hash PBKDF2 con su sal, nunca en texto. Puede
+-- faltar en usuarios creados antes del login: no entran hasta que se les ponga.
+CREATE TABLE IF NOT EXISTS usuarios (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+perfil TEXT NOT NULL CHECK (perfil IN ('ADMIN', 'CD', 'SUCURSAL')),
+nombre_usuario TEXT NOT NULL UNIQUE COLLATE NOCASE,
+nombre_completo TEXT NOT NULL,
+ubicacion_id INTEGER REFERENCES ubicaciones(id),
+hash_contrasena TEXT,
+sal TEXT,
+activo INTEGER NOT NULL DEFAULT 1,
+CHECK ((perfil = 'ADMIN') = (ubicacion_id IS NULL))
+);
+
+-- Red de seguridad: el perfil tiene que coincidir con el tipo de la ubicación
+-- (un usuario CD en el CD, uno de sucursal en una sucursal). Los nombres son
+-- los mismos a propósito, así la regla es una simple comparación. El
+-- administrador no tiene ubicación (lo controla el CHECK de la tabla).
+CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_alta
+BEFORE INSERT ON usuarios
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+BEGIN
+    SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
+END;
+
+CREATE TRIGGER IF NOT EXISTS usuarios_perfil_segun_ubicacion_cambio
+BEFORE UPDATE OF perfil, ubicacion_id ON usuarios
+WHEN NEW.perfil <> 'ADMIN'
+ AND (SELECT tipo FROM ubicaciones WHERE id = NEW.ubicacion_id) IS NOT NEW.perfil
+BEGIN
+    SELECT RAISE(ABORT, 'El perfil del usuario no corresponde al tipo de su ubicación');
+END;
+
+-- Sesiones abiertas con el login. Se guarda el hash del token (no el token):
+-- si alguien lee la base, no puede usarlo para entrar. Vencen solas.
+CREATE TABLE IF NOT EXISTS sesiones (
+token_hash TEXT PRIMARY KEY,
+usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+vence TEXT NOT NULL
+);
+
+
 -- Cantidad de cada producto en cada ubicación (CD o sucursal): una fila por
 -- par producto-ubicación. La cantidad nunca puede ser negativa. El stock
 -- mínimo no se repite acá: se toma de productos.stock_minimo.
@@ -77,6 +132,17 @@ cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
 UNIQUE (producto_id, ubicacion_id)
 );
 
+-- Red de seguridad: un producto con stock en alguna ubicación no se da de baja
+-- (quedaría mercadería que no aparece en ninguna lista). Va después de la
+-- tabla stock porque la consulta.
+CREATE TRIGGER IF NOT EXISTS productos_no_se_dan_de_baja_con_stock
+BEFORE UPDATE OF activo ON productos
+WHEN NEW.activo = 0 AND OLD.activo = 1
+ AND EXISTS (SELECT 1 FROM stock WHERE producto_id = NEW.id AND cantidad > 0)
+BEGIN
+    SELECT RAISE(ABORT, 'No se puede dar de baja un producto que todavía tiene stock');
+END;
+
 -- Libro de movimientos: solo se insertan filas, nunca se modifican ni se
 -- borran. La cantidad lleva signo (positiva entra, negativa sale).
 CREATE TABLE IF NOT EXISTS movimientos_stock (
@@ -85,7 +151,8 @@ stock_id INTEGER NOT NULL REFERENCES stock(id),
 fecha TEXT NOT NULL,
 cantidad INTEGER NOT NULL CHECK (cantidad <> 0),
 tipo TEXT NOT NULL CHECK (tipo IN ('COMPRA', 'DESPACHO', 'RECEPCION', 'VENTA', 'DEVOLUCION', 'AJUSTE')),
-referencia TEXT NOT NULL DEFAULT ''
+referencia TEXT NOT NULL DEFAULT '',
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE INDEX IF NOT EXISTS movimientos_stock_por_stock
@@ -109,6 +176,7 @@ subtotal INTEGER NOT NULL CHECK (subtotal > 0),
 total INTEGER NOT NULL CHECK (total > 0),
 vuelto INTEGER NOT NULL DEFAULT 0 CHECK (vuelto >= 0),
 nro_comprobante INTEGER NOT NULL CHECK (nro_comprobante > 0),
+usuario_id INTEGER REFERENCES usuarios(id),
 UNIQUE (sucursal_id, nro_comprobante)
 );
 
@@ -126,13 +194,30 @@ PRIMARY KEY (venta_id, producto_id)
 );
 
 -- Solo de ventas registradas (la clave foránea lo exige también en la base)
+-- nro_nota_credito: correlativo por local, como el comprobante de la venta
+-- (el local es el de la venta). Puede faltar solo en bases viejas antes de
+-- la migración, que numera las devoluciones que ya había.
 CREATE TABLE IF NOT EXISTS devoluciones (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 venta_id INTEGER NOT NULL REFERENCES ventas(id),
 fecha TEXT NOT NULL,
 motivo TEXT NOT NULL,
-importe INTEGER NOT NULL CHECK (importe >= 0)
+importe INTEGER NOT NULL CHECK (importe >= 0),
+usuario_id INTEGER REFERENCES usuarios(id),
+nro_nota_credito INTEGER CHECK (nro_nota_credito > 0)
 );
+
+-- Red de seguridad: dos notas de crédito del mismo local no tienen el mismo
+-- número. Es un trigger y no un UNIQUE porque el local está en la venta.
+CREATE TRIGGER IF NOT EXISTS notas_credito_unicas_por_local
+BEFORE INSERT ON devoluciones
+WHEN NEW.nro_nota_credito IS NOT NULL AND EXISTS (
+    SELECT 1 FROM devoluciones d JOIN ventas v ON v.id = d.venta_id
+    WHERE d.nro_nota_credito = NEW.nro_nota_credito
+      AND v.sucursal_id = (SELECT sucursal_id FROM ventas WHERE id = NEW.venta_id))
+BEGIN
+    SELECT RAISE(ABORT, 'Ese número de nota de crédito ya existe en este local');
+END;
 
 CREATE TABLE IF NOT EXISTS detalles_devolucion (
 devolucion_id INTEGER NOT NULL REFERENCES devoluciones(id),
@@ -164,7 +249,8 @@ CREATE TABLE IF NOT EXISTS ordenes_reposicion (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
-estado TEXT NOT NULL CHECK (estado IN ('ABIERTA', 'CERRADA'))
+estado TEXT NOT NULL CHECK (estado IN ('ABIERTA', 'CERRADA')),
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 -- Lo que pide cada sucursal. orden_id queda vacío hasta que se consolida.
@@ -173,7 +259,8 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 sucursal_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
 estado TEXT NOT NULL CHECK (estado IN ('PENDIENTE', 'CONSOLIDADO')),
-orden_id INTEGER REFERENCES ordenes_reposicion(id)
+orden_id INTEGER REFERENCES ordenes_reposicion(id),
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE TABLE IF NOT EXISTS detalles_pedido (
@@ -192,9 +279,21 @@ origen_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 destino_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
 estado TEXT NOT NULL CHECK (estado IN ('ABIERTO', 'CERRADO', 'EN_TRANSITO', 'VERIFICADO', 'VERIFICADO_CON_RECHAZOS')),
+usuario_id INTEGER REFERENCES usuarios(id),
+llegada_estimada TEXT,   -- la informa el CD al despachar
 CHECK (origen_id <> destino_id),
 UNIQUE (orden_id, destino_id)
 );
+
+-- Red de seguridad: un remito no sale del CD sin decir cuándo llega. Solo
+-- se controla al pasar a EN_TRANSITO, así los remitos despachados antes de
+-- esta regla (sin llegada estimada) siguen funcionando.
+CREATE TRIGGER IF NOT EXISTS remitos_se_despachan_con_llegada_estimada
+BEFORE UPDATE OF estado ON remitos
+WHEN NEW.estado = 'EN_TRANSITO' AND OLD.estado <> 'EN_TRANSITO' AND NEW.llegada_estimada IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Un remito no se despacha sin la llegada estimada');
+END;
 
 -- El estado se guarda como texto y el DAO vuelve a armar el objeto del
 -- patrón State al leerlo. El precinto es único: dos bultos con el mismo
@@ -222,7 +321,8 @@ bulto_id INTEGER NOT NULL REFERENCES bultos(id),
 fecha_hora TEXT NOT NULL,
 estado_anterior TEXT NOT NULL,
 estado_nuevo TEXT NOT NULL,
-observacion TEXT NOT NULL DEFAULT ''
+observacion TEXT NOT NULL DEFAULT '',
+usuario_id INTEGER REFERENCES usuarios(id)
 );
 
 CREATE INDEX IF NOT EXISTS historial_bultos_por_bulto

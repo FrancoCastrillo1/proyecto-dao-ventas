@@ -1,7 +1,32 @@
 // Único lugar del front que habla con el backend (como un DAO, pero del lado
 // del navegador). Las pantallas llaman a api.listar(...), api.crear(...), etc.
-// y no saben nada de fetch, JSON ni códigos HTTP.
+// y no saben nada de fetch, JSON ni códigos HTTP. También es el único que
+// sabe dónde se guarda el token del login y cómo se manda.
 // Acá NO va nada de pantallas ni de estado de React.
+
+// ---------------------------------------------------------------- Sesión
+// El token se guarda en sessionStorage: sobrevive a recargar la página, pero
+// se borra al cerrar la pestaña (en una caja compartida no queda abierta).
+// Puede no estar disponible (modo privado estricto): entonces vive solo en memoria.
+const CLAVE_TOKEN = "tp_dao_token";
+let tokenEnMemoria = null;
+let alVencerSesion = () => {};
+
+export const sesion = {
+  token() {
+    try { return sessionStorage.getItem(CLAVE_TOKEN) ?? tokenEnMemoria; } catch { return tokenEnMemoria; }
+  },
+  guardar(token) {
+    tokenEnMemoria = token;
+    try { sessionStorage.setItem(CLAVE_TOKEN, token); } catch { /* queda en memoria */ }
+  },
+  borrar() {
+    tokenEnMemoria = null;
+    try { sessionStorage.removeItem(CLAVE_TOKEN); } catch { /* no había nada guardado */ }
+  },
+  // La app avisa qué hacer cuando el back dice que la sesión ya no vale (401)
+  alVencer(funcion) { alVencerSesion = funcion; },
+};
 
 // Error con el código HTTP y el mensaje de la regla de negocio que falló
 export class ErrorApi extends Error {
@@ -20,6 +45,7 @@ const NOMBRE_CAMPO = {
   medio_pago: "Medio de pago", monto_entregado: "Monto entregado", motivo: "Motivo", referencia: "Referencia",
   nro_precinto: "Precinto", nro_leido: "Precinto leído", intacto: "Intacto", pedido_ids: "Pedidos",
   orden_id: "Orden", destino_id: "Destino", items: "Productos", limite: "Límite",
+  nombre_usuario: "Usuario", nombre_completo: "Nombre completo", contrasena: "Contraseña", perfil: "Perfil",
 };
 
 // Qué formato espera cada tipo de error de Pydantic (el "type" que viene en el 422)
@@ -49,30 +75,63 @@ function textoDelError(cuerpo) {
   return "Error desconocido";
 }
 
-async function pedir(metodo, ruta, datos) {
-  let respuesta;
+async function enviar(metodo, ruta, datos) {
+  const headers = {};
+  if (datos) headers["Content-Type"] = "application/json";
+  if (sesion.token()) headers.Authorization = `Bearer ${sesion.token()}`;
   try {
-    respuesta = await fetch(`/api${ruta}`, {
-      method: metodo,
-      headers: datos ? { "Content-Type": "application/json" } : undefined,
-      body: datos ? JSON.stringify(datos) : undefined,
-    });
+    return await fetch(`/api${ruta}`, { method: metodo, headers, body: datos ? JSON.stringify(datos) : undefined });
   } catch {
     throw new ErrorApi(0, "No se pudo conectar con el backend");
   }
+}
 
-  if (respuesta.status === 204) return null; // OK sin contenido (bajas, asignaciones)
-
+// Convierte una respuesta con error en un ErrorApi con el mensaje para el usuario
+async function errorDe(respuesta) {
   const cuerpo = await respuesta.json().catch(() => null);
-  if (!respuesta.ok) {
-    // Sin JSON: el proxy de Vite no encontró al backend
-    if (cuerpo === null) throw new ErrorApi(respuesta.status, "No se pudo conectar con el backend. ¿Está corriendo uvicorn?");
-    throw new ErrorApi(respuesta.status, textoDelError(cuerpo));
+  // Sin JSON: el proxy de Vite no encontró al backend
+  if (cuerpo === null) return new ErrorApi(respuesta.status, "No se pudo conectar con el backend. ¿Está corriendo uvicorn?");
+  const error = new ErrorApi(respuesta.status, textoDelError(cuerpo));
+  // 401 con una sesión abierta = venció o la cerraron: se vuelve al login
+  if (respuesta.status === 401 && sesion.token()) {
+    sesion.borrar();
+    alVencerSesion(error.message);
   }
-  return cuerpo;
+  return error;
+}
+
+async function pedir(metodo, ruta, datos) {
+  const respuesta = await enviar(metodo, ruta, datos);
+  if (!respuesta.ok) throw await errorDe(respuesta);
+  if (respuesta.status === 204) return null; // OK sin contenido (bajas, asignaciones)
+  return respuesta.json();
+}
+
+// Baja un archivo (ej: un PDF) con el nombre que manda el back. No alcanza con
+// un enlace común: el pedido tiene que llevar el token.
+async function descargar(ruta) {
+  const respuesta = await enviar("GET", ruta);
+  if (!respuesta.ok) throw await errorDe(respuesta);
+  const nombre = /filename="([^"]+)"/.exec(respuesta.headers.get("Content-Disposition") ?? "")?.[1] ?? "documento.pdf";
+  const url = URL.createObjectURL(await respuesta.blob());
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombre;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return nombre;
 }
 
 export const api = {
+  // Devuelve el usuario; el token queda guardado para los pedidos que siguen
+  async entrar(nombre_usuario, contrasena) {
+    const { token, usuario } = await pedir("POST", "/auth/login", { nombre_usuario, contrasena });
+    sesion.guardar(token);
+    return usuario;
+  },
+  async salir() {
+    try { await pedir("POST", "/auth/logout"); } finally { sesion.borrar(); }
+  },
   listar: (ruta) => pedir("GET", ruta),
   obtener: (ruta) => pedir("GET", ruta),
   crear: (ruta, datos) => pedir("POST", ruta, datos),
@@ -80,4 +139,5 @@ export const api = {
   borrar: (ruta) => pedir("DELETE", ruta),
   asociar: (ruta) => pedir("POST", ruta),
   accion: (ruta) => pedir("POST", ruta), // acciones sin datos, ej: /categorias/3/reactivar
+  descargar,
 };

@@ -68,9 +68,10 @@ class CategoriaService:
 
 
 class ProductoService:
-    def __init__(self, dao=None, categoria_dao=None):
+    def __init__(self, dao=None, categoria_dao=None, proveedor_dao=None):
         self.dao = dao or ProductoDAO()
-        self.categoria_dao = categoria_dao or CategoriaDAO()
+        self.categoria_dao = categoria_dao or CategoriaDAO(self.dao.db_path)
+        self.proveedor_dao = proveedor_dao or ProveedorDAO(self.dao.db_path)
 
     def validar_categoria(self, categoria_id):
         categoria = self.categoria_dao.obtener_por_id(categoria_id)
@@ -79,14 +80,34 @@ class ProductoService:
         if not categoria.activo:
             raise DatoInvalido(f"La categoría '{categoria.nombre}' está dada de baja")
 
-    def crear(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0):
+    # Dos productos activos no pueden llamarse igual (el código ya es único)
+    def validar_nombre_libre(self, producto):
+        otro = self.dao.obtener_activo_por_nombre(producto.nombre_normalizado)
+        if otro and otro.id != producto.id:
+            raise EntidadDuplicada(f"Ya existe el producto '{otro.nombre}' (código {otro.codigo})")
+
+    # Los proveedores que se eligen al crear el producto: tienen que existir y
+    # estar activos. Se valida todo antes de guardar nada.
+    def validar_proveedores(self, proveedor_ids):
+        ids = list(dict.fromkeys(proveedor_ids or ()))   # sin repetidos, en el orden en que vinieron
+        for proveedor_id in ids:
+            proveedor = self.proveedor_dao.obtener_por_id(proveedor_id)
+            if proveedor is None:
+                raise NoEncontrado(f"No se encontro el proveedor {proveedor_id}")
+            if not proveedor.activo:
+                raise DatoInvalido(f"El proveedor '{proveedor.razon_social}' está dado de baja")
+        return ids
+
+    def crear(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0, proveedor_ids=()):
         # Primero el dominio valida el formato, después lo que necesita la base
         producto = Producto(codigo, nombre, categoria_id, precio_venta, costo, stock_minimo)
         existente = self.dao.obtener_por_codigo(producto.codigo)
         if existente:
             raise EntidadDuplicada(mensaje_duplicado(f"Ya existe un producto con el código '{producto.codigo}'", existente))
+        self.validar_nombre_libre(producto)
         self.validar_categoria(producto.categoria_id)
-        return self.dao.crear(producto)
+        proveedor_ids = self.validar_proveedores(proveedor_ids)
+        return self.dao.crear(producto, proveedor_ids)   # el producto y sus proveedores, todo junto
 
     def obtener(self, id):
         producto = self.dao.obtener_por_id(id)
@@ -97,6 +118,15 @@ class ProductoService:
     def listar(self, categoria_id=None, incluir_bajas=False):
         return self.dao.listar(solo_activos=not incluir_bajas, categoria_id=categoria_id)
 
+    def buscar(self, filtro):
+        """filtro: FiltroProductos del dominio (ya validó los valores). Acá se
+        controla lo que necesita la base: que la categoría y el proveedor existan."""
+        if filtro.categoria_id is not None and self.categoria_dao.obtener_por_id(filtro.categoria_id) is None:
+            raise NoEncontrado(f"No se encontro la categoria {filtro.categoria_id}")
+        if filtro.proveedor_id is not None and self.proveedor_dao.obtener_por_id(filtro.proveedor_id) is None:
+            raise NoEncontrado(f"No se encontro el proveedor {filtro.proveedor_id}")
+        return self.dao.buscar(filtro)
+
     # El código no se recibe: es la identidad del producto y no se modifica
     def modificar(self, id, nombre, categoria_id, precio_venta, costo, stock_minimo):
         producto = self.obtener(id)
@@ -105,26 +135,30 @@ class ProductoService:
         producto.precio_venta = precio_venta
         producto.costo = costo
         producto.stock_minimo = stock_minimo
+        if producto.activo:
+            self.validar_nombre_libre(producto)
         self.validar_categoria(producto.categoria_id)
         return self.dao.actualizar(producto)
 
+    # El dominio decide si se puede (sin stock); acá se cuenta cuánto queda
     def dar_de_baja(self, id):
         producto = self.obtener(id)
-        producto.dar_de_baja()
+        producto.dar_de_baja(self.dao.unidades_en_stock(producto.id))
         self.dao.actualizar(producto)
 
-    # No se reactiva un producto cuya categoría sigue dada de baja
+    # No se reactiva un producto cuya categoría sigue dada de baja, ni uno cuyo
+    # nombre ya lo usa otro producto activo
     def reactivar(self, id):
         producto = self.obtener(id)
         validar_que_este_de_baja(producto, f"el producto '{producto.nombre}'")
         self.validar_categoria(producto.categoria_id)
+        self.validar_nombre_libre(producto)
         producto.reactivar()
         return self.dao.actualizar(producto)
 
-    # El nombre de un producto puede repetirse (lo identifica el código), así
-    # que acá los idénticos también se avisan
+    # Los idénticos no se avisan: el alta ya los rechaza con un 409
     def parecidos(self, nombre, excluir_id=None):
-        return buscar_parecidos(nombre, self.dao.listar(), lambda p: p.nombre, excluir_id)
+        return buscar_parecidos(nombre, self.dao.listar(), lambda p: p.nombre, excluir_id, incluir_iguales=False)
 
 
 class ProveedorService:

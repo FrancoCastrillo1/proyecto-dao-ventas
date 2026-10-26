@@ -59,7 +59,8 @@ docs/                  guia_oral.md, presentacion_preliminar.md
   `TransicionDeEstadoInvalida` por defecto y cada estado redefine lo suyo. El
   estado cambia solo por `cambiar_estado()`, que registra el historial. En la
   base se guarda el texto y `crear_estado()` vuelve a armar el objeto.
-- **Fábricas simples** (diccionario nombre → clase): `crear_estado`, `crear_medio_pago`, `crear_ubicacion`.
+- **Fábricas simples** (diccionario nombre → clase): `crear_estado`, `crear_medio_pago`, `crear_ubicacion`, `crear_usuario`.
+- **Template Method:** `DocumentoComercial` (comprobante de venta y nota de crédito), desde el paso 5.
 - **Inmutabilidad en la base:** triggers que rechazan UPDATE y DELETE en
   `historial_bultos`, `movimientos_stock` y `movimientos_caja`.
 - **Stock del CD:** se descuenta al despachar el remito, en una transacción.
@@ -98,10 +99,14 @@ cd frontend; npm install; npm run dev                        # http://localhost:
   bulto por bulto o por remito; rechazado merma o vuelve al CD; reserva de stock
   al preparar; control de cantidades en la recepción; DAO como patrón;
   proveedores N:M vs uno por producto; usuarios.
-- Próximos pasos: diagramas de clases y de estados (Mermaid); órdenes de
-  compra sugeridas por faltantes; control de cantidades en la recepción;
-  usuarios en el historial; `Decimal` en los precios de Producto; gráficos en
-  reportes; eliminación física de maestros.
+- Próximos pasos (al 26/10 están hechos los pasos 1 a 7 y el 1e del plan, los
+  5 a 7 y el 1e sin commitear): repensar las devoluciones, 1d (arreglos del
+  recorrido), compras a proveedores con factura en PDF (8), reportes nuevos por
+  perfil y exportables (9; los gráficos ya están), envíos demorados y reposición
+  sugerida (10), limpieza (11). También: control de cantidades en la recepción y
+  eliminación física de maestros. Ver `docs/plan_mejoras.md`.
+- Ramas: `feature/usuarios` (pasos 2 y 3, para el pull request a `main`) y
+  `feature/productos` (pasos 4 a 7, sale de `feature/usuarios`).
 
 ## Cómo trabajamos los pasos
 - Cuando te diga lo que quiero hacer, no empieces a codear. Primero mirá el código y después usá la herramienta AskUserQuestion para darme las opciones de cada decisión: hasta 4 por pregunta, la recomendada primero con "(Recomendada)", y una línea de qué implica cada una. Si una opción suma un patrón de diseño, decilo.
@@ -122,10 +127,10 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - El local de ventas, pedidos, recepción y reportes sale del usuario logueado, nunca del formulario.
 
 ### Paso 3: usuarios y perfiles (decidido el 20/10)
-- Primero los perfiles y después la autenticación. Mientras tanto, el usuario se identifica con el encabezado `X-Usuario` (provisorio: no se entrega así). Todas las rutas obtienen el usuario por una sola dependencia, `usuario_actual`; el login real cambia solo esa función.
-- `Usuario` abstracto con `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
+- Login con usuario y contraseña (`POST /auth/login` → token en `Authorization: Bearer`). Todas las rutas obtienen el usuario por una sola dependencia, `usuario_actual` (en `api/dependencias.py`). Hecho el 23/10.
+- `Usuario` abstracto con `UsuarioAdministrador` (sin ubicación), `UsuarioCD` y `UsuarioSucursal`, en una sola tabla con columna `perfil` y la fábrica `crear_usuario` (como `Ubicacion`). Cada perfil responde sus capacidades; nada de `if perfil ==`.
 - El perfil tiene que coincidir con el tipo de ubicación (CD con el CD, local con una sucursal), validado en el dominio (`validar_ubicacion`), el service y un trigger.
-- Pertenencia: el CD ve toda la red (stock y reportes de cualquier ubicación); el local, solo lo suyo. Productos, categorías y ubicaciones los consultan los dos; proveedores, solo el CD.
+- Pertenencia: el administrador y el CD ven toda la red; el local, solo lo suyo (se controla en la api con `exigir_que_sea_suyo`). Productos, categorías y ubicaciones los consultan todos; proveedores, el administrador y el CD.
 - Baja lógica de usuarios con reactivar.
 - `usuario_id` en ventas, devoluciones, remitos, movimientos de stock e historial del bulto. En el historial lo graba el DAO con el usuario que le pasa el service (el patrón State no se toca).
 - Tests de rutas con `TestClient`, agregando `httpx` como dependencia de desarrollo.
@@ -134,4 +139,31 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Permisos: una dependencia por ruta que exige la capacidad (ej. `Depends(requiere("puede_vender"))`), no por router ni con decorador propio.
 - Acceso a algo de otro local: 403 con mensaje claro ("Ese remito no es de tu local"), no 404.
 - El perfil y la ubicación de un usuario no se modifican (igual que el tipo de una ubicación).
-- Para el paso de autenticación: contraseña con `hashlib.pbkdf2_hmac` y sal (iteraciones en `config.py`, menos en los tests); token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON (no formulario, para no sumar `python-multipart`); script para crear el primer usuario CD.
+- Autenticación: contraseña con `hashlib.pbkdf2_hmac` y sal (iteraciones en `config.py`, menos en los tests); token opaco con `secrets.token_urlsafe`, guardando su hash y con vencimiento; login con JSON (no formulario, para no sumar `python-multipart`); `backend.datos.crear_admin` para el primer administrador. Seed: `admin`, `cd.central`, `centro`, `norte`, `sur`, contraseña `tpdao2026`.
+
+### Paso 3 del plan: front por perfil (decidido el 23/10)
+- Pantalla de login propia; el token en `sessionStorage`, manejado solo por `api.js`; un 401 con sesión abierta vuelve al login.
+- El menú se arma con las `capacidades` de `/auth/yo` (cada pantalla dice qué capacidad requiere); nada de `if perfil ==` en el front.
+- El local no se elige en el front: lo pone el back. Pantalla de Usuarios para el administrador.
+
+### Paso 4 del plan: reglas del producto y filtros (decidido el 23/10)
+- Dos productos activos no se llaman igual (nombre normalizado; índice único parcial). Uno de baja libera el nombre.
+- Un producto con stock no se da de baja (dominio con el dato, service que cuenta, trigger en la base).
+- `GET /productos` filtra en el back con `FiltroProductos` (dominio): texto, categoría, proveedor (solo quien ve proveedores) y rango de precio.
+
+### Paso 6 del plan: bandeja de tareas y llegada estimada (decidido el 23/10)
+- `GET /tareas` arma los pendientes según las capacidades (CD prepara; local recibe, verifica y repone). "Pedir" abre el pedido precargado hasta el mínimo; también desde Stock.
+- Transporte: solo la llegada estimada (día y hora), obligatoria al despachar (dominio, trigger). `Remito.esta_demorado()`.
+
+### Paso 1e del plan: arreglos de la prueba del 26/10 (decidido el 26/10)
+- Capacidad `ve_ventas` (admin y local sí, CD no): rutas de ventas, caja, comprobantes y reportes de ventas/más vendidos; el front esconde lo mismo.
+- Remito en PDF (`GET /remitos/{id}/remito.pdf`) con el mismo Template Method: `RemitoDocumento` y los ganchos `columnas()` y `etiqueta_responsable()`. Solo despachado.
+- Proveedores opcionales (uno o varios) al crear el producto, en la misma transacción.
+- Gráficos de los reportes con Recharts (`componentes/Graficos.jsx`): barras de una serie, rojo para negativos, sin gráfico si hay una sola barra.
+- Efectivo solo números; el comprobante no muestra vuelto; mensaje claro al devolver de más.
+- Pendiente: repensar las devoluciones.
+
+### Paso 5 del plan: comprobante y nota de crédito en PDF (decidido el 23/10)
+- PDF en el back con fpdf2; lo descarga quien puede ver la venta.
+- **Template Method** (`dominio/documentos.py`): `DocumentoComercial.armar()` fija el orden; `ComprobanteVenta` y `NotaCredito` completan los pasos. El dibujo del PDF (`servicios/documentos_pdf.py`) no sabe qué documento es.
+- Nota de crédito correlativa por local (`nro_nota_credito`, trigger de unicidad, migración). Datos del comercio en `config.py`; quién atendió, del `usuario_id`.

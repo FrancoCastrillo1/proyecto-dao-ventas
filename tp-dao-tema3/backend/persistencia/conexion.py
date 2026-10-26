@@ -34,18 +34,52 @@ def crear_tablas(db_path=DB_PATH):
     with get_conexion(db_path) as cx:
         migrar(cx)
         cx.executescript(ESQUEMA_PATH.read_text(encoding="utf-8"))
+        completar_migracion(cx)
 
 
 # Columnas que se agregaron cuando el grupo ya tenía bases creadas. CREATE TABLE
 # IF NOT EXISTS no toca tablas existentes, así que si la tabla ya está pero le
 # falta la columna, se agrega y se completa con los datos que ya había.
 # Corre ANTES del esquema: el esquema crea índices sobre estas columnas.
-COLUMNAS_NORMALIZADAS = {"categorias": "nombre", "ubicaciones": "nombre"}
+COLUMNAS_NORMALIZADAS = {"categorias": "nombre", "ubicaciones": "nombre", "productos": "nombre"}
+
+# Tablas de operaciones que registran QUIÉN las hizo. Las filas que ya existían
+# quedan con usuario_id vacío: se hicieron antes de que hubiera usuarios.
+TABLAS_CON_USUARIO = [
+    "pedidos_reposicion", "ordenes_reposicion", "remitos", "historial_bultos",
+    "movimientos_stock", "ventas", "devoluciones",
+]
+
+
+def columnas_de(cx, tabla):
+    # Vacío si la tabla todavía no existe (base nueva: la crea el esquema)
+    return [fila["name"] for fila in cx.execute(f"PRAGMA table_info({tabla})")]
+
+
+TRIGGERS_DE_USUARIOS = ["usuarios_perfil_segun_ubicacion_alta", "usuarios_perfil_segun_ubicacion_cambio"]
 
 
 def migrar(cx):
+    # La tabla usuarios de antes del login no admitía administradores (sin
+    # ubicación) ni guardaba la contraseña. SQLite no deja cambiar un CHECK ni
+    # un NOT NULL, así que se aparta la tabla vieja, el esquema crea la nueva y
+    # completar_migracion copia los datos. Va primero: los PRAGMA no tienen
+    # efecto dentro de una transacción, y lo de abajo abre una.
+    columnas = columnas_de(cx, "usuarios")
+    if columnas and "hash_contrasena" not in columnas:
+        cx.execute("PRAGMA foreign_keys = OFF")     # las operaciones apuntan a usuarios(id)
+        cx.execute("PRAGMA legacy_alter_table = ON")  # que esas referencias no se muden a la tabla vieja
+        cx.execute("ALTER TABLE usuarios RENAME TO usuarios_anterior")
+        for trigger in TRIGGERS_DE_USUARIOS:          # se mudaron con la tabla; el esquema los recrea
+            cx.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+    for tabla in TABLAS_CON_USUARIO:
+        columnas = columnas_de(cx, tabla)
+        if columnas and "usuario_id" not in columnas:
+            cx.execute(f"ALTER TABLE {tabla} ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)")
+
     for tabla, origen in COLUMNAS_NORMALIZADAS.items():
-        columnas = [fila["name"] for fila in cx.execute(f"PRAGMA table_info({tabla})")]
+        columnas = columnas_de(cx, tabla)
         if columnas and "nombre_normalizado" not in columnas:
             cx.execute(f"ALTER TABLE {tabla} ADD COLUMN nombre_normalizado TEXT")
             for fila in cx.execute(f"SELECT id, {origen} FROM {tabla}").fetchall():
@@ -53,3 +87,49 @@ def migrar(cx):
                     f"UPDATE {tabla} SET nombre_normalizado = ? WHERE id = ?",
                     (normalizar_texto(fila[origen]), fila["id"]),
                 )
+            if tabla == "productos":
+                desempatar_nombres_de_productos(cx)
+
+    columnas = columnas_de(cx, "remitos")
+    if columnas and "llegada_estimada" not in columnas:
+        cx.execute("ALTER TABLE remitos ADD COLUMN llegada_estimada TEXT")   # los viejos quedan sin dato
+
+    # Las devoluciones de antes no tenían nota de crédito: se numeran por local
+    # en el orden en que se hicieron, así cada una tiene su comprobante
+    columnas = columnas_de(cx, "devoluciones")
+    if columnas and "nro_nota_credito" not in columnas:
+        cx.execute("ALTER TABLE devoluciones ADD COLUMN nro_nota_credito INTEGER CHECK (nro_nota_credito > 0)")
+        siguiente = {}
+        for fila in cx.execute("SELECT d.id, v.sucursal_id FROM devoluciones d JOIN ventas v ON v.id = d.venta_id "
+                               "ORDER BY d.id").fetchall():
+            siguiente[fila["sucursal_id"]] = siguiente.get(fila["sucursal_id"], 0) + 1
+            cx.execute("UPDATE devoluciones SET nro_nota_credito = ? WHERE id = ?",
+                       (siguiente[fila["sucursal_id"]], fila["id"]))
+
+
+def desempatar_nombres_de_productos(cx):
+    # Antes los productos podían repetir el nombre. El índice único nuevo no se
+    # podría crear si quedan dos activos iguales, así que a todos menos al
+    # primero se les agrega su código al nombre ("Agua 1L" → "Agua 1L (BEB-009)").
+    filas = cx.execute("SELECT id, codigo, nombre, nombre_normalizado FROM productos WHERE activo = 1 ORDER BY id").fetchall()
+    vistos = set()
+    for fila in filas:
+        if fila["nombre_normalizado"] in vistos:
+            nombre = f"{fila['nombre']} ({fila['codigo']})"
+            cx.execute("UPDATE productos SET nombre = ?, nombre_normalizado = ? WHERE id = ?",
+                       (nombre, normalizar_texto(nombre), fila["id"]))
+        vistos.add(fila["nombre_normalizado"])
+
+
+def completar_migracion(cx):
+    # Segunda mitad de la reconstrucción de usuarios (ver migrar): los usuarios
+    # viejos pasan con su mismo id, así las operaciones siguen apuntando bien.
+    # Quedan sin contraseña: no entran hasta que un administrador les ponga una.
+    if columnas_de(cx, "usuarios_anterior"):
+        cx.execute(
+            "INSERT INTO usuarios (id, perfil, nombre_usuario, nombre_completo, ubicacion_id, activo) "
+            "SELECT id, perfil, nombre_usuario, nombre_completo, ubicacion_id, activo FROM usuarios_anterior"
+        )
+        cx.execute("DROP TABLE usuarios_anterior")
+        cx.commit()
+        cx.execute("PRAGMA foreign_keys = ON")

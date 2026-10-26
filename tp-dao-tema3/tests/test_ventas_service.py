@@ -235,7 +235,10 @@ def test_las_devoluciones_guardadas_cuentan_para_las_siguientes(service, stock, 
     d = con_stock
     venta = service.vender(d["centro"], [(d["coca"].id, 3)], "DEBITO")
     service.devolver(venta.id, [(d["coca"].id, 2)], "Primera")
-    with pytest.raises(DatoInvalido):
+    # El error dice qué producto y cuánto queda, con palabras claras
+    with pytest.raises(DatoInvalido, match=r"No se puede devolver más de lo que se vendió: de 'Coca 500ml' se "
+                                           r"vendieron 3 \(2 ya se devolvieron\), así que se pueden devolver hasta 1 "
+                                           r"y se pidieron 2"):
         service.devolver(venta.id, [(d["coca"].id, 2)], "Segunda")   # queda 1 por devolver
     assert cantidad(stock, d) == 9    # 10 - 3 + 2: la segunda no movió nada
     assert len(service.obtener(venta.id).devoluciones) == 1

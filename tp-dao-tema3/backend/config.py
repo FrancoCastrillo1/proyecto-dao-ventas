@@ -11,3 +11,18 @@ CARPETA_BACKEND = Path(__file__).parent
 DB_PATH = Path(os.environ.get("TP_DAO_DB") or CARPETA_BACKEND / "tp_dao.db")
 
 ESQUEMA_PATH = CARPETA_BACKEND / "persistencia" / "esquema.sql"
+
+# Contraseñas: PBKDF2-SHA256. Más iteraciones = más lento probar contraseñas a
+# lo bruto. Los tests bajan el número con TP_DAO_ITERACIONES para no tardar.
+ITERACIONES_CONTRASENA = int(os.environ.get("TP_DAO_ITERACIONES") or 300_000)
+
+# Cuánto dura una sesión desde el login (un turno de trabajo)
+HORAS_SESION = 10
+
+# Datos del comercio que salen en los comprobantes y notas de crédito
+# (ficticios: el CUIT es válido pero no es de nadie)
+COMERCIO = {
+    "razon_social": "Minorista del Centro S.A.",
+    "cuit": "30-71111111-1",
+    "direccion": "Av. Colón 1000, Córdoba",
+}

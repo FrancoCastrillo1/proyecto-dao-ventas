@@ -1,4 +1,5 @@
-// Pantalla de Productos: listado con buscador y filtro por categoría; alta y
+// Pantalla de Productos: listado con filtros (texto, categoría, proveedor y
+// rango de precio) que resuelve el back (GET /productos con parámetros); alta y
 // edición en un panel lateral (que también muestra quién provee el producto),
 // baja lógica con confirmación y reactivación.
 // No se valida nada acá a propósito: los errores los muestra el backend.
@@ -11,26 +12,42 @@ import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
 import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
-import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
+import { Buscador, Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import { pesos } from "../formato.js";
 
 const VACIO = { codigo: "", nombre: "", categoria_id: "", precio_venta: "", costo: "", stock_minimo: "0" };
+const SIN_FILTROS = { texto: "", categoria_id: "", proveedor_id: "", precio_desde: "", precio_hasta: "" };
 
 export default function Productos({ irA }) {
   const [productos, setProductos] = useState(null);  // null = cargando; trae también los dados de baja
   const [categorias, setCategorias] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [categoria, setCategoria] = useState("");
+  const [proveedores, setProveedores] = useState([]);
+  const [filtros, setFiltros] = useState(SIN_FILTROS);
   const [verActivos, setVerActivos] = useState(true);
   const [editando, setEditando] = useState(null);    // null = cerrado; {} = nuevo; producto = editar
   const { aviso, ejecutar, limpiar } = useAviso();
   const confirmacion = useConfirmacion();
 
-  const cargar = () => ejecutar(async () => {
-    setProductos(await api.listar("/productos?incluir_bajas=true"));
-    setCategorias(await api.listar("/categorias"));
-  });
-  useEffect(() => { cargar(); }, []);
+  // Se piden también los dados de baja (para contar las dos pestañas); el
+  // resto de los filtros los aplica el back
+  const cargar = () => {
+    const parametros = new URLSearchParams({ incluir_bajas: true });
+    for (const [campo, valor] of Object.entries(filtros)) if (valor !== "") parametros.set(campo, valor);
+    return ejecutar(async () => setProductos(await api.listar(`/productos?${parametros}`)));
+  };
+  useEffect(() => {
+    ejecutar(async () => {
+      setCategorias(await api.listar("/categorias"));
+      setProveedores(await api.listar("/proveedores"));
+    });
+  }, []);
+  // Medio segundo después de dejar de escribir, para no consultar por cada letra
+  useEffect(() => {
+    const temporizador = setTimeout(cargar, 300);
+    return () => clearTimeout(temporizador);
+  }, [JSON.stringify(filtros)]);
+  const filtrar = (campo) => (e) => setFiltros({ ...filtros, [campo]: e.target.value });
+  const hayFiltros = Object.values(filtros).some((v) => v !== "");
 
   const nombreCategoria = (id) => categorias.find((c) => c.id === id)?.nombre ?? "(categoría de baja)";
 
@@ -46,10 +63,7 @@ export default function Productos({ irA }) {
   }
 
   const deBaja = (productos ?? []).filter((p) => !p.activo).length;
-  const visibles = (productos ?? [])
-    .filter((p) => p.activo === verActivos)
-    .filter((p) => !categoria || p.categoria_id === Number(categoria))
-    .filter((p) => coincide(p.nombre, busqueda) || coincide(p.codigo, busqueda));
+  const visibles = (productos ?? []).filter((p) => p.activo === verActivos);
 
   return (
     <section>
@@ -61,8 +75,8 @@ export default function Productos({ irA }) {
       <Confirmacion confirmacion={confirmacion} />
 
       <div className="barra">
-        <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar por nombre o código" />
-        <select className="filtro" value={categoria} onChange={(e) => setCategoria(e.target.value)} aria-label="Categoría">
+        <Buscador valor={filtros.texto} alCambiar={(texto) => setFiltros({ ...filtros, texto })} placeholder="Buscar por nombre o código" />
+        <select className="filtro" value={filtros.categoria_id} onChange={filtrar("categoria_id")} aria-label="Categoría">
           <option value="">Todas las categorías</option>
           {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
@@ -71,9 +85,25 @@ export default function Productos({ irA }) {
           { valor: false, texto: "De baja", contador: deBaja },
         ]} />
       </div>
+      <div className="barra filtros">
+        <label>Proveedor
+          <select value={filtros.proveedor_id} onChange={filtrar("proveedor_id")}>
+            <option value="">Todos</option>
+            {proveedores.map((pr) => <option key={pr.id} value={pr.id}>{pr.razon_social}</option>)}
+          </select>
+        </label>
+        <label>Precio desde
+          <input type="number" min="0" value={filtros.precio_desde} onChange={filtrar("precio_desde")} placeholder="$" />
+        </label>
+        <label>Precio hasta
+          <input type="number" min="0" value={filtros.precio_hasta} onChange={filtrar("precio_hasta")} placeholder="$" />
+        </label>
+        {hayFiltros && <button className="fantasma" onClick={() => setFiltros(SIN_FILTROS)}>Limpiar filtros</button>}
+      </div>
 
       {productos === null ? <Cargando /> : visibles.length === 0 ? (
-        busqueda || categoria ? <Vacio icono="🔍" titulo="Ningún producto coincide" texto="Probá con otra búsqueda u otra categoría." />
+        hayFiltros ? <Vacio icono="🔍" titulo="Ningún producto coincide con los filtros" texto="Probá con otros valores o tocá «Limpiar filtros»."
+          accion="Limpiar filtros" alAccionar={() => setFiltros(SIN_FILTROS)} />
           : !verActivos ? <Vacio icono="✨" titulo="No hay productos dados de baja" />
             : categorias.length === 0
               ? <Vacio icono="🏷️" titulo="Primero creá una categoría" texto="Todo producto pertenece a una categoría."
@@ -108,7 +138,7 @@ export default function Productos({ irA }) {
       )}
 
       {editando && (
-        <CajonProducto producto={editando} categorias={categorias} ejecutar={ejecutar} irA={irA}
+        <CajonProducto producto={editando} categorias={categorias} todosLosProveedores={proveedores} ejecutar={ejecutar} irA={irA}
           alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); cargar(); }}
           alDarDeBaja={() => pedirBaja(editando)} />
       )}
@@ -116,10 +146,12 @@ export default function Productos({ irA }) {
   );
 }
 
-function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuardar, alDarDeBaja }) {
+function CajonProducto({ producto, categorias, todosLosProveedores, ejecutar, irA, alCerrar, alGuardar, alDarDeBaja }) {
   const nuevo = !producto.id;
   const [form, setForm] = useState(nuevo ? VACIO : { ...producto, categoria_id: String(producto.categoria_id) });
-  const [proveedores, setProveedores] = useState(null);
+  const [proveedores, setProveedores] = useState(null);   // los que ya lo venden (al editar)
+  const [elegidos, setElegidos] = useState([]);           // los que se tildan al crearlo
+  const alternarProveedor = (id) => setElegidos((actual) => (actual.includes(id) ? actual.filter((x) => x !== id) : [...actual, id]));
   const parecidos = useParecidos();
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
@@ -137,7 +169,8 @@ function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuarda
       };
       // Al modificar no se manda el código: es la identidad del producto
       const ok = nuevo
-        ? await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos }), `Producto «${form.nombre.trim()}» creado`)
+        ? await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos, proveedor_ids: elegidos }),
+          `Producto «${form.nombre.trim()}» creado`)
         : await ejecutar(() => api.modificar(`/productos/${producto.id}`, datos), "Cambios guardados");
       if (ok) alGuardar();
     });
@@ -176,6 +209,20 @@ function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuarda
           <input type="number" min="0" step="1" value={form.stock_minimo} onChange={cambiar("stock_minimo")} />
           <span className="ayuda-campo">Si en algún lugar queda menos que esto, aparece como «Reponer».</span>
         </label>
+        {nuevo && (
+          <div>
+            <span className="etiqueta-campo">¿Quién lo vende? <span className="ayuda-campo">(opcional, se puede asignar después)</span></span>
+            {todosLosProveedores.length === 0 && <p className="nota">Todavía no hay proveedores cargados.</p>}
+            <div className="lista-tildes">
+              {todosLosProveedores.map((pr) => (
+                <label key={pr.id} className="check">
+                  <input type="checkbox" checked={elegidos.includes(pr.id)} onChange={() => alternarProveedor(pr.id)} />
+                  {pr.razon_social}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </form>
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar} alCancelar={parecidos.descartar} />
 

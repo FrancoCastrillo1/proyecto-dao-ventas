@@ -1,9 +1,13 @@
-# Guía para el oral: State, Strategy y las decisiones del TP
+# Guía para el oral: patrones y decisiones del TP
 
-Cada integrante tiene que poder explicar los dos patrones y defender las
-decisiones de diseño. Esta guía arma la explicación en el orden en que
-conviene contarla: **qué problema hay → cómo lo resuelve el patrón → dónde
-está en el código → qué preguntas pueden venir**.
+Cada integrante tiene que poder explicar los tres patrones (State, Strategy y
+Template Method) y defender las decisiones de diseño. Esta guía arma la
+explicación en el orden en que conviene contarla: **qué problema hay → cómo
+lo resuelve el patrón → dónde está en el código → qué preguntas pueden venir**.
+
+Material de apoyo: [diagramas.md](diagramas.md) (clases y estados, con imágenes
+en `docs/img/`), [patrones.md](patrones.md) (tabla de todos los patrones) y
+[guion_demo.md](guion_demo.md) (la demo de 5 minutos).
 
 ---
 
@@ -127,7 +131,78 @@ def cobrar(self, medio, monto_entregado=None):
 
 ---
 
-## 3. Otras decisiones que conviene saber defender
+## 3. Patrón Template Method: comprobante, nota de crédito y remito
+
+### El problema
+Cada venta tiene su comprobante, cada devolución su nota de crédito y cada
+envío su remito, los tres en PDF. Se arman igual —datos del comercio y del
+local, número, renglones, totales y notas al pie— y cambian solo en el
+contenido. Con funciones sueltas, el encabezado y los totales se repiten y un
+cambio de formato se hace tres veces.
+
+### La solución
+Una clase abstracta define el **método plantilla** con el orden fijo y llama a
+pasos que cada hija completa.
+
+| Pieza del patrón | En el TP |
+|---|---|
+| **Clase abstracta con el método plantilla** | `DocumentoComercial.armar()` en `backend/dominio/documentos.py` |
+| **Pasos comunes (heredados)** | `encabezado()`, `notas_comunes()` |
+| **Pasos que redefine cada hija** | `titulo()`, `codigo()`, `fecha()`, `renglones()`, `totales()`, `prefijo_archivo()` |
+| **Ganchos (hooks)** | `notas()` (por defecto, ninguna), `columnas()` (por defecto Producto, Cant., Precio, Importe) y `etiqueta_responsable()` (por defecto "Atendió"): tienen un valor por defecto y un documento los redefine solo si lo necesita |
+| **Clases concretas** | `ComprobanteVenta`, `NotaCredito`, `RemitoDocumento` |
+
+- El **remito** (sumado el 26/10) fue la prueba de que el patrón sirve: se
+  agregó una hija nueva y `armar()` no se tocó. Redefine los ganchos para
+  mostrar bulto y precinto en vez de precio, y "Preparó" en vez de "Atendió".
+  Se descarga recién despachado, porque antes no es definitivo.
+
+- `armar()` devuelve un `ContenidoDocumento` (qué dice el papel). El PDF lo
+  dibuja `servicios/documentos_pdf.py` con fpdf2, **sin saber qué documento
+  es**: el dominio no conoce la librería.
+- La nota de crédito se numera correlativa por local como el comprobante
+  (`NC 0002-00000001`), y en la base un trigger impide repetir el número.
+
+### Preguntas que pueden venir
+- **¿En qué se diferencia de Strategy?** Template Method usa **herencia**: la
+  plantilla está en el padre y las hijas completan pasos. Strategy usa
+  **composición**: la venta tiene una estrategia que se puede cambiar.
+- **¿Cómo agregarían un presupuesto?** Una hija más que defina los pasos;
+  `armar()` y el dibujo del PDF no se tocan (hay un test que lo hace).
+- **¿Por qué el PDF no está en el dominio?** Porque es cómo se ve, no una
+  regla: el dominio arma el contenido y otra capa lo dibuja.
+
+---
+
+## 4. Usuarios y perfiles: polimorfismo por capacidades
+
+### El problema
+Hay tres perfiles: **administrador** (maneja los datos: locales, productos,
+proveedores, usuarios), **CD** (compra, prepara y despacha) y **local** (pide,
+recibe, vende). Cada uno puede hacer cosas distintas y ver solo lo suyo.
+
+### La solución
+`Usuario` es abstracta, con `UsuarioAdministrador`, `UsuarioCD` y
+`UsuarioSucursal` (`backend/dominio/usuarios.py`). Cada perfil **responde qué
+puede hacer**: `puede_vender()`, `puede_preparar_envios()`,
+`puede_gestionar_maestros()`, `ve_toda_la_red()`… Por defecto todo da `False`
+y cada hija redefine lo suyo (igual que los estados del bulto).
+
+- La api pide la capacidad en cada ruta: `Depends(requiere("puede_vender"))`
+  (`backend/api/dependencias.py`). Si algo es de otro local: 403 "Ese remito
+  no es de tu local".
+- El front arma el menú con las capacidades que devuelve `/auth/yo`.
+- **No hay ningún `if perfil == ...`**: un perfil nuevo es una clase más.
+- El local de una venta o un pedido sale del usuario que entró, nunca del
+  formulario.
+- Login con contraseña: hash PBKDF2 con sal (nunca en texto) y un token del
+  que la base guarda solo el hash, con vencimiento de 10 horas.
+- Cada operación graba quién la hizo (`usuario_id`); en el historial del
+  bulto lo graba el DAO, así el patrón State no se tocó.
+
+---
+
+## 5. Otras decisiones que conviene saber defender
 
 | Pregunta | Respuesta corta |
 |---|---|
@@ -139,16 +214,18 @@ def cobrar(self, medio, monto_entregado=None):
 | ¿Cuándo sale del CD? | Al despachar el remito, todo en una transacción: si un producto no alcanza, no se despacha nada. |
 | ¿Por qué baja lógica? | Las ventas y los remitos apuntan a los maestros; si se borraran, la historia quedaría rota. Lo dado de baja se puede reactivar. |
 | ¿Cómo garantizan las validaciones? | En tres lugares: dominio (formato y estados), service (lo que necesita consultar la base) y base (UNIQUE, CHECK, claves foráneas y triggers). `tests/test_validaciones_consigna.py` prueba las 5 de la consigna. |
+| ¿Por qué un administrador aparte? | Administrar los datos y operar son tareas distintas. El administrador no tiene ubicación (lo controla un CHECK en la base) y no se puede dar de baja al último. |
+| ¿Productos duplicados? | El código (SKU) es único, y además dos productos **activos** no pueden llamarse igual (sin importar mayúsculas ni tildes): índice único parcial en la base. |
+| ¿Se puede dar de baja un producto con stock? | No: quedaría mercadería que no aparece en ninguna lista. Lo controla el dominio con el dato que cuenta el service, y un trigger en la base. |
+| ¿Qué datos del transporte guardan? | Solo la llegada estimada (día y hora), obligatoria al despachar. Sirve para que el local sepa cuándo llega y para marcar los envíos demorados. |
+| ¿Qué es la bandeja de Inicio? | `GET /tareas` arma lo pendiente según las capacidades del usuario: el CD ve qué preparar y despachar; el local, qué recibir, verificar y reponer (con el pedido ya cargado). |
 
-## 4. Para practicar antes del oral
+## 6. Para practicar antes del oral
 1. Correr `.venv\Scripts\python -m backend.datos.seed --reiniciar` y levantar
    back y front.
-2. En **Logística**, abrir el remito de la Sucursal Sur (en tránsito):
-   recibir el bulto y verificarlo con el precinto correcto. Ver cómo el
-   historial suma los registros y el stock del local aumenta.
-3. Intentar verificar con otro número de precinto en un remito nuevo y ver
-   el rechazo en el reporte de **Mermas**.
-4. En **Ventas**, vender lo mismo con efectivo y con crédito y comparar los
-   totales: es la Strategy funcionando.
-5. Abrir `estados_bulto.py` y `medios_pago.py` y explicarlos en voz alta
-   con la tabla "Pieza del patrón → En el TP".
+2. Hacer la demo de [guion_demo.md](guion_demo.md) entera, cronometrada.
+3. Explicar en voz alta los diagramas de [diagramas.md](diagramas.md): el de
+   estados del bulto y el de clases de logística.
+4. Abrir `estados_bulto.py`, `medios_pago.py` y `documentos.py` y explicarlos
+   con la tabla "Pieza del patrón → En el TP" de cada uno.
+5. Responder las preguntas de [patrones.md](patrones.md) sin mirar.

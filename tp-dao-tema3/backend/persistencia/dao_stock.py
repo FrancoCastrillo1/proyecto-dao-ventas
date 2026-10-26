@@ -39,11 +39,12 @@ class StockDAO:
         return Stock(producto_id, ubicacion_id, stock_minimo=fila["stock_minimo"],
                      cantidad=fila["cantidad"] or 0, id=fila["id"])
 
-    def guardar(self, cx, stock):
+    def guardar(self, cx, stock, usuario_id=None):
         """Guarda la cantidad y agrega al libro los movimientos del objeto.
         Un Stock leído con obtener() arranca sin movimientos, así que los que
         tiene son los de esta operación: se guarda una vez por operación.
-        Al libro solo se le hacen INSERT, nunca UPDATE ni DELETE."""
+        Al libro solo se le hacen INSERT, nunca UPDATE ni DELETE.
+        usuario_id es quién hizo la operación (None en las de antes de los usuarios)."""
         if stock.id is None:
             cur = cx.execute(
                 "INSERT INTO stock (producto_id, ubicacion_id, cantidad) VALUES (?, ?, ?)",
@@ -53,8 +54,8 @@ class StockDAO:
         else:
             cx.execute("UPDATE stock SET cantidad = ? WHERE id = ?", (stock.cantidad, stock.id))
         cx.executemany(
-            "INSERT INTO movimientos_stock (stock_id, fecha, cantidad, tipo, referencia) VALUES (?, ?, ?, ?, ?)",
-            [(stock.id, m.fecha.isoformat(sep=" ", timespec="seconds"), m.cantidad, m.tipo.value, m.referencia)
+            "INSERT INTO movimientos_stock (stock_id, fecha, cantidad, tipo, referencia, usuario_id) VALUES (?, ?, ?, ?, ?, ?)",
+            [(stock.id, m.fecha.isoformat(sep=" ", timespec="seconds"), m.cantidad, m.tipo.value, m.referencia, usuario_id)
              for m in stock.movimientos],
         )
         return stock

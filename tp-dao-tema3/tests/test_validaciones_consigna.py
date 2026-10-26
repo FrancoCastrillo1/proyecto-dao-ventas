@@ -3,6 +3,7 @@
 # para la defensa: cada test dice qué regla cumple y dónde se aplica.
 # (Los casos borde de cada regla están en los tests de cada módulo.)
 import sqlite3
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -50,7 +51,7 @@ def bulto_despachado(s, cantidad=10):
     remito = s.repo.crear_remito(s.repo.crear_orden([pedido.id_pedido]).id_orden, s.local.id)
     bulto = s.repo.agregar_bulto(remito.id_remito, [(s.coca.id, cantidad)])
     s.repo.precintar(bulto.id_bulto, f"P-{bulto.id_bulto}")
-    s.repo.despachar(remito.id_remito)
+    s.repo.despachar(remito.id_remito, datetime.now() + timedelta(days=1))
     return bulto.id_bulto
 
 

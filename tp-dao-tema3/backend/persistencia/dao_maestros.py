@@ -74,15 +74,21 @@ class ProductoDAO:
             activo=bool(fila["activo"]),
         )
 
-    def crear(self, producto):
+    def crear(self, producto, proveedor_ids=()):
+        # El producto y sus proveedores en la misma conexión: si algo falla,
+        # se deshace todo y no queda un producto a medio cargar
         with self._conn() as cx:
             cur = cx.execute(
-                "INSERT INTO productos (codigo, nombre, categoria_id, precio_venta, costo, stock_minimo, activo) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (producto.codigo, producto.nombre, producto.categoria_id, producto.precio_venta,
-                 producto.costo, producto.stock_minimo, int(producto.activo)),
+                "INSERT INTO productos (codigo, nombre, nombre_normalizado, categoria_id, precio_venta, costo, "
+                "stock_minimo, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (producto.codigo, producto.nombre, producto.nombre_normalizado, producto.categoria_id,
+                 producto.precio_venta, producto.costo, producto.stock_minimo, int(producto.activo)),
             )
             producto.id = cur.lastrowid
+            cx.executemany(
+                "INSERT INTO producto_proveedor (proveedor_id, producto_id) VALUES (?, ?)",
+                [(proveedor_id, producto.id) for proveedor_id in proveedor_ids],
+            )
         return producto
 
     def obtener_por_id(self, id):
@@ -94,6 +100,21 @@ class ProductoDAO:
         with self._conn() as cx:
             fila = cx.execute("SELECT * FROM productos WHERE codigo = ?", (codigo,)).fetchone()
         return self._a_objeto(fila) if fila else None
+
+    # El producto ACTIVO que se llama así (sin importar mayúsculas ni tildes), o None
+    def obtener_activo_por_nombre(self, nombre_normalizado):
+        with self._conn() as cx:
+            fila = cx.execute(
+                "SELECT * FROM productos WHERE nombre_normalizado = ? AND activo = 1", (nombre_normalizado,)
+            ).fetchone()
+        return self._a_objeto(fila) if fila else None
+
+    # Cuántas unidades del producto hay, sumando todas las ubicaciones
+    def unidades_en_stock(self, producto_id):
+        with self._conn() as cx:
+            return cx.execute(
+                "SELECT COALESCE(SUM(cantidad), 0) FROM stock WHERE producto_id = ?", (producto_id,)
+            ).fetchone()[0]
 
     def listar(self, solo_activos=True, categoria_id=None):
         sql = "SELECT * FROM productos WHERE 1 = 1"
@@ -108,14 +129,42 @@ class ProductoDAO:
             filas = cx.execute(sql, parametros).fetchall()
         return [self._a_objeto(f) for f in filas]
 
+    def buscar(self, filtro):
+        """Traduce un FiltroProductos del dominio a SQL. Cada criterio que
+        viene suma una condición; el texto se busca en el nombre (normalizado)
+        o en el código."""
+        sql = "SELECT * FROM productos p WHERE 1 = 1"
+        parametros = []
+        if not filtro.incluir_bajas:
+            sql += " AND p.activo = 1"
+        if filtro.texto:
+            sql += " AND (p.nombre_normalizado LIKE ? OR p.codigo LIKE ?)"
+            parametros += [f"%{filtro.texto}%", f"%{filtro.texto_en_codigo()}%"]
+        if filtro.categoria_id is not None:
+            sql += " AND p.categoria_id = ?"
+            parametros.append(filtro.categoria_id)
+        if filtro.proveedor_id is not None:
+            sql += " AND EXISTS (SELECT 1 FROM producto_proveedor pp WHERE pp.producto_id = p.id AND pp.proveedor_id = ?)"
+            parametros.append(filtro.proveedor_id)
+        if filtro.precio_desde is not None:
+            sql += " AND p.precio_venta >= ?"
+            parametros.append(filtro.precio_desde)
+        if filtro.precio_hasta is not None:
+            sql += " AND p.precio_venta <= ?"
+            parametros.append(filtro.precio_hasta)
+        sql += " ORDER BY p.nombre"
+        with self._conn() as cx:
+            filas = cx.execute(sql, parametros).fetchall()
+        return [self._a_objeto(f) for f in filas]
+
     # El código no se actualiza: es la identidad del producto
     def actualizar(self, producto):
         with self._conn() as cx:
             cx.execute(
-                "UPDATE productos SET nombre = ?, categoria_id = ?, precio_venta = ?, costo = ?, "
-                "stock_minimo = ?, activo = ? WHERE id = ?",
-                (producto.nombre, producto.categoria_id, producto.precio_venta, producto.costo,
-                 producto.stock_minimo, int(producto.activo), producto.id),
+                "UPDATE productos SET nombre = ?, nombre_normalizado = ?, categoria_id = ?, precio_venta = ?, "
+                "costo = ?, stock_minimo = ?, activo = ? WHERE id = ?",
+                (producto.nombre, producto.nombre_normalizado, producto.categoria_id, producto.precio_venta,
+                 producto.costo, producto.stock_minimo, int(producto.activo), producto.id),
             )
         return producto
 

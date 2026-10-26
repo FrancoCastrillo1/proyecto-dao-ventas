@@ -20,6 +20,9 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 - 8 ventas y 2 devoluciones.
 
 **Cómo está armada la pantalla:**
+
+- Desde el paso 3 se entra con usuario y contraseña. Usuarios del seed (contraseña de todos: `tpdao2026`): `admin` (Administrador), `cd.central` (CD), `centro`, `norte` y `sur` (un usuario por local).
+- Cada perfil ve solo sus pantallas: el administrador maneja los datos, el CD prepara los envíos y cada local pide, recibe y vende. Arriba del menú dice quién entró, con el botón **Salir**.
 - A la izquierda está el menú. "Operación" es el día a día; "Datos" son los maestros.
 - Arriba a la derecha de cada pantalla está el botón de lo principal que se hace ahí (`+ Nuevo…`).
 - Crear, editar o ver el detalle de algo abre un **panel a la derecha**. Se cierra con la ×, con Escape o tocando afuera.
@@ -27,7 +30,54 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ---
 
+## 0. Entrar con cada perfil (paso 3)
+
+- [s] **0.1 Hacé:** abrí la app.
+  **Debería:** aparecer solo la pantalla "Entrar", sin menú.
+- [s ] **0.2 Hacé:** entrá con `norte` y la contraseña `otra-clave`.
+  **Debería:** salir "Usuario o contraseña incorrectos" (no dice cuál de los dos está mal) y borrarse la contraseña.
+- [s ] **0.3 Hacé:** entrá con `norte` / `tpdao2026`.
+  **Debería:** decir "Hola, Nico" y "Lo que está pasando hoy en Sucursal Norte". Menú: Inicio, Vender, Envíos, Stock, Reportes (sin Datos).
+- [ s] **0.4 Hacé:** recargá la página (F5).
+  **Debería:** seguir adentro. Cerrá la pestaña, abrí otra en http://localhost:5173: tiene que pedir entrar de nuevo.
+- [ ] **0.5 Hacé:** "Salir" y entrá con `cd.central`.
+  **Debería:** menú Inicio, Envíos, Stock, Reportes (sin Vender ni Datos). En Inicio no aparece "Ventas de hoy" y en Reportes no están "Ventas" ni "Más vendidos". (Nota del 23/10: "la cd puede ver las ventas de las sucursales en reportes, aparte aparece ventas hoy". Arreglado el 26/10: volvé a probarlo.)
+- [ s] **0.6 Hacé:** "Salir" y entrá con `admin`.
+  **Debería:** menú Inicio, Stock, Reportes y todo "Datos", incluido **Usuarios** (sin Vender ni Envíos).
+- [ s] **0.7 Hacé:** como `admin`, Usuarios → "+ Nuevo usuario" → Local, Sucursal Sur, "Pablo Pérez", usuario `pablo.sur`, contraseña `clave-de-pablo` → Crear usuario.
+  **Debería:** salir "Usuario «pablo.sur» creado: ya puede entrar". Después, entrar como `pablo.sur` funciona.
+- [ s] **0.8 Hacé:** como `admin`, abrí a Pablo → "Cambiar la contraseña" con `corta`.
+  **Debería:** salir que tiene que tener al menos 8 caracteres.
+- [ s] **0.9 Hacé:** como `admin`, dale de baja a Pablo y probá entrar como `pablo.sur`.
+  **Debería:** "Usuario o contraseña incorrectos". En "De baja" se lo puede reactivar.
+- [s ] **0.10 Hacé:** como `admin`, abrite a vos misma (dice "Vos") → "Dar de baja".
+  **Debería:** salir que no se puede dar de baja al único administrador activo.
+
+## 0b. Bandeja "Para hacer" y llegada estimada (paso 6)
+
+> Empezá con la base recién cargada (seed).
+
+- [s ] **0b.1 Hacé:** entrá como `sur`.
+  **Debería:** ver arriba "Para hacer" con "Recibir el envío #3 (1 bulto) · Llega …" y "Pedir N productos bajo el mínimo", cada uno con su botón.
+- [s ] **0b.2 Hacé:** tocá "Pedir →".
+  **Debería:** abrirse Envíos con el pedido ya cargado ("Ya está cargado lo que te falta para llegar al mínimo"). Crealo.
+- [s ] **0b.3 Hacé:** volvé a Inicio.
+  **Debería:** desaparecer la tarea de pedir (lo que ya está pedido no se vuelve a sugerir).
+- [ s] **0b.4 Hacé:** salí y entrá como `cd.central`.
+  **Debería:** ver "Preparar 1 pedido de locales · Sucursal Sur". Tocá "Preparar →", prepará el pedido, armá el bulto con "Cargar lo que falta" y precintalo. (al precintar me gustaria que sea un precintado secuencial, ya preestablecido)
+- [ s] **0b.5 Hacé:** mirá el pie del remito.
+  **Debería:** aparecer "Llegada estimada al local" con mañana a las 12. Si la borrás, "Despachar" se deshabilita; si ponés una hora pasada, el back responde que tiene que ser posterior al despacho.
+- [s ] **0b.6 Hacé:** despachá.
+  **Debería:** la confirmación decir la llegada estimada, y la tarjeta en "En camino" mostrar "llega …".
+- [s ] **0b.7 Hacé:** entrá como `norte` → Stock.
+  **Debería:** aparecer "Pedir lo que falta (N)" arriba, y cada "Reponer →" de la tabla como botón que abre el pedido con ese producto.
+- [Despues se vera ] **0b.8 (opcional) Hacé:** con un envío en camino cuya llegada estimada ya pasó, entrá como el local destino.
+  **Debería:** la tarea de recibir salir primera, en rojo, con "Demorado", y la tarjeta en "En camino" con la etiqueta "Demorado".
+
+
 ## 1. Inicio
+
+> Entrá como `admin`: es el que ve todos los indicadores.
 
 - [ CHECK] **1.1 Hacé:** abrí la app.
   **Debería:** verse 4 tarjetas con números (ventas de hoy, pedidos sin preparar, envíos en camino, faltantes para reponer) y abajo 4 accesos rápidos.
@@ -38,6 +88,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
   **Debería:** aparecer "No hay conexión con el sistema", con el comando para levantarlo.
 
 ## 2. Locales y CD (Datos → Locales y CD)
+
+> Entrá como `admin`.
 
 - [ CHECK] **2.1 Hacé:** entrá a la pantalla.
   **Debería:** verse *CD Central* con la etiqueta "Despacha", y los 3 locales con "Vende" y "Recibe". (esto igual hay que cambiarlo porque tendriamos que manejar los perfiles de sucursales y de cd)
@@ -62,6 +114,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 
 ## 3. Categorías y productos (Datos)
 
+> Entrá como `admin`.
+
 - [ check] **3.1 Hacé:** en Categorías, "+ Nueva categoría" → "lacteos" → Crear.
   **Debería:** salir un error de que ya existe (*Lácteos*), aunque no tenga tilde ni mayúscula. (si deja esta bien, pero aparece error 409, un usuario normal no va a entender que es error 409)
 - [check ] **3.2 Hacé:** escribí "lim" en el buscador.
@@ -79,7 +133,28 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
 - [Check] **3.8 Hacé:** tocá la fila de *Aceite de Girasol*.
   **Debería:** abrirse el panel sin el campo código (el código va en el subtítulo y no se cambia), y abajo "Quién lo vende" con *Mayorista Norte SA*.
 
+## 3b. Reglas del producto y filtros (paso 4)
+
+> Entrá como `admin` → Productos.
+
+- [ s] **3b.1 Hacé:** escribí "lác" en el buscador.
+  **Debería:** quedar *Leche Entera 1L* y *Yogur Bebible 1L (promo)* (busca sin importar tildes, en el nombre y en el código).
+- [ s] **3b.2 Hacé:** "Limpiar filtros", elegí el proveedor *Mayorista Norte SA* y poné "Precio desde" 2000.
+  **Debería:** quedar *Aceite de Girasol 1.5L* y *Arroz Largo Fino 1kg*.
+- [s ] **3b.3 Hacé:** poné "Precio desde" 5000 y "Precio hasta" 1000.
+  **Debería:** salir que el precio «desde» no puede ser mayor que el «hasta».
+- [s ] **3b.4 Hacé:** "+ Nuevo producto" con código `TST-001` y nombre `agua MINERAL 1.5l`.
+  **Debería:** salir "Ya existe el producto 'Agua Mineral 1.5L' (código BEB-002)": dos productos activos no se llaman igual.
+- [ s] **3b.5 Hacé:** abrí *Aceite de Girasol 1.5L* → "Dar de baja" → confirmá.
+  **Debería:** salir "No se puede dar de baja 'Aceite de Girasol 1.5L': todavía quedan … unidades en stock". Sigue en "Activos".
+- [s ] **3b.6 Hacé:** creá un producto `TST-002` "Producto de prueba" (sin stock) y dalo de baja. Después creá otro `TST-003` con el mismo nombre.
+  **Debería:** dejar las dos cosas: un producto de baja libera su nombre. Si intentás reactivar `TST-002`, sale que el nombre ya lo usa otro.
+- [ ] **3b.7 Hacé:** "+ Nuevo producto" `TST-004`, y en "¿Quién lo vende?" tildá *Distribuidora Sur SA* y *Láctea del Valle SRL* → Crear producto.
+  **Debería:** crearse ya con esos dos proveedores (abrilo y fijate en la sección de proveedores; en Proveedores, cada uno lo tiene en "Productos que vende"). Sin tildar ninguno también se puede. (Nuevo el 26/10.)
+
 ## 4. Proveedores (Datos → Proveedores)
+
+> Entrá como `admin`.
 
 - [check ] **4.1 Hacé:** "+ Nuevo proveedor" con CUIT `20-12345678-5`. (funciona pero de vuelta, primero no explica q esta mal, y ademas tira el numero del codigo 400 que un usuario no sabe q es )
   **Debería:** salir un error de CUIT inválido (el dígito verificador no da). 
@@ -94,6 +169,8 @@ Andá en orden: algunos pasos usan lo que creaste en uno anterior.
   **Debería:** volver al desplegable.
 
 ## 5. Pedido de un local y preparación (Operación → Envíos a locales)
+
+> Desde el paso 3: el pedido lo hace el **local** (entrá como `norte`, ya no se elige el local) y el que lo prepara es el **CD** (`cd.central`).
 
 La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercadería:
 **Pedidos de locales → Armando en el CD → En camino → Entregados**.
@@ -115,6 +192,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   (funciona pero como vnego diciendo habria que ir manejando esto en perfiles diferentes)
 
 ## 6. Bultos con remito y precinto (Envíos, columna "Armando en el CD")
+
+> Entrá como `cd.central`.
 
 - [ check ] **6.1 Hacé:** tocá la tarjeta de *Sucursal Norte*.
   **Debería:** abrirse el remito, con una tabla "Lo que pidió el local": Lavandina, Pidió 10, En bultos 0, Falta 10. 
@@ -140,6 +219,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ## 7. Despacho
 
+> Entrá como `cd.central`.
+
 - [check ] **7.1 Hacé:** antes de despachar, en Stock → *CD Central*, anotá cuántas *Lavandina 1L* hay.
   **Debería:** verse un número (llamalo X).
 - [check ] **7.2 Hacé:** volvé al remito y tocá "Despachar →".
@@ -148,8 +229,12 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** salir "Despachado: el envío está en camino"; el panel se cierra y la tarjeta pasa a "En camino" con una barra de progreso en 0 de 2.
 - [check] **7.4 Hacé:** mirá Stock → *CD Central*.
   **Debería:** haber X − 10 Lavandinas. En "Ver movimientos" aparece "Despacho a un local −6" y "−4".
+- [ ] **7.5 Hacé:** abrí el envío que acabás de despachar (columna "En camino") y tocá "⬇ Remito PDF".
+  **Debería:** bajarse `remito-0001-0000000X.pdf` con el CD, el número, cada producto con su bulto y su precinto, el total de bultos y unidades, el destino, la llegada estimada y "Preparó: Carlos del CD". Mientras el remito se está armando, el botón no aparece. El local destino también lo puede bajar. (Nuevo el 26/10.)
 
 ## 8. Recepción verificando el precinto
+
+> Recibe y verifica **el local destino**: entrá como `sur` (8.1 a 8.4) y como `norte` (8.5 y 8.6). El CD ve el envío pero no tiene los botones de recibir.
 
 - [ check] **8.1 Hacé:** abrí la tarjeta de *Sucursal Sur* en "En camino" (es la del seed).
   **Debería:** verse su bulto en **En camino**, con el botón "Marcar como recibido".
@@ -171,32 +256,54 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ## 9. Ventas, cobro, comprobante y devoluciones (Operación → Vender)
 
+> Entrá como `sur`: vende en su local, ya no se elige (la 9.1 no aplica).
+
 - [ ] **9.1 Hacé:** entrá a Vender y elegí *Sucursal Sur* arriba.
   **Debería:** verse los productos como tarjetas con precio y "Hay N". Los que no tienen stock aparecen apagados con "Sin stock" y no se pueden tocar.
-- [ ] **9.2 Hacé:** tocá *Agua Mineral*.
+- [s ] **9.2 Hacé:** tocá *Agua Mineral*.
   **Debería:** sumarse al ticket de la derecha con − 1 +, y "Elegí cómo paga".
-- [ ] **9.3 Hacé:** tocá cada medio de pago.
+- [s ] **9.3 Hacé:** tocá cada medio de pago.
   **Debería:** el total cambiar solo:
   - Efectivo: $ 1.020 (descuento 15 %);
   - Débito y Transferencia: $ 1.200;
   - Crédito: $ 1.320 (recargo 10 %).
-- [ ] **9.4 Hacé:** en Efectivo, "¿Con cuánto paga?" $ 5000.
-  **Debería:** aparecer "Vuelto $ 3.980" en verde, y el botón decir "Cobrar $ 1.020,00".
-- [ ] **9.5 Hacé:** cambiá a $ 500.
+- [ ] **9.4 Hacé:** en Efectivo, "¿Con cuánto paga?" $ 5000. Probá también escribir letras.
+  **Debería:** aparecer "Vuelto $ 3.980" en verde, y el botón decir "Cobrar $ 1.020,00". Las letras no entran (solo números). (Nota del 23/10: "no debería dejar poner letras". Arreglado el 26/10.)
+- [ S] **9.5 Hacé:** cambiá a $ 500.
   **Debería:** aparecer "Con lo que entrega no alcanza" y el botón de cobrar quedar deshabilitado.
-- [ ] **9.6 Hacé:** tocá + en el ticket hasta pasar lo que hay.
+- [ S] **9.6 Hacé:** tocá + en el ticket hasta pasar lo que hay.
   **Debería:** la tarjeta decir "Hay N · M en el ticket"; al pasarte, abajo del producto aparece en rojo "Solo hay N" y el botón de cobrar se deshabilita.
 - [ ] **9.7 Hacé:** dejá 1 agua, $ 5000 en efectivo → Cobrar.
   **Debería:**
-  - abrirse el **comprobante** (número, producto, descuento, total y vuelto);
+  - abrirse el **comprobante** (número, producto, descuento y total; el vuelto ya no aparece, ni en pantalla ni en el PDF: arreglado el 26/10);
   - el ticket queda vacío;
   - la venta aparece arriba en la lista y la caja sube.
-- [ ] **9.8 Hacé:** "Ver" en una venta → devolvé 1 unidad con motivo "Vencido".
+- [S ] **9.8 Hacé:** "Ver" en una venta → devolvé 1 unidad con motivo "Vencido".
   **Debería:** la venta mostrar lo devuelto y la caja bajar.
 - [ ] **9.9 Hacé:** intentá devolver más de lo que se vendió.
-  **Debería:** salir un error.
+  **Debería:** salir algo como "No se puede devolver más de lo que se vendió: de 'Agua Mineral 1.5L' se vendieron 2, así que se pueden devolver hasta 2 y se pidieron 3" (los números dependen de la venta; si ya se devolvió algo, lo aclara entre paréntesis). (Arreglado el 26/10: antes el error no era claro.)
+
+## 9b. Comprobante y nota de crédito en PDF (paso 5)
+
+> Entrá como `centro`.
+
+- [S ] **9b.1 Hacé:** vendé algo y, en el comprobante que se abre, tocá "⬇ Descargar PDF".
+  **Debería:** bajarse `comprobante-0002-0000000X.pdf` con: el comercio (Minorista del Centro S.A., CUIT), el local, el número, los productos, el descuento o recargo del medio de pago, el total destacado y "Atendió: Lucía de Centro".
+- [S ] **9b.2 Hacé:** en la lista de ventas abrí la `0002-00000002` (la del seed que tiene una devolución).
+  **Debería:** aparecer "NC 0002-00000001" en "Devoluciones anteriores", con su botón "⬇ PDF".
+- [ S] **9b.3 Hacé:** tocá "⬇ PDF" de esa devolución.
+  **Debería:** bajarse `nota-credito-0002-00000001.pdf` con lo devuelto, el total reintegrado, la venta de origen y el motivo.
+- [ ] **9b.4 Hacé:** registrá una devolución nueva en otra venta del local.
+  **Debería:** salir con la nota de crédito siguiente del local (`NC 0002-00000002`); en Norte la numeración arranca aparte.
+- [ ] **9b.5 Hacé:** con el `id` de una venta de Centro, entrá como `norte` y abrí en otra pestaña `http://localhost:5173/api/ventas/<id>/comprobante.pdf`.
+  **Debería:** no bajar nada (sin token: 401). Por la app, un local nunca ve las ventas de otro.
+
+
+  EL TEMA DE LAS DEVOLUCIONES ESTA MUY RARO,HAY QUE REVEERLO
 
 ## 10. Stock (Operación → Stock)
+
+> Como `cd.central` o `admin` se elige la ubicación; como un local, ves solo el tuyo. "+ Registrar compra" aparece solo para `cd.central`.
 
 - [ ] **10.1 Hacé:** cambiá de ubicación con los botones de arriba.
   **Debería:** que "+ Registrar compra" aparezca **solo** en *CD Central*. En un local aparece "A este local la mercadería le entra cuando verifica un envío del CD" con el enlace a Envíos.
@@ -207,15 +314,21 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ## 11. Reportes (Operación → Reportes)
 
-- [ ] **11.1 Hacé:** recorré las 5 pestañas.
+> Como `admin` o `cd.central` se ve toda la red; como un local, solo lo tuyo (no aparece el filtro de local).
+
+- [ S] **11.1 Hacé:** recorré las 5 pestañas.
   **Debería:** cambiar el subtítulo con la pregunta que responde cada reporte, y verse tarjetas con totales y una tabla.
-- [ ] **11.2 Hacé:** en "💰 Ventas", cambiá "Ver por" entre Día, Mes y Todo junto.
+- [S ] **11.2 Hacé:** en "💰 Ventas", cambiá "Ver por" entre Día, Mes y Todo junto.
   **Debería:** la tabla actualizarse sola (no hay botón Consultar).
-- [ ] **11.3 Hacé:** poné una fecha "Desde" de mañana.
+- [S ] **11.3 Hacé:** poné una fecha "Desde" de mañana.
   **Debería:** aparecer "No hay datos para estos filtros" y el botón "Limpiar filtros".
-- [ ] **11.4 Hacé:** "🏆 Más vendidos".
+- [S ] **11.4 Hacé:** "🏆 Más vendidos".
   **Debería:** verse una barrita por producto, proporcional a las unidades; el yogur tiene la ganancia en rojo.
-- [ ] **11.5 Hacé:** "📦 Existencias" con "Solo lo que falta reponer".
+- [ ] **11.6 Hacé:** recorré las 5 pestañas como `admin` y pasá el mouse por las barras de cada gráfico.
+  **Debería:** arriba de cada tabla, un gráfico de barras: ingreso neto por día (con "Todo junto", por medio de pago), ganancia por producto (el yogur en rojo, a la izquierda del 0), inventario por ubicación, valor perdido por local y tiempo promedio de envío. Al pasar el mouse aparece un globito con el valor exacto. (Nuevo el 26/10.)
+- [ ] **11.7 Hacé:** lo mismo como `norte`.
+  **Debería:** ver solo los gráficos que comparan más de una cosa (por ejemplo "Más vendidos"); donde hay un solo dato (su local) alcanza con la tarjeta y no aparece gráfico.
+- [S ] **11.5 Hacé:** "📦 Existencias" con "Solo lo que falta reponer".
   **Debería:** aparecer los faltantes de los locales, con la columna "Falta".
 
 ---

@@ -75,7 +75,7 @@ class VentasService:
         }
         return venta, disponible, alcanza_pago
 
-    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None):
+    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None, usuario_id=None):
         """items: pares (producto_id, cantidad). Primero se arma y se cobra la
         venta en memoria (el dominio valida todo); recién después se abre la
         transacción que guarda la venta, descuenta el stock y registra la caja.
@@ -85,18 +85,18 @@ class VentasService:
 
         with self.dao.transaccion() as cx:
             venta.emitir_comprobante(self.dao.siguiente_numero_comprobante(cx, sucursal_id))
-            self.dao.crear(cx, venta)
+            self.dao.crear(cx, venta, usuario_id)
             for detalle in venta.detalles:
                 try:
                     self.stock_service.egresar(sucursal_id, detalle.producto_id, detalle.cantidad,
-                                               TipoMovimiento.VENTA, venta.referencia(), cx=cx)
+                                               TipoMovimiento.VENTA, venta.referencia(), cx=cx, usuario_id=usuario_id)
                 except StockInsuficiente as error:
                     # En una venta con varios productos hay que decir cuál no alcanza
                     raise StockInsuficiente(f"{nombres[detalle.producto_id]}: {error}") from error
             self.dao.registrar_movimiento_caja(cx, venta.movimiento_caja())
         return venta
 
-    def devolver(self, venta_id, items, motivo):
+    def devolver(self, venta_id, items, motivo, usuario_id=None):
         """items: pares (producto_id, cantidad). Reingresa el stock al local de
         la venta y saca de la caja lo que se reintegra, todo junto o nada."""
         with self.dao.transaccion() as cx:
@@ -105,12 +105,20 @@ class VentasService:
             venta = self.dao.obtener(venta_id, cx)
             if venta is None:
                 raise NoEncontrado(f"La venta {venta_id} no está registrada: no se puede devolver")
-            devolucion = venta.devolver(items, motivo)
-            self.dao.crear_devolucion(cx, devolucion)
+            # Los nombres de los productos, para que un error diga cuál (el dominio solo tiene ids)
+            nombres = {}
+            for producto_id, cantidad in items:
+                producto = self.producto_dao.obtener_por_id(producto_id)
+                nombres[producto_id] = f"'{producto.nombre}'" if producto else f"el producto {producto_id}"
+            devolucion = venta.devolver(items, motivo, nombres=nombres)
+            # Igual que el comprobante: el siguiente número del local, dentro de la transacción
+            devolucion.emitir_nota_credito(self.dao.siguiente_numero_nota_credito(cx, venta.sucursal_id))
+            self.dao.crear_devolucion(cx, devolucion, usuario_id)
             for detalle in devolucion.detalles:
                 self.stock_service.ingresar(venta.sucursal_id, detalle.producto_id, detalle.cantidad,
                                             TipoMovimiento.DEVOLUCION,
-                                            f"Devolución {devolucion.id} de {venta.referencia()}", cx=cx)
+                                            f"{devolucion.referencia()} de {venta.referencia()}", cx=cx,
+                                            usuario_id=usuario_id)
             self.dao.registrar_movimiento_caja(cx, devolucion.movimiento_caja())
         return devolucion
 

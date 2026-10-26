@@ -5,6 +5,7 @@
 # DAO (el estado del bulto vuelve a armarse desde el texto) y los triggers que
 # hacen inmutable el historial. Acá NO se prueba la api.
 import sqlite3
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -25,6 +26,8 @@ from backend.servicios.reposicion_service import ReposicionService
 from backend.servicios.stock_service import StockService
 from backend.servicios.ventas_service import VentasService
 
+# Llegada estimada para despachar: el dominio la exige y tiene que ser futura
+MANANA = datetime.now() + timedelta(days=1)
 
 @pytest.fixture
 def e(tmp_path):
@@ -79,7 +82,7 @@ def test_circuito_completo_mueve_el_stock_segun_el_estado_del_bulto(e):
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 10)], [[(e.coca.id, 10)]])
     assert cantidad(e, e.cd, e.coca) == 100  # preparar y precintar no descuenta
 
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     assert cantidad(e, e.cd, e.coca) == 90   # al despachar sale del CD
     assert cantidad(e, e.centro, e.coca) == 0
 
@@ -93,7 +96,7 @@ def test_circuito_completo_mueve_el_stock_segun_el_estado_del_bulto(e):
 
 def test_el_historial_queda_guardado_completo_y_en_orden(e):
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     recibir_y_verificar(e, bulto_id)
     leido = e.repo.obtener_bulto(bulto_id)  # se vuelve a leer de la base
     assert [(r.estado_anterior, r.estado_nuevo) for r in leido.historial] == [
@@ -104,7 +107,7 @@ def test_el_historial_queda_guardado_completo_y_en_orden(e):
 
 def test_el_estado_del_bulto_vuelve_a_armarse_desde_la_base(e):
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     leido = e.repo.obtener_bulto(bulto_id)
     assert type(leido.estado_actual).__name__ == "EnTransito"
     with pytest.raises(TransicionDeEstadoInvalida):  # y el State sigue funcionando
@@ -114,7 +117,7 @@ def test_el_estado_del_bulto_vuelve_a_armarse_desde_la_base(e):
 def test_despues_de_la_recepcion_se_puede_vender_y_antes_no(e):
     ventas = VentasService(VentaDAO(e.db), e.stock, ProductoDAO(e.db), UbicacionDAO(e.db))
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 10)], [[(e.coca.id, 10)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     with pytest.raises(StockInsuficiente):
         ventas.vender(e.centro.id, [(e.coca.id, 2)], "DEBITO")
     recibir_y_verificar(e, bulto_id)
@@ -126,7 +129,7 @@ def test_despues_de_la_recepcion_se_puede_vender_y_antes_no(e):
 
 def test_el_stock_no_entra_hasta_que_se_verifica_todo_el_remito(e):
     remito_id, (b1, b2) = armar_remito(e, [(e.coca.id, 10)], [[(e.coca.id, 6)], [(e.coca.id, 4)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     _, remito, ingreso = recibir_y_verificar(e, b1)
     assert (remito.estado, ingreso) == (Remito.EN_TRANSITO, False)
     assert cantidad(e, e.centro, e.coca) == 0  # un bulto verificado no alcanza: falta el remito
@@ -140,7 +143,7 @@ def test_bulto_rechazado_no_suma_stock_y_queda_como_merma(e, intacto, nro):
     remito_id, (bueno, malo) = armar_remito(
         e, [(e.coca.id, 10), (e.agua.id, 5)], [[(e.coca.id, 10)], [(e.agua.id, 5)]],
     )
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     recibir_y_verificar(e, bueno)
     bulto, remito, _ = recibir_y_verificar(e, malo, intacto=intacto, nro=nro)
     assert bulto.estado == "RECHAZADO"
@@ -164,9 +167,11 @@ def test_pedido_vacio(e):
 
 
 def test_pedido_de_un_producto_dado_de_baja(e):
-    e.productos.dar_de_baja(e.agua.id)
+    # Uno sin stock: con stock no se puede dar de baja
+    jugo = e.productos.crear("BEB-3", "Jugo", e.coca.categoria_id, 800, 400)
+    e.productos.dar_de_baja(jugo.id)
     with pytest.raises(DatoInvalido, match="dado de baja"):
-        e.repo.crear_pedido(e.centro.id, [(e.agua.id, 1)])
+        e.repo.crear_pedido(e.centro.id, [(jugo.id, 1)])
 
 
 def test_pedido_de_una_sucursal_dada_de_baja(e):
@@ -253,14 +258,14 @@ def test_no_se_despacha_con_bultos_sin_precintar(e):
     remito = e.repo.crear_remito(e.repo.crear_orden([pedido.id_pedido]).id_orden, e.centro.id)
     e.repo.agregar_bulto(remito.id_remito, [(e.coca.id, 5)])
     with pytest.raises(DatoInvalido, match="precintados"):
-        e.repo.despachar(remito.id_remito)
+        e.repo.despachar(remito.id_remito, MANANA)
 
 
 def test_sin_stock_en_el_cd_no_se_despacha_nada(e):
     remito_id, ids = armar_remito(e, [(e.coca.id, 30), (e.agua.id, 60)],
                                   [[(e.coca.id, 30)], [(e.agua.id, 60)]])  # agua: hay 50
     with pytest.raises(StockInsuficiente, match="Agua"):
-        e.repo.despachar(remito_id)
+        e.repo.despachar(remito_id, MANANA)
     # Se deshizo todo: ni la coca salió del CD ni cambiaron los estados
     assert cantidad(e, e.cd, e.coca) == 100
     assert e.repo.obtener_remito(remito_id).estado == Remito.ABIERTO
@@ -269,15 +274,15 @@ def test_sin_stock_en_el_cd_no_se_despacha_nada(e):
 
 def test_no_se_despacha_dos_veces(e):
     remito_id, _ = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     with pytest.raises(TransicionDeEstadoInvalida):
-        e.repo.despachar(remito_id)
+        e.repo.despachar(remito_id, MANANA)
     assert cantidad(e, e.cd, e.coca) == 95
 
 
 def test_no_se_agregan_bultos_a_un_remito_despachado(e):
     remito_id, _ = armar_remito(e, [(e.coca.id, 10)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     with pytest.raises(TransicionDeEstadoInvalida):
         e.repo.agregar_bulto(remito_id, [(e.coca.id, 5)])
 
@@ -292,14 +297,14 @@ def test_no_se_recibe_un_bulto_que_no_salio_del_cd(e):
 
 def test_no_se_verifica_un_bulto_sin_recibirlo(e):
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     with pytest.raises(TransicionDeEstadoInvalida):
         e.rec.verificar(bulto_id, f"P-{remito_id}-1", True)
 
 
 def test_un_bulto_verificado_no_se_vuelve_a_verificar(e):
     remito_id, (bulto_id,) = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     recibir_y_verificar(e, bulto_id)
     with pytest.raises(TransicionDeEstadoInvalida):
         e.rec.verificar(bulto_id, f"P-{remito_id}-1", True)
@@ -314,7 +319,7 @@ def test_un_bulto_verificado_no_se_vuelve_a_verificar(e):
 ])
 def test_la_base_no_deja_modificar_ni_borrar_el_historial(e, sql):
     remito_id, _ = armar_remito(e, [(e.coca.id, 5)], [[(e.coca.id, 5)]])
-    e.repo.despachar(remito_id)
+    e.repo.despachar(remito_id, MANANA)
     with get_conexion(e.db) as cx:
         with pytest.raises(sqlite3.DatabaseError, match="inmutable"):
             cx.execute(sql)

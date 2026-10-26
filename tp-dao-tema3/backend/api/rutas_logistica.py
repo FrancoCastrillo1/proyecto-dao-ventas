@@ -1,21 +1,28 @@
 # Endpoints de logística: pedidos de reposición, órdenes, bultos, despacho y recepción.
 # Llaman a reposicion_service y recepcion_service.
+# Permisos: el local pide y recibe lo suyo; el CD consolida, arma, precinta y
+# despacha. El local del pedido sale del usuario, nunca del formulario.
+# Quién hizo cada operación se le pasa al service (queda en la base).
 # Acá NO va lógica de negocio ni acceso a la base.
 #
-# Recorrido completo desde /docs:
+# Recorrido completo desde /docs (con el token de POST /auth/login):
 #   POST /pedidos → POST /ordenes → POST /remitos → POST /remitos/{id}/bultos
 #   → POST /bultos/{id}/precintar → POST /remitos/{id}/despachar
 #   → POST /bultos/{id}/recibir → POST /bultos/{id}/verificar
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 
+from backend.api.dependencias import exigir_que_sea_suyo, requiere, ubicacion_para_filtrar, usuario_actual
+from backend.servicios.comprobantes_service import ComprobantesService
 from backend.servicios.recepcion_service import RecepcionService
 from backend.servicios.reposicion_service import ReposicionService
 
 reposicion = ReposicionService()
 recepcion = RecepcionService()
+documentos = ComprobantesService()
 
 
 # ------------------------------------------------------------ Modelos comunes
@@ -47,8 +54,7 @@ router_pedidos = APIRouter(prefix="/pedidos", tags=["Logística: pedidos"])
 
 
 class PedidoEntrada(BaseModel):
-    sucursal_id: int
-    items: list[ItemEntrada]
+    items: list[ItemEntrada]   # el local es el del usuario que pide
 
 
 class PedidoSalida(BaseModel):
@@ -66,18 +72,21 @@ def pedido_a_salida(pedido):
 
 
 @router_pedidos.get("", response_model=list[PedidoSalida])
-def listar_pedidos(sucursal_id: int | None = None, estado: str | None = None):
+def listar_pedidos(sucursal_id: int | None = None, estado: str | None = None, usuario=Depends(usuario_actual)):
+    sucursal_id = ubicacion_para_filtrar(usuario, sucursal_id)
     return [pedido_a_salida(p) for p in reposicion.listar_pedidos(sucursal_id, estado)]
 
 
 @router_pedidos.get("/{id}", response_model=PedidoSalida)
-def obtener_pedido(id: int):
-    return pedido_a_salida(reposicion.obtener_pedido(id))
+def obtener_pedido(id: int, usuario=Depends(usuario_actual)):
+    pedido = reposicion.obtener_pedido(id)
+    exigir_que_sea_suyo(usuario, pedido.local, "Ese pedido")
+    return pedido_a_salida(pedido)
 
 
 @router_pedidos.post("", response_model=PedidoSalida, status_code=201)
-def crear_pedido(datos: PedidoEntrada):
-    return pedido_a_salida(reposicion.crear_pedido(datos.sucursal_id, a_pares(datos.items)))
+def crear_pedido(datos: PedidoEntrada, usuario=Depends(requiere("puede_pedir_reposicion"))):
+    return pedido_a_salida(reposicion.crear_pedido(usuario.ubicacion_id, a_pares(datos.items), usuario.id))
 
 
 # -------------------------------------------------------------------- Órdenes
@@ -103,19 +112,19 @@ def orden_a_salida(orden):
                        total_por_producto=totales_a_items(orden.total_por_producto()))
 
 
-@router_ordenes.get("", response_model=list[OrdenSalida])
+@router_ordenes.get("", response_model=list[OrdenSalida], dependencies=[Depends(requiere("puede_preparar_envios"))])
 def listar_ordenes():
     return [orden_a_salida(o) for o in reposicion.listar_ordenes()]
 
 
-@router_ordenes.get("/{id}", response_model=OrdenSalida)
+@router_ordenes.get("/{id}", response_model=OrdenSalida, dependencies=[Depends(requiere("puede_preparar_envios"))])
 def obtener_orden(id: int):
     return orden_a_salida(reposicion.obtener_orden(id))
 
 
 @router_ordenes.post("", response_model=OrdenSalida, status_code=201)
-def crear_orden(datos: OrdenEntrada):
-    return orden_a_salida(reposicion.crear_orden(datos.pedido_ids))
+def crear_orden(datos: OrdenEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return orden_a_salida(reposicion.crear_orden(datos.pedido_ids, usuario.id))
 
 
 # --------------------------------------------------------------------- Bultos
@@ -165,23 +174,31 @@ class VerificacionSalida(BaseModel):
 
 
 @router_bultos.get("/{id}", response_model=BultoSalida)
-def obtener_bulto(id: int):
-    return bulto_a_salida(reposicion.obtener_bulto(id))
+def obtener_bulto(id: int, usuario=Depends(usuario_actual)):
+    bulto = reposicion.obtener_bulto(id)
+    exigir_que_sea_suyo(usuario, destino_del_bulto(bulto), "Ese bulto")
+    return bulto_a_salida(bulto)
+
+
+def destino_del_bulto(bulto):
+    return reposicion.obtener_remito(bulto.remito_id).destino
 
 
 @router_bultos.post("/{id}/precintar", response_model=BultoSalida)
-def precintar_bulto(id: int, datos: PrecintoEntrada):
-    return bulto_a_salida(reposicion.precintar(id, datos.nro_precinto))
+def precintar_bulto(id: int, datos: PrecintoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return bulto_a_salida(reposicion.precintar(id, datos.nro_precinto, usuario.id))
 
 
 @router_bultos.post("/{id}/recibir", response_model=BultoSalida)
-def recibir_bulto(id: int):
-    return bulto_a_salida(recepcion.recibir(id))
+def recibir_bulto(id: int, usuario=Depends(requiere("puede_recibir"))):
+    exigir_que_sea_suyo(usuario, destino_del_bulto(reposicion.obtener_bulto(id)), "Ese bulto")
+    return bulto_a_salida(recepcion.recibir(id, usuario.id))
 
 
 @router_bultos.post("/{id}/verificar", response_model=VerificacionSalida)
-def verificar_bulto(id: int, datos: VerificacionEntrada):
-    bulto, remito, ingreso = recepcion.verificar(id, datos.nro_leido, datos.intacto)
+def verificar_bulto(id: int, datos: VerificacionEntrada, usuario=Depends(requiere("puede_recibir"))):
+    exigir_que_sea_suyo(usuario, destino_del_bulto(reposicion.obtener_bulto(id)), "Ese bulto")
+    bulto, remito, ingreso = recepcion.verificar(id, datos.nro_leido, datos.intacto, usuario.id)
     return VerificacionSalida(bulto=bulto_a_salida(bulto), remito_estado=remito.estado, stock_ingresado=ingreso)
 
 
@@ -198,6 +215,10 @@ class BultoEntrada(BaseModel):
     items: list[ItemEntrada]
 
 
+class DespachoEntrada(BaseModel):
+    llegada_estimada: datetime   # día y hora en que se espera que llegue al local
+
+
 class RemitoSalida(BaseModel):
     id: int
     orden_id: int
@@ -205,6 +226,8 @@ class RemitoSalida(BaseModel):
     destino_id: int
     fecha: datetime
     estado: str
+    llegada_estimada: datetime | None
+    demorado: bool          # sigue en camino y ya pasó la llegada estimada
     bultos: list[BultoSalida]
     total_por_producto: list[ItemSalida]
 
@@ -212,30 +235,45 @@ class RemitoSalida(BaseModel):
 def remito_a_salida(remito):
     return RemitoSalida(id=remito.id_remito, orden_id=remito.orden_id, origen_id=remito.origen,
                         destino_id=remito.destino, fecha=remito.fecha, estado=remito.estado,
+                        llegada_estimada=remito.llegada_estimada, demorado=remito.esta_demorado(),
                         bultos=[bulto_a_salida(b) for b in remito.bultos],
                         total_por_producto=totales_a_items(remito.total_por_producto()))
 
 
 @router_remitos.get("", response_model=list[RemitoSalida])
-def listar_remitos(destino_id: int | None = None, estado: str | None = None):
+def listar_remitos(destino_id: int | None = None, estado: str | None = None, usuario=Depends(usuario_actual)):
+    destino_id = ubicacion_para_filtrar(usuario, destino_id)
     return [remito_a_salida(r) for r in reposicion.listar_remitos(destino_id, estado)]
 
 
 @router_remitos.get("/{id}", response_model=RemitoSalida)
-def obtener_remito(id: int):
-    return remito_a_salida(reposicion.obtener_remito(id))
+def obtener_remito(id: int, usuario=Depends(usuario_actual)):
+    remito = reposicion.obtener_remito(id)
+    exigir_que_sea_suyo(usuario, remito.destino, "Ese remito")
+    return remito_a_salida(remito)
+
+
+# El remito en PDF (Template Method, como el comprobante): lo baja quien puede
+# ver el remito (el CD, el administrador o el local destino), una vez despachado
+@router_remitos.get("/{id}/remito.pdf", response_class=Response)
+def descargar_remito(id: int, usuario=Depends(usuario_actual)):
+    remito = documentos.obtener_remito(id)
+    exigir_que_sea_suyo(usuario, remito.destino, "Ese remito")
+    nombre, contenido = documentos.remito(remito)
+    return Response(content=contenido, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
 
 
 @router_remitos.post("", response_model=RemitoSalida, status_code=201)
-def crear_remito(datos: RemitoEntrada):
-    return remito_a_salida(reposicion.crear_remito(datos.orden_id, datos.destino_id))
+def crear_remito(datos: RemitoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return remito_a_salida(reposicion.crear_remito(datos.orden_id, datos.destino_id, usuario.id))
 
 
 @router_remitos.post("/{id}/bultos", response_model=BultoSalida, status_code=201)
-def agregar_bulto(id: int, datos: BultoEntrada):
-    return bulto_a_salida(reposicion.agregar_bulto(id, a_pares(datos.items)))
+def agregar_bulto(id: int, datos: BultoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return bulto_a_salida(reposicion.agregar_bulto(id, a_pares(datos.items), usuario.id))
 
 
 @router_remitos.post("/{id}/despachar", response_model=RemitoSalida)
-def despachar_remito(id: int):
-    return remito_a_salida(reposicion.despachar(id))
+def despachar_remito(id: int, datos: DespachoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return remito_a_salida(reposicion.despachar(id, datos.llegada_estimada, usuario.id))

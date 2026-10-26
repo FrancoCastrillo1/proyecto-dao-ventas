@@ -1,5 +1,6 @@
 # Las clases "maestras" que casi no cambian: Producto, Categoria, Proveedor,
-# Ubicacion, Sucursal y CentroDistribucion, con sus validaciones básicas.
+# Ubicacion, Sucursal y CentroDistribucion, con sus validaciones básicas, y
+# FiltroProductos (qué productos se buscan).
 # Acá NO va el stock ni los movimientos (eso está en stock.py) ni nada de base de datos.
 import re
 import unicodedata
@@ -112,8 +113,8 @@ def convertir_a_entero(valor, campo):
 
 class Producto:
     # El código (SKU) identifica al producto y no se modifica después de crearlo.
-    # La unicidad del código y que la categoría exista los valida el service,
-    # porque necesitan consultar la base.
+    # Que el código y el nombre no se repitan y que la categoría exista los
+    # valida el service, porque necesitan consultar la base.
     def __init__(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0, id=None, activo=True):
         self.id = id
         self.codigo = codigo
@@ -149,6 +150,12 @@ class Producto:
         if len(valor) > 100:
             raise DatoInvalido("El nombre del producto no puede tener más de 100 caracteres")
         self._nombre = valor
+
+    # Lo que se compara para que dos productos activos no se llamen igual (como
+    # en categorías): "Coca-Cola 500ml" y "coca-cola  500ML" son el mismo nombre
+    @property
+    def nombre_normalizado(self):
+        return normalizar_texto(self.nombre)
 
     @property
     def categoria_id(self):
@@ -199,7 +206,14 @@ class Producto:
     def margen_unitario(self):
         return round(self.precio_venta - self.costo, 2)
 
-    def dar_de_baja(self):
+    # Un producto con stock no se da de baja: dejaría de aparecer en las listas
+    # y esa mercadería quedaría invisible. Cuántas unidades quedan (sumando todas
+    # las ubicaciones) lo consulta el service y se lo pasa.
+    def dar_de_baja(self, unidades_en_stock=0):
+        if unidades_en_stock > 0:
+            raise DatoInvalido(
+                f"No se puede dar de baja '{self.nombre}': todavía quedan {unidades_en_stock} unidades en stock"
+            )
         self.activo = False
 
     # Deshace la baja lógica: es el mismo registro, con su id y su historia
@@ -208,6 +222,47 @@ class Producto:
 
     def __str__(self):
         return f"Producto: ({self.id}, {self.codigo}, {self.nombre}, ${self.precio_venta})"
+
+
+class FiltroProductos:
+    """Qué productos se buscan. Valida que los valores tengan sentido (montos
+    no negativos, "desde" no mayor que "hasta"); que la categoría o el
+    proveedor existan lo controla el service, y el DAO lo traduce a SQL.
+    Todo es opcional: un filtro vacío trae todos los productos activos."""
+
+    def __init__(self, texto=None, categoria_id=None, proveedor_id=None, precio_desde=None, precio_hasta=None,
+                 incluir_bajas=False):
+        # El texto se busca en el nombre (sin tildes ni mayúsculas) y en el código
+        self.texto = normalizar_texto(texto) or None
+        self.categoria_id = self.id_opcional(categoria_id, "id de categoría")
+        self.proveedor_id = self.id_opcional(proveedor_id, "id de proveedor")
+        self.precio_desde = self.monto_opcional(precio_desde, "precio desde")
+        self.precio_hasta = self.monto_opcional(precio_hasta, "precio hasta")
+        if self.precio_desde is not None and self.precio_hasta is not None and self.precio_desde > self.precio_hasta:
+            raise DatoInvalido("El precio «desde» no puede ser mayor que el precio «hasta»")
+        self.incluir_bajas = bool(incluir_bajas)
+
+    @staticmethod
+    def id_opcional(valor, campo):
+        if valor in (None, ""):
+            return None
+        valor = convertir_a_entero(valor, campo)
+        if valor <= 0:
+            raise DatoInvalido(f"El {campo} tiene que ser mayor a cero")
+        return valor
+
+    @staticmethod
+    def monto_opcional(valor, campo):
+        if valor in (None, ""):
+            return None
+        valor = convertir_a_monto(valor, campo)
+        if valor < 0:
+            raise DatoInvalido(f"El {campo} no puede ser negativo")
+        return valor
+
+    def texto_en_codigo(self):
+        # El código se guarda en mayúsculas
+        return self.texto.upper() if self.texto else None
 
 
 # Algoritmo "módulo 11" del CUIT: el último dígito se calcula a partir de los

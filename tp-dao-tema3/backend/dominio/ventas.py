@@ -68,8 +68,9 @@ class Pago:
 
 @dataclass(frozen=True)
 class Comprobante:
-    """Ticket de la venta. Se numera correlativo por sucursal (punto de venta),
-    como un comprobante real: 0002-00000015."""
+    """Número de un documento comercial: el ticket de una venta o la nota de
+    crédito de una devolución. Se numera correlativo por sucursal (punto de
+    venta), como un comprobante real: 0002-00000015."""
     punto_venta: int
     numero: int
     fecha: datetime
@@ -208,9 +209,11 @@ class Venta:
     def total_reintegrado(self):
         return sum((dev.importe for dev in self._devoluciones), CERO)
 
-    def devolver(self, items, motivo, fecha=None):
+    def devolver(self, items, motivo, fecha=None, nombres=None):
         """items: pares (producto_id, cantidad). Valida todo antes de crear la
         devolución: si un ítem no cumple, no se devuelve nada.
+        nombres: {producto_id: nombre}, para que los errores digan qué producto
+        (lo pasa el service; si no viene, se usa el id).
         Se reintegra lo que realmente se cobró: si se pagó en efectivo con 15%
         de descuento, devolver un producto de $1000 reintegra $850."""
         fecha = fecha or ahora()
@@ -234,12 +237,17 @@ class Venta:
 
         detalles = []
         for producto_id, cantidad in pedidas.items():
-            if self.cantidad_vendida(producto_id) == 0:
-                raise DatoInvalido(f"El producto {producto_id} no está en esta venta")
+            nombre = (nombres or {}).get(producto_id, f"el producto {producto_id}")
+            vendida = self.cantidad_vendida(producto_id)
+            if vendida == 0:
+                raise DatoInvalido(f"No se puede devolver {nombre}: no está en esta venta")
             devolvible = self.cantidad_devolvible(producto_id)
             if cantidad > devolvible:
+                ya_devuelta = vendida - devolvible
+                detalle = f" ({ya_devuelta} ya se devolvieron)" if ya_devuelta else ""
                 raise DatoInvalido(
-                    f"Del producto {producto_id} se pueden devolver {devolvible} unidades y se piden {cantidad}"
+                    f"No se puede devolver más de lo que se vendió: de {nombre} se vendieron {vendida}"
+                    f"{detalle}, así que se pueden devolver hasta {devolvible} y se pidieron {cantidad}"
                 )
             precio = next(d.precio_unitario for d in self._detalles if d.producto_id == producto_id)
             importe = aplicar_porcentaje(precio * cantidad, self._pago.porcentaje_ajuste)
@@ -271,9 +279,10 @@ class DetalleDevolucion:
 
 class Devolucion:
     """Lo que el cliente devuelve de UNA venta registrada. No se crea suelta:
-    la arma Venta.devolver(), que valida contra lo vendido."""
+    la arma Venta.devolver(), que valida contra lo vendido. Lleva su nota de
+    crédito, numerada aparte de los comprobantes de venta."""
 
-    def __init__(self, venta_id, sucursal_id, medio_pago, motivo, detalles, fecha=None, id=None):
+    def __init__(self, venta_id, sucursal_id, medio_pago, motivo, detalles, fecha=None, id=None, nota_credito=None):
         self.id = id
         self.venta_id = venta_id
         self.sucursal_id = sucursal_id
@@ -281,12 +290,23 @@ class Devolucion:
         self.motivo = motivo
         self.detalles = tuple(detalles)
         self.fecha = fecha or ahora()
+        self.nota_credito = nota_credito
 
     @property
     def importe(self):
         return sum((d.importe for d in self.detalles), CERO)
 
+    # El número lo da el service (el siguiente del local, consultando la base)
+    def emitir_nota_credito(self, numero):
+        if self.nota_credito is not None:
+            raise TransicionDeEstadoInvalida("La devolución ya tiene nota de crédito")
+        _validar_cantidad(numero)
+        self.nota_credito = Comprobante(self.sucursal_id, numero, self.fecha)
+
+    def referencia(self):
+        return f"Nota de crédito {self.nota_credito.codigo}" if self.nota_credito else f"Devolución {self.id}"
+
     def movimiento_caja(self):
         # Salida de dinero: el importe va en negativo
         return MovimientoCaja(self.fecha, self.sucursal_id, "DEVOLUCION", self.medio_pago, -self.importe,
-                              f"Devolución {self.id} de la venta {self.venta_id}")
+                              f"{self.referencia()} de la venta {self.venta_id}")
