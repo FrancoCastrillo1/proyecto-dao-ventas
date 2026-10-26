@@ -94,6 +94,7 @@ class ProductoModificacion(BaseModel):
 # Al crear se agrega el código, que después no se puede modificar
 class ProductoEntrada(ProductoModificacion):
     codigo: str
+    proveedor_ids: list[int] = []   # quién lo vende (opcional: se puede asignar después)
 
 
 class ProductoSalida(BaseModel):
@@ -150,6 +151,7 @@ def obtener_producto(id: int):
 def crear_producto(datos: ProductoEntrada):
     return producto_a_salida(producto_service.crear(
         datos.codigo, datos.nombre, datos.categoria_id, datos.precio_venta, datos.costo, datos.stock_minimo,
+        datos.proveedor_ids,
     ))
 
 

@@ -12,14 +12,17 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.api.dependencias import exigir_que_sea_suyo, requiere, ubicacion_para_filtrar, usuario_actual
+from backend.servicios.comprobantes_service import ComprobantesService
 from backend.servicios.recepcion_service import RecepcionService
 from backend.servicios.reposicion_service import ReposicionService
 
 reposicion = ReposicionService()
 recepcion = RecepcionService()
+documentos = ComprobantesService()
 
 
 # ------------------------------------------------------------ Modelos comunes
@@ -212,6 +215,10 @@ class BultoEntrada(BaseModel):
     items: list[ItemEntrada]
 
 
+class DespachoEntrada(BaseModel):
+    llegada_estimada: datetime   # día y hora en que se espera que llegue al local
+
+
 class RemitoSalida(BaseModel):
     id: int
     orden_id: int
@@ -219,6 +226,8 @@ class RemitoSalida(BaseModel):
     destino_id: int
     fecha: datetime
     estado: str
+    llegada_estimada: datetime | None
+    demorado: bool          # sigue en camino y ya pasó la llegada estimada
     bultos: list[BultoSalida]
     total_por_producto: list[ItemSalida]
 
@@ -226,6 +235,7 @@ class RemitoSalida(BaseModel):
 def remito_a_salida(remito):
     return RemitoSalida(id=remito.id_remito, orden_id=remito.orden_id, origen_id=remito.origen,
                         destino_id=remito.destino, fecha=remito.fecha, estado=remito.estado,
+                        llegada_estimada=remito.llegada_estimada, demorado=remito.esta_demorado(),
                         bultos=[bulto_a_salida(b) for b in remito.bultos],
                         total_por_producto=totales_a_items(remito.total_por_producto()))
 
@@ -243,6 +253,17 @@ def obtener_remito(id: int, usuario=Depends(usuario_actual)):
     return remito_a_salida(remito)
 
 
+# El remito en PDF (Template Method, como el comprobante): lo baja quien puede
+# ver el remito (el CD, el administrador o el local destino), una vez despachado
+@router_remitos.get("/{id}/remito.pdf", response_class=Response)
+def descargar_remito(id: int, usuario=Depends(usuario_actual)):
+    remito = documentos.obtener_remito(id)
+    exigir_que_sea_suyo(usuario, remito.destino, "Ese remito")
+    nombre, contenido = documentos.remito(remito)
+    return Response(content=contenido, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
 @router_remitos.post("", response_model=RemitoSalida, status_code=201)
 def crear_remito(datos: RemitoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
     return remito_a_salida(reposicion.crear_remito(datos.orden_id, datos.destino_id, usuario.id))
@@ -254,5 +275,5 @@ def agregar_bulto(id: int, datos: BultoEntrada, usuario=Depends(requiere("puede_
 
 
 @router_remitos.post("/{id}/despachar", response_model=RemitoSalida)
-def despachar_remito(id: int, usuario=Depends(requiere("puede_preparar_envios"))):
-    return remito_a_salida(reposicion.despachar(id, usuario.id))
+def despachar_remito(id: int, datos: DespachoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
+    return remito_a_salida(reposicion.despachar(id, datos.llegada_estimada, usuario.id))

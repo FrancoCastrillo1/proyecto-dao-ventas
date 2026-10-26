@@ -74,7 +74,9 @@ class ProductoDAO:
             activo=bool(fila["activo"]),
         )
 
-    def crear(self, producto):
+    def crear(self, producto, proveedor_ids=()):
+        # El producto y sus proveedores en la misma conexión: si algo falla,
+        # se deshace todo y no queda un producto a medio cargar
         with self._conn() as cx:
             cur = cx.execute(
                 "INSERT INTO productos (codigo, nombre, nombre_normalizado, categoria_id, precio_venta, costo, "
@@ -83,6 +85,10 @@ class ProductoDAO:
                  producto.precio_venta, producto.costo, producto.stock_minimo, int(producto.activo)),
             )
             producto.id = cur.lastrowid
+            cx.executemany(
+                "INSERT INTO producto_proveedor (proveedor_id, producto_id) VALUES (?, ?)",
+                [(proveedor_id, producto.id) for proveedor_id in proveedor_ids],
+            )
         return producto
 
     def obtener_por_id(self, id):

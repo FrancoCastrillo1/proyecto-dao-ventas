@@ -217,3 +217,35 @@ def test_buscar_incluyendo_los_dados_de_baja(red):
 def test_buscar_con_una_categoria_o_proveedor_que_no_existe(red, criterio):
     with pytest.raises(NoEncontrado):
         buscar(red, **{criterio: 999})
+
+
+# ================================================ Proveedores al crear el producto
+
+def proveedores_de(red, producto_id):
+    return [p.razon_social for p in ProveedorService(ProveedorDAO(red["db"]), ProductoDAO(red["db"]))
+            .listar_proveedores_de_producto(producto_id)]
+
+
+def test_se_crea_el_producto_con_sus_proveedores(red):
+    otro = ProveedorService(ProveedorDAO(red["db"]), ProductoDAO(red["db"])).crear("30-71234567-1", "Mayorista Norte SA")
+    nuevo = red["productos"].crear("BEB-010", "Soda 2L", red["bebidas"].id, 900, 500,
+                                   proveedor_ids=[red["sur"].id, otro.id, red["sur"].id])   # repetido: se ignora
+    assert sorted(proveedores_de(red, nuevo.id)) == ["Distribuidora Sur SA", "Mayorista Norte SA"]
+
+
+def test_sin_proveedores_tambien_se_puede(red):
+    nuevo = red["productos"].crear("BEB-011", "Tónica 1L", red["bebidas"].id, 900, 500)
+    assert proveedores_de(red, nuevo.id) == []
+
+
+def test_con_un_proveedor_que_no_existe_no_se_crea_nada(red):
+    with pytest.raises(NoEncontrado, match="proveedor 999"):
+        red["productos"].crear("BEB-012", "Agua con gas", red["bebidas"].id, 900, 500, proveedor_ids=[red["sur"].id, 999])
+    assert ProductoDAO(red["db"]).obtener_por_codigo("BEB-012") is None
+
+
+def test_con_un_proveedor_dado_de_baja_no_se_crea(red):
+    ProveedorService(ProveedorDAO(red["db"]), ProductoDAO(red["db"])).dar_de_baja(red["sur"].id)
+    with pytest.raises(DatoInvalido, match="está dado de baja"):
+        red["productos"].crear("BEB-013", "Pomelo 1L", red["bebidas"].id, 900, 500, proveedor_ids=[red["sur"].id])
+    assert ProductoDAO(red["db"]).obtener_por_codigo("BEB-013") is None

@@ -4,6 +4,7 @@
 // lo calcula el back mientras se arma el ticket (POST /ventas/cotizar), con el
 // mismo cálculo que la venta real (Strategy de medios de pago): el front no
 // conoce los descuentos. Abajo: las ventas del local, su caja y las devoluciones.
+// El comprobante y las notas de crédito se descargan en PDF (los arma el back).
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
@@ -72,6 +73,10 @@ export default function Ventas({ usuario }) {
     }, 400);
     return () => clearTimeout(temporizador);
   }, [clave]);
+
+  function descargarComprobante(venta) {
+    ejecutar(() => api.descargar(`/ventas/${venta.id}/comprobante.pdf`), `Comprobante ${venta.comprobante} descargado`);
+  }
 
   async function cobrar() {
     let venta = null;
@@ -154,7 +159,8 @@ export default function Ventas({ usuario }) {
             </div>
             {medio === "EFECTIVO" && (
               <label>¿Con cuánto paga?
-                <input value={entregado} onChange={(e) => setEntregado(e.target.value)} placeholder="Opcional, para calcular el vuelto" inputMode="decimal" />
+                <input type="number" min="0" step="0.01" inputMode="decimal" value={entregado}
+                  onChange={(e) => setEntregado(e.target.value)} placeholder="Opcional, para calcular el vuelto" />
               </label>
             )}
 
@@ -221,14 +227,18 @@ export default function Ventas({ usuario }) {
 
       {comprobante && (
         <Cajon titulo={`Comprobante ${comprobante.comprobante}`} subtitulo={`${catalogos.nombreUbicacion(comprobante.sucursal_id)} · ${fecha(comprobante.fecha)}`}
-          alCerrar={() => setComprobante(null)} pie={<button onClick={() => setComprobante(null)}>Listo</button>}>
+          alCerrar={() => setComprobante(null)} pie={<>
+            <button className="secundario" onClick={() => descargarComprobante(comprobante)}>⬇ Descargar PDF</button>
+            <button onClick={() => setComprobante(null)}>Listo</button>
+          </>}>
           <DetalleVenta venta={comprobante} catalogos={catalogos} />
         </Cajon>
       )}
 
       {abierta && (
         <CajonVenta key={abierta.id} venta={abierta} catalogos={catalogos} ejecutar={ejecutar}
-          alCambiar={async () => { await cargarLocal(); setAbierta(null); }} alCerrar={() => setAbierta(null)} />
+          alCambiar={async () => { await cargarLocal(); setAbierta(null); }} alCerrar={() => setAbierta(null)}
+          alDescargar={() => descargarComprobante(abierta)} />
       )}
     </section>
   );
@@ -256,13 +266,12 @@ function DetalleVenta({ venta, catalogos }) {
         <div className="renglon"><span>Subtotal</span><span>{pesos(venta.subtotal)}</span></div>
         <div className="renglon"><span>Pago: {nombreMedio(venta.medio_pago)} ({venta.porcentaje_ajuste}%)</span><span>{pesos(venta.total - venta.subtotal)}</span></div>
         <div className="renglon total"><span>Total</span><span>{pesos(venta.total)}</span></div>
-        {venta.vuelto > 0 && <div className="renglon vuelto"><span>Vuelto</span><span>{pesos(venta.vuelto)}</span></div>}
       </div>
     </>
   );
 }
 
-function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar }) {
+function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar, alDescargar }) {
   const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
   const [motivo, setMotivo] = useState("");
   const vendidos = venta.detalles.map((d) => catalogos.productos.find((p) => p.id === d.producto_id)).filter(Boolean);
@@ -278,6 +287,7 @@ function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar }) {
   return (
     <Cajon titulo={`Venta ${venta.comprobante}`} subtitulo={fecha(venta.fecha)} alCerrar={alCerrar}
       pie={<>
+        <button className="secundario izquierda" onClick={alDescargar}>⬇ Comprobante PDF</button>
         <button className="secundario" onClick={alCerrar}>Cerrar</button>
         <button onClick={devolver}>Registrar devolución</button>
       </>}>
@@ -288,8 +298,16 @@ function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar }) {
           <h3>Devoluciones anteriores</h3>
           <ul className="lista-simple">
             {venta.devoluciones.map((d) => (
-              <li key={d.id}>{fecha(d.fecha)} · {d.motivo} · {pesos(d.importe)} · {d.detalles.map((x) =>
-                `${x.cantidad} × ${catalogos.nombreProducto(x.producto_id)}`).join(", ")}</li>
+              <li key={d.id}>
+                {d.nota_credito && <strong>NC {d.nota_credito} · </strong>}
+                {fecha(d.fecha)} · {d.motivo} · {pesos(d.importe)} · {d.detalles.map((x) =>
+                  `${x.cantidad} × ${catalogos.nombreProducto(x.producto_id)}`).join(", ")}
+                {d.nota_credito && (
+                  <button className="fantasma chico" onClick={() => ejecutar(
+                    () => api.descargar(`/ventas/${venta.id}/devoluciones/${d.id}/nota-credito.pdf`),
+                    `Nota de crédito ${d.nota_credito} descargada`)}>⬇ PDF</button>
+                )}
+              </li>
             ))}
           </ul>
         </div>

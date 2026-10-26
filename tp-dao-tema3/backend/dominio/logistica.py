@@ -4,7 +4,7 @@
 # Solo se importa Preparado porque es el estado con el que nace todo bulto;
 # los demás estados los crean los propios estados al hacer cada transición.
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from backend.dominio.estados_bulto import ESTADOS_FINALES, Preparado
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
@@ -209,6 +209,9 @@ class Remito:
     VERIFICADO = "VERIFICADO"
     VERIFICADO_CON_RECHAZOS = "VERIFICADO_CON_RECHAZOS"
 
+    # Un viaje del CD a un local no puede estimarse a más de esto
+    MAXIMO_DIAS_DE_VIAJE = 30
+
     def __init__(self, id_remito, origen, destino, orden_id=None):
         for valor, nombre in ((origen, "el origen"), (destino, "el destino")):
             if valor is None or (isinstance(valor, str) and not valor.strip()):
@@ -222,6 +225,7 @@ class Remito:
         self.bultos = []  # Lista de Bulto
         self.estado = self.ABIERTO
         self.fecha = datetime.now()
+        self.llegada_estimada = None  # día y hora en que se espera que llegue al local
 
     def _validar_abierto(self, accion):
         if self.estado != self.ABIERTO:
@@ -249,9 +253,20 @@ class Remito:
             raise DatoInvalido("Todos los bultos del remito tienen que estar precintados")
         self.estado = self.CERRADO
 
-    def despachar(self):
+    def validar_llegada_estimada(self, llegada_estimada, ahora):
+        if not isinstance(llegada_estimada, datetime):
+            raise DatoInvalido("Indicá el día y la hora estimados de llegada al local")
+        if llegada_estimada <= ahora:
+            raise DatoInvalido("La llegada estimada tiene que ser posterior al despacho")
+        if llegada_estimada > ahora + timedelta(days=self.MAXIMO_DIAS_DE_VIAJE):
+            raise DatoInvalido(f"La llegada estimada no puede ser a más de {self.MAXIMO_DIAS_DE_VIAJE} días")
+
+    def despachar(self, llegada_estimada, ahora=None):
         """Sale del CD: si todavía está abierto se cierra (eso valida que todos
-        los bultos estén precintados) y cada bulto pasa a EN_TRANSITO."""
+        los bultos estén precintados) y cada bulto pasa a EN_TRANSITO. Se
+        registra cuándo se espera que llegue (lo informa el CD al despachar).
+        Se valida todo antes de cambiar algo."""
+        self.validar_llegada_estimada(llegada_estimada, ahora or datetime.now())
         if self.estado == self.ABIERTO:
             self.cerrar()
         if self.estado != self.CERRADO:
@@ -259,6 +274,12 @@ class Remito:
         for bulto in self.bultos:
             bulto.despachar()
         self.estado = self.EN_TRANSITO
+        self.llegada_estimada = llegada_estimada
+
+    def esta_demorado(self, ahora=None):
+        """Sigue en camino y ya pasó la hora en que tenía que llegar."""
+        return (self.estado == self.EN_TRANSITO and self.llegada_estimada is not None
+                and (ahora or datetime.now()) > self.llegada_estimada)
 
     def registrar_verificacion(self):
         """Se llama cada vez que se verifica un bulto. Si ya no queda ninguno

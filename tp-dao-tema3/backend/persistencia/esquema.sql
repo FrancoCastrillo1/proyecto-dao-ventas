@@ -194,14 +194,30 @@ PRIMARY KEY (venta_id, producto_id)
 );
 
 -- Solo de ventas registradas (la clave foránea lo exige también en la base)
+-- nro_nota_credito: correlativo por local, como el comprobante de la venta
+-- (el local es el de la venta). Puede faltar solo en bases viejas antes de
+-- la migración, que numera las devoluciones que ya había.
 CREATE TABLE IF NOT EXISTS devoluciones (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 venta_id INTEGER NOT NULL REFERENCES ventas(id),
 fecha TEXT NOT NULL,
 motivo TEXT NOT NULL,
 importe INTEGER NOT NULL CHECK (importe >= 0),
-usuario_id INTEGER REFERENCES usuarios(id)
+usuario_id INTEGER REFERENCES usuarios(id),
+nro_nota_credito INTEGER CHECK (nro_nota_credito > 0)
 );
+
+-- Red de seguridad: dos notas de crédito del mismo local no tienen el mismo
+-- número. Es un trigger y no un UNIQUE porque el local está en la venta.
+CREATE TRIGGER IF NOT EXISTS notas_credito_unicas_por_local
+BEFORE INSERT ON devoluciones
+WHEN NEW.nro_nota_credito IS NOT NULL AND EXISTS (
+    SELECT 1 FROM devoluciones d JOIN ventas v ON v.id = d.venta_id
+    WHERE d.nro_nota_credito = NEW.nro_nota_credito
+      AND v.sucursal_id = (SELECT sucursal_id FROM ventas WHERE id = NEW.venta_id))
+BEGIN
+    SELECT RAISE(ABORT, 'Ese número de nota de crédito ya existe en este local');
+END;
 
 CREATE TABLE IF NOT EXISTS detalles_devolucion (
 devolucion_id INTEGER NOT NULL REFERENCES devoluciones(id),
@@ -264,9 +280,20 @@ destino_id INTEGER NOT NULL REFERENCES ubicaciones(id),
 fecha TEXT NOT NULL,
 estado TEXT NOT NULL CHECK (estado IN ('ABIERTO', 'CERRADO', 'EN_TRANSITO', 'VERIFICADO', 'VERIFICADO_CON_RECHAZOS')),
 usuario_id INTEGER REFERENCES usuarios(id),
+llegada_estimada TEXT,   -- la informa el CD al despachar
 CHECK (origen_id <> destino_id),
 UNIQUE (orden_id, destino_id)
 );
+
+-- Red de seguridad: un remito no sale del CD sin decir cuándo llega. Solo
+-- se controla al pasar a EN_TRANSITO, así los remitos despachados antes de
+-- esta regla (sin llegada estimada) siguen funcionando.
+CREATE TRIGGER IF NOT EXISTS remitos_se_despachan_con_llegada_estimada
+BEFORE UPDATE OF estado ON remitos
+WHEN NEW.estado = 'EN_TRANSITO' AND OLD.estado <> 'EN_TRANSITO' AND NEW.llegada_estimada IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Un remito no se despacha sin la llegada estimada');
+END;
 
 -- El estado se guarda como texto y el DAO vuelve a armar el objeto del
 -- patrón State al leerlo. El precinto es único: dos bultos con el mismo

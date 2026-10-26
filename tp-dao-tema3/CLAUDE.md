@@ -59,7 +59,8 @@ docs/                  guia_oral.md, presentacion_preliminar.md
   `TransicionDeEstadoInvalida` por defecto y cada estado redefine lo suyo. El
   estado cambia solo por `cambiar_estado()`, que registra el historial. En la
   base se guarda el texto y `crear_estado()` vuelve a armar el objeto.
-- **Fábricas simples** (diccionario nombre → clase): `crear_estado`, `crear_medio_pago`, `crear_ubicacion`.
+- **Fábricas simples** (diccionario nombre → clase): `crear_estado`, `crear_medio_pago`, `crear_ubicacion`, `crear_usuario`.
+- **Template Method:** `DocumentoComercial` (comprobante de venta y nota de crédito), desde el paso 5.
 - **Inmutabilidad en la base:** triggers que rechazan UPDATE y DELETE en
   `historial_bultos`, `movimientos_stock` y `movimientos_caja`.
 - **Stock del CD:** se descuenta al despachar el remito, en una transacción.
@@ -98,10 +99,14 @@ cd frontend; npm install; npm run dev                        # http://localhost:
   bulto por bulto o por remito; rechazado merma o vuelve al CD; reserva de stock
   al preparar; control de cantidades en la recepción; DAO como patrón;
   proveedores N:M vs uno por producto; usuarios.
-- Próximos pasos: diagramas de clases y de estados (Mermaid); órdenes de
-  compra sugeridas por faltantes; control de cantidades en la recepción;
-  usuarios en el historial; `Decimal` en los precios de Producto; gráficos en
-  reportes; eliminación física de maestros.
+- Próximos pasos (al 26/10 están hechos los pasos 1 a 7 y el 1e del plan, los
+  5 a 7 y el 1e sin commitear): repensar las devoluciones, 1d (arreglos del
+  recorrido), compras a proveedores con factura en PDF (8), reportes nuevos por
+  perfil y exportables (9; los gráficos ya están), envíos demorados y reposición
+  sugerida (10), limpieza (11). También: control de cantidades en la recepción y
+  eliminación física de maestros. Ver `docs/plan_mejoras.md`.
+- Ramas: `feature/usuarios` (pasos 2 y 3, para el pull request a `main`) y
+  `feature/productos` (pasos 4 a 7, sale de `feature/usuarios`).
 
 ## Cómo trabajamos los pasos
 - Cuando te diga lo que quiero hacer, no empieces a codear. Primero mirá el código y después usá la herramienta AskUserQuestion para darme las opciones de cada decisión: hasta 4 por pregunta, la recomendada primero con "(Recomendada)", y una línea de qué implica cada una. Si una opción suma un patrón de diseño, decilo.
@@ -145,3 +150,20 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Dos productos activos no se llaman igual (nombre normalizado; índice único parcial). Uno de baja libera el nombre.
 - Un producto con stock no se da de baja (dominio con el dato, service que cuenta, trigger en la base).
 - `GET /productos` filtra en el back con `FiltroProductos` (dominio): texto, categoría, proveedor (solo quien ve proveedores) y rango de precio.
+
+### Paso 6 del plan: bandeja de tareas y llegada estimada (decidido el 23/10)
+- `GET /tareas` arma los pendientes según las capacidades (CD prepara; local recibe, verifica y repone). "Pedir" abre el pedido precargado hasta el mínimo; también desde Stock.
+- Transporte: solo la llegada estimada (día y hora), obligatoria al despachar (dominio, trigger). `Remito.esta_demorado()`.
+
+### Paso 1e del plan: arreglos de la prueba del 26/10 (decidido el 26/10)
+- Capacidad `ve_ventas` (admin y local sí, CD no): rutas de ventas, caja, comprobantes y reportes de ventas/más vendidos; el front esconde lo mismo.
+- Remito en PDF (`GET /remitos/{id}/remito.pdf`) con el mismo Template Method: `RemitoDocumento` y los ganchos `columnas()` y `etiqueta_responsable()`. Solo despachado.
+- Proveedores opcionales (uno o varios) al crear el producto, en la misma transacción.
+- Gráficos de los reportes con Recharts (`componentes/Graficos.jsx`): barras de una serie, rojo para negativos, sin gráfico si hay una sola barra.
+- Efectivo solo números; el comprobante no muestra vuelto; mensaje claro al devolver de más.
+- Pendiente: repensar las devoluciones.
+
+### Paso 5 del plan: comprobante y nota de crédito en PDF (decidido el 23/10)
+- PDF en el back con fpdf2; lo descarga quien puede ver la venta.
+- **Template Method** (`dominio/documentos.py`): `DocumentoComercial.armar()` fija el orden; `ComprobanteVenta` y `NotaCredito` completan los pasos. El dibujo del PDF (`servicios/documentos_pdf.py`) no sabe qué documento es.
+- Nota de crédito correlativa por local (`nro_nota_credito`, trigger de unicidad, migración). Datos del comercio en `config.py`; quién atendió, del `usuario_id`.

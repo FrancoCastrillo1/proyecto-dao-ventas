@@ -40,13 +40,14 @@ def test_usuario_es_abstracto():
 
 
 CAPACIDADES = ["puede_gestionar_maestros", "puede_comprar", "puede_preparar_envios",
-               "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red"]
+               "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red", "ve_ventas"]
+VER = {"ve_toda_la_red", "ve_ventas"}   # lo que se puede ver lo comparten varios perfiles
 
 
 @pytest.mark.parametrize("usuario, permitidas", [
-    (un_admin(), {"puede_gestionar_maestros", "ve_toda_la_red"}),
-    (un_cd(), {"puede_comprar", "puede_preparar_envios", "ve_toda_la_red"}),
-    (una_sucursal(), {"puede_pedir_reposicion", "puede_recibir", "puede_vender"}),
+    (un_admin(), {"puede_gestionar_maestros", "ve_toda_la_red", "ve_ventas"}),
+    (un_cd(), {"puede_comprar", "puede_preparar_envios", "ve_toda_la_red"}),     # el CD no ve ventas
+    (una_sucursal(), {"puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_ventas"}),
 ])
 def test_cada_perfil_tiene_sus_funciones_y_ninguna_mas(usuario, permitidas):
     for capacidad in CAPACIDADES:
@@ -55,8 +56,8 @@ def test_cada_perfil_tiene_sus_funciones_y_ninguna_mas(usuario, permitidas):
 
 def test_ningun_perfil_hace_lo_del_otro():
     # Lo que se HACE está repartido sin repetir: administrar, abastecer y vender.
-    # Ver toda la red no es una tarea: la comparten el administrador y el CD.
-    tareas = [c for c in CAPACIDADES if c != "ve_toda_la_red"]
+    # Ver (toda la red, las ventas) no es una tarea: lo comparten varios perfiles.
+    tareas = [c for c in CAPACIDADES if c not in VER]
     perfiles = [un_admin(), un_cd(), una_sucursal()]
     for capacidad in tareas:
         assert sum(getattr(p, capacidad)() for p in perfiles) == 1, capacidad

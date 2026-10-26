@@ -90,6 +90,22 @@ def migrar(cx):
             if tabla == "productos":
                 desempatar_nombres_de_productos(cx)
 
+    columnas = columnas_de(cx, "remitos")
+    if columnas and "llegada_estimada" not in columnas:
+        cx.execute("ALTER TABLE remitos ADD COLUMN llegada_estimada TEXT")   # los viejos quedan sin dato
+
+    # Las devoluciones de antes no tenían nota de crédito: se numeran por local
+    # en el orden en que se hicieron, así cada una tiene su comprobante
+    columnas = columnas_de(cx, "devoluciones")
+    if columnas and "nro_nota_credito" not in columnas:
+        cx.execute("ALTER TABLE devoluciones ADD COLUMN nro_nota_credito INTEGER CHECK (nro_nota_credito > 0)")
+        siguiente = {}
+        for fila in cx.execute("SELECT d.id, v.sucursal_id FROM devoluciones d JOIN ventas v ON v.id = d.venta_id "
+                               "ORDER BY d.id").fetchall():
+            siguiente[fila["sucursal_id"]] = siguiente.get(fila["sucursal_id"], 0) + 1
+            cx.execute("UPDATE devoluciones SET nro_nota_credito = ? WHERE id = ?",
+                       (siguiente[fila["sucursal_id"]], fila["id"]))
+
 
 def desempatar_nombres_de_productos(cx):
     # Antes los productos podían repetir el nombre. El índice único nuevo no se

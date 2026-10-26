@@ -17,6 +17,10 @@ function hoy() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const ICONOS_TAREA = {
+  pedidos: "📝", armar: "📦", precintar: "🔒", despachar: "🚚", recibir: "📥", verificar: "🔍", reponer: "🛒",
+};
+
 export default function Inicio({ irA, puedeIr, usuario }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
@@ -24,14 +28,19 @@ export default function Inicio({ irA, puedeIr, usuario }) {
   useEffect(() => {
     (async () => {
       try {
-        const [productos, pedidos, remitos, ventasHoy, existencias] = await Promise.all([
+        const [productos, pedidos, remitos, ventasHoy, existencias, tareas] = await Promise.all([
           api.listar("/productos"),
           api.listar("/pedidos?estado=PENDIENTE"),
           api.listar("/remitos"),
-          api.obtener(`/reportes/ventas?desde=${hoy()}&hasta=${hoy()}&agrupar=total`),
+          // El CD no ve ventas: ni se piden (el back respondería 403)
+          puede(usuario, "ve_ventas")
+            ? api.obtener(`/reportes/ventas?desde=${hoy()}&hasta=${hoy()}&agrupar=total`)
+            : Promise.resolve({ cantidad_ventas: null, total_neto: null }),
           api.obtener("/reportes/existencias?solo_bajo_minimo=true"),
+          api.listar("/tareas"),
         ]);
         setDatos({
+          tareas,
           hayProductos: productos.length > 0,
           pedidosPendientes: pedidos.length,
           armando: remitos.filter((r) => r.estado === "ABIERTO").length,
@@ -64,9 +73,30 @@ export default function Inicio({ irA, puedeIr, usuario }) {
       )}
 
       {datos?.hayProductos && (<>
+        {/* La bandeja: lo que le toca hacer a este usuario (lo arma el back según sus capacidades) */}
+        {puedeIr("logistica") && (
+          <div className="bandeja">
+            <h2 className="titulo-seccion">Para hacer</h2>
+            {datos.tareas.length === 0 && <p className="vacio-chico">🎉 No tenés nada pendiente.</p>}
+            {datos.tareas.map((t, i) => (
+              <div key={i} className={`tarea ${t.urgente ? "urgente" : ""}`}>
+                <span className="tarea-icono" aria-hidden="true">{ICONOS_TAREA[t.tipo] ?? "•"}</span>
+                <div className="tarea-textos">
+                  <strong>{t.titulo}</strong>
+                  <span>{t.detalle}</span>
+                </div>
+                <button className={t.urgente ? "" : "secundario"} onClick={() =>
+                  irA(t.pantalla, t.items.length ? { pedido: t.items } : null)}>{t.accion} →</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="indicadores">
-          <Indicador tema="tema-durazno" icono="🛒" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
-            pie={puedeIr("ventas") ? "Ir a vender →" : "Ver reportes →"} alTocar={() => irA(puedeIr("ventas") ? "ventas" : "reportes")} />
+          {puede(usuario, "ve_ventas") && (
+            <Indicador tema="tema-durazno" icono="🛒" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
+              pie={puedeIr("ventas") ? "Ir a vender →" : "Ver reportes →"} alTocar={() => irA(puedeIr("ventas") ? "ventas" : "reportes")} />
+          )}
           {puedeIr("logistica") && (<>
             <Indicador tema="tema-cielo" icono="📝" valor={datos.pedidosPendientes}
               texto={puede(usuario, "puede_preparar_envios") ? "pedidos de locales sin preparar" : "pedidos tuyos esperando al CD"}
@@ -88,7 +118,9 @@ export default function Inicio({ irA, puedeIr, usuario }) {
           {puede(usuario, "puede_comprar") && <Acceso tema="tema-menta" icono="📦" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />}
           {puedeIr("usuarios") && <Acceso tema="tema-manteca" icono="👤" titulo="Usuarios" texto="Quién entra y qué puede hacer" alTocar={() => irA("usuarios")} />}
           {puedeIr("productos") && <Acceso tema="tema-manteca" icono="🧃" titulo="Productos y precios" texto="Catálogo, costos y mínimos" alTocar={() => irA("productos")} />}
-          <Acceso tema="tema-rosa" icono="📊" titulo="Ver reportes" texto="Ventas, márgenes y mermas" alTocar={() => irA("reportes")} />
+          <Acceso tema="tema-rosa" icono="📊" titulo="Ver reportes"
+            texto={puede(usuario, "ve_ventas") ? "Ventas, márgenes y mermas" : "Existencias, mermas y tiempos de envío"}
+            alTocar={() => irA("reportes")} />
         </div>
       </>)}
     </section>

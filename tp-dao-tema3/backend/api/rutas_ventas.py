@@ -1,20 +1,25 @@
 # Endpoints de ventas: registrar ventas, cobros, comprobantes y devoluciones.
 # Llaman a ventas_service.
 # Permisos: vende, cotiza y devuelve un local, siempre en SU local (sale del
-# usuario, nunca del formulario). Las ventas y la caja de un local las ve ese
-# local o quien ve toda la red.
+# usuario, nunca del formulario). Las ventas, la caja y los comprobantes los ve
+# quien tiene ve_ventas (el local, solo los suyos; el administrador, todos).
+# El CD no: solo abastece.
 # Acá NO va lógica de negocio ni acceso a la base.
 from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from backend.api.dependencias import LOGUEADO, exigir_que_sea_suyo, requiere, ubicacion_para_filtrar, usuario_actual
+from backend.api.dependencias import LOGUEADO, exigir_que_sea_suyo, requiere, ubicacion_para_filtrar
+from backend.servicios.comprobantes_service import ComprobantesService
 from backend.servicios.ventas_service import VentasService
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
 service = VentasService()
+
+VE_VENTAS = Depends(requiere("ve_ventas"))
 
 
 # Forma del JSON que llega (POST)
@@ -61,6 +66,7 @@ class DevolucionSalida(BaseModel):
     motivo: str
     medio_pago: str
     importe: float
+    nota_credito: str | None   # número de la nota de crédito (ej: 0002-00000001)
     detalles: list[DetalleDevolucionSalida]
 
 
@@ -83,6 +89,7 @@ def devolucion_a_salida(devolucion):
     return DevolucionSalida(
         id=devolucion.id, venta_id=devolucion.venta_id, fecha=devolucion.fecha, motivo=devolucion.motivo,
         medio_pago=devolucion.medio_pago, importe=devolucion.importe,
+        nota_credito=devolucion.nota_credito.codigo if devolucion.nota_credito else None,
         detalles=[DetalleDevolucionSalida(producto_id=d.producto_id, cantidad=d.cantidad, importe=d.importe)
                   for d in devolucion.detalles],
     )
@@ -113,13 +120,13 @@ def listar_medios_pago():
 
 @router.get("", response_model=list[VentaSalida])
 def listar_ventas(sucursal_id: int | None = None, desde: date | None = None, hasta: date | None = None,
-                  usuario=Depends(usuario_actual)):
+                  usuario=VE_VENTAS):
     sucursal_id = ubicacion_para_filtrar(usuario, sucursal_id)
     return [venta_a_salida(v) for v in service.listar(sucursal_id, desde, hasta)]
 
 
 @router.get("/{id}", response_model=VentaSalida)
-def obtener_venta(id: int, usuario=Depends(usuario_actual)):
+def obtener_venta(id: int, usuario=VE_VENTAS):
     venta = service.obtener(id)
     exigir_que_sea_suyo(usuario, venta.sucursal_id, "Esa venta")
     return venta_a_salida(venta)
@@ -177,6 +184,31 @@ def registrar_devolucion(id: int, datos: DevolucionEntrada, usuario=Depends(requ
     return devolucion_a_salida(service.devolver(id, a_pares(datos.items), datos.motivo, usuario.id))
 
 
+# ------------------------------------------------- Documentos en PDF
+# Los descarga quien puede ver la venta: el local que la hizo, o quien ve toda
+# la red. Qué dice cada documento lo arma el dominio (Template Method).
+comprobantes = ComprobantesService()
+
+
+def pdf(nombre_archivo, contenido):
+    return Response(content=contenido, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'})
+
+
+@router.get("/{id}/comprobante.pdf", response_class=Response)
+def descargar_comprobante(id: int, usuario=VE_VENTAS):
+    venta = comprobantes.obtener_venta(id)
+    exigir_que_sea_suyo(usuario, venta.sucursal_id, "Esa venta")
+    return pdf(*comprobantes.comprobante_de_venta(venta))
+
+
+@router.get("/{id}/devoluciones/{devolucion_id}/nota-credito.pdf", response_class=Response)
+def descargar_nota_de_credito(id: int, devolucion_id: int, usuario=VE_VENTAS):
+    venta = comprobantes.obtener_venta(id)
+    exigir_que_sea_suyo(usuario, venta.sucursal_id, "Esa venta")
+    return pdf(*comprobantes.nota_de_credito(venta, devolucion_id))
+
+
 # -------------------------------------------------------------------- Caja
 router_caja = APIRouter(prefix="/caja", tags=["Caja"])
 
@@ -197,7 +229,7 @@ class CajaSalida(BaseModel):
 
 
 @router_caja.get("/{sucursal_id}", response_model=CajaSalida)
-def ver_caja(sucursal_id: int, desde: date | None = None, hasta: date | None = None, usuario=Depends(usuario_actual)):
+def ver_caja(sucursal_id: int, desde: date | None = None, hasta: date | None = None, usuario=VE_VENTAS):
     exigir_que_sea_suyo(usuario, sucursal_id, "Esa caja")
     movimientos, por_medio = service.caja(sucursal_id, desde, hasta)
     return CajaSalida(

@@ -203,6 +203,8 @@ class RemitoDAO(DAOBase):
         remito = Remito(fila["id"], fila["origen_id"], fila["destino_id"], fila["orden_id"])
         remito.estado = fila["estado"]
         remito.fecha = datetime.fromisoformat(fila["fecha"])
+        if fila["llegada_estimada"]:
+            remito.llegada_estimada = datetime.fromisoformat(fila["llegada_estimada"])
         remito.bultos = self.bulto_dao.listar_por_remito(fila["id"], cx)
         return remito
 
@@ -216,7 +218,9 @@ class RemitoDAO(DAOBase):
 
     # Guarda el estado del remito y el de todos sus bultos
     def guardar(self, cx, remito, usuario_id=None):
-        cx.execute("UPDATE remitos SET estado = ? WHERE id = ?", (remito.estado, remito.id_remito))
+        llegada = a_texto(remito.llegada_estimada) if remito.llegada_estimada else None
+        cx.execute("UPDATE remitos SET estado = ?, llegada_estimada = ? WHERE id = ?",
+                   (remito.estado, llegada, remito.id_remito))
         for bulto in remito.bultos:
             bulto.remito_id = remito.id_remito
             self.bulto_dao.guardar(cx, bulto, usuario_id)
@@ -226,6 +230,15 @@ class RemitoDAO(DAOBase):
         with self._conn(cx) as cx:
             fila = cx.execute("SELECT * FROM remitos WHERE id = ?", (id,)).fetchone()
             return self._a_objeto(cx, fila) if fila else None
+
+    # Nombre de quien armó el remito (para el documento), o None si no se sabe
+    def quien_lo_armo(self, remito_id):
+        with self._conn() as cx:
+            fila = cx.execute(
+                "SELECT u.nombre_completo FROM remitos r JOIN usuarios u ON u.id = r.usuario_id WHERE r.id = ?",
+                (remito_id,),
+            ).fetchone()
+        return fila[0] if fila else None
 
     def obtener_por_orden_y_destino(self, orden_id, destino_id, cx=None):
         with self._conn(cx) as cx:

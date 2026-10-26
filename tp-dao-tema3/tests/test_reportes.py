@@ -2,7 +2,7 @@
 # (compras, reposición con un bulto rechazado, ventas con distintos medios de
 # pago y una devolución) y se verifica cada número contra la cuenta a mano.
 # Acá NO se prueba la api.
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -58,7 +58,7 @@ def r(tmp_path):
     b2 = repo.agregar_bulto(remito.id_remito, [(agua.id, 5)])
     repo.precintar(b1.id_bulto, "P-1")
     repo.precintar(b2.id_bulto, "P-2")
-    repo.despachar(remito.id_remito)
+    repo.despachar(remito.id_remito, datetime.now() + timedelta(days=1))
     for bulto_id, intacto in ((b1.id_bulto, True), (b2.id_bulto, False)):
         rec.recibir(bulto_id)
         rec.verificar(bulto_id, f"P-{bulto_id}", intacto)

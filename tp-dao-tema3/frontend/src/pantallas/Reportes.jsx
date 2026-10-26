@@ -1,7 +1,8 @@
 // Pantalla de Reportes: los 5 reportes del backend (/reportes/...) con sus
 // filtros. Cada cambio de filtro vuelve a consultar solo. Las cuentas las hace
-// el backend; acá solo se muestran. Un local ve solo los suyos (lo filtra el
-// back), así que no se le muestra el filtro de local.
+// el backend; acá solo se muestran, con un gráfico arriba de cada tabla. Un
+// local ve solo los suyos (lo filtra el back), así que no se le muestra el
+// filtro de local.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
@@ -10,11 +11,13 @@ import Cabecera from "../componentes/Cabecera.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { puede } from "../componentes/Permisos.js";
 import { Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
+import { GraficoBarras, agrupar } from "../componentes/Graficos.jsx";
 import { fecha, nombreMedio, pesos, porcentaje } from "../formato.js";
 
+// requiere: la capacidad que hace falta para ver el reporte (los de ventas, el CD no los ve)
 const REPORTES = [
-  { valor: "ventas", texto: "💰 Ventas", pregunta: "¿Cuánto se vendió, dónde y cómo se cobró?", fechas: true, sucursal: true },
-  { valor: "productos-mas-vendidos", texto: "🏆 Más vendidos", pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true },
+  { valor: "ventas", texto: "💰 Ventas", pregunta: "¿Cuánto se vendió, dónde y cómo se cobró?", fechas: true, sucursal: true, requiere: "ve_ventas" },
+  { valor: "productos-mas-vendidos", texto: "🏆 Más vendidos", pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true, requiere: "ve_ventas" },
   { valor: "existencias", texto: "📦 Existencias", pregunta: "¿Cuánto hay, cuánto vale y qué falta reponer?", ubicacion: true },
   { valor: "mermas", texto: "⚠️ Mermas", pregunta: "¿Cuántos bultos llegaron con el precinto roto y cuánto se perdió?", fechas: true, sucursal: true },
   { valor: "tiempos-transito", texto: "⏱️ Tiempos de envío", pregunta: "¿Cuánto tarda un bulto del CD a cada local?", fechas: true, sucursal: true },
@@ -25,11 +28,12 @@ const FILTROS_INICIALES = { desde: "", hasta: "", sucursal_id: "", ubicacion_id:
 export default function Reportes({ usuario }) {
   const catalogos = useCatalogos();
   const { aviso, ejecutar, limpiar } = useAviso();
-  const [clave, setClave] = useState("ventas");
+  const disponibles = REPORTES.filter((r) => !r.requiere || puede(usuario, r.requiere));
+  const [clave, setClave] = useState(disponibles[0].valor);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
   const [datos, setDatos] = useState(null);
 
-  const reporte = REPORTES.find((r) => r.valor === clave);
+  const reporte = disponibles.find((r) => r.valor === clave);
   const veTodaLaRed = puede(usuario, "ve_toda_la_red");
   const cambiar = (campo) => (e) => setFiltros({ ...filtros, [campo]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const hayFiltros = filtros.desde || filtros.hasta || filtros.sucursal_id || filtros.ubicacion_id || filtros.solo_bajo_minimo;
@@ -56,7 +60,7 @@ export default function Reportes({ usuario }) {
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <div className="barra">
-        <Segmentado etiqueta="Reporte" valor={clave} alCambiar={setClave} opciones={REPORTES} />
+        <Segmentado etiqueta="Reporte" valor={clave} alCambiar={setClave} opciones={disponibles} />
       </div>
 
       <div className="barra filtros">
@@ -103,7 +107,7 @@ export default function Reportes({ usuario }) {
       </div>
 
       {datos?.clave !== clave ? <Cargando /> : !datos.error && (<>
-        {clave === "ventas" && <ReporteVentas datos={datos} />}
+        {clave === "ventas" && <ReporteVentas datos={datos} agrupado={filtros.agrupar} />}
         {clave === "productos-mas-vendidos" && <ReporteMasVendidos datos={datos} />}
         {clave === "existencias" && <ReporteExistencias datos={datos} />}
         {clave === "mermas" && <ReporteMermas datos={datos} />}
@@ -130,13 +134,26 @@ function Tabla({ children }) {
 
 const SIN_DATOS = <Vacio icono="🔍" titulo="No hay datos para estos filtros" texto="Probá con otras fechas o con todos los locales." />;
 
-function ReporteVentas({ datos }) {
+// "2026-10-20" → "20/10"; "2026-10" → "10/2026"
+function periodoCorto(periodo) {
+  const [anio, mes, dia] = periodo.split("-");
+  return dia ? `${dia}/${mes}` : `${mes}/${anio}`;
+}
+
+function ReporteVentas({ datos, agrupado }) {
+  // Por día o mes: cómo evoluciona el ingreso. Todo junto: cómo se cobró.
+  const porTiempo = agrupado !== "total";
+  const grafico = porTiempo
+    ? agrupar(datos.filas, (f) => periodoCorto(f.periodo), (f) => f.neto)
+    : agrupar(datos.filas, (f) => nombreMedio(f.medio_pago), (f) => f.neto);
   return (<>
     <Tarjetas items={[
       ["Ventas", datos.cantidad_ventas], ["Vendido", pesos(datos.total_vendido)],
       ["Devuelto", pesos(datos.total_devuelto)], ["Ingreso neto", pesos(datos.total_neto)],
     ]} />
-    {datos.filas.length === 0 ? SIN_DATOS : (
+    {datos.filas.length === 0 ? SIN_DATOS : (<>
+      <GraficoBarras titulo={porTiempo ? `Ingreso neto por ${agrupado === "dia" ? "día" : "mes"} ($)` : "Ingreso neto por medio de pago ($)"}
+        datos={grafico} formato={pesos} horizontal={!porTiempo} />
       <Tabla>
         <thead><tr><th>Período</th><th>Local</th><th>Medio de pago</th><th className="num">Ventas</th>
           <th className="num">Vendido</th><th className="num">Devuelto</th><th className="num">Neto</th></tr></thead>
@@ -147,7 +164,7 @@ function ReporteVentas({ datos }) {
           ))}
         </tbody>
       </Tabla>
-    )}
+    </>)}
   </>);
 }
 
@@ -155,7 +172,10 @@ function ReporteMasVendidos({ datos }) {
   const maximo = Math.max(1, ...datos.filas.map((f) => f.unidades));
   return (<>
     <Tarjetas items={[["Ingreso", pesos(datos.total_ingreso)], ["Ganancia (margen)", pesos(datos.total_margen)]]} />
-    {datos.filas.length === 0 ? SIN_DATOS : (
+    {datos.filas.length === 0 ? SIN_DATOS : (<>
+      {/* en rojo los que se venden a pérdida */}
+      <GraficoBarras titulo="Ganancia por producto ($)" formato={pesos} horizontal
+        datos={datos.filas.map((f) => ({ nombre: f.nombre, valor: Number(f.margen), detalle: `${f.unidades} u. · margen ${porcentaje(f.margen_porcentaje)}` }))} />
       <Tabla>
         <thead><tr><th>#</th><th>Producto</th><th>Unidades</th><th className="num">Ingreso</th>
           <th className="num">Costo</th><th className="num">Ganancia</th><th className="num">Margen</th></tr></thead>
@@ -172,7 +192,7 @@ function ReporteMasVendidos({ datos }) {
           ))}
         </tbody>
       </Tabla>
-    )}
+    </>)}
   </>);
 }
 
@@ -180,7 +200,12 @@ function ReporteExistencias({ datos }) {
   const tarjetas = Object.entries(datos.valorizado_por_ubicacion).map(([nombre, valor]) => [nombre, pesos(valor)]);
   return (<>
     <Tarjetas items={[...tarjetas, ["Productos para reponer", datos.productos_bajo_minimo], ["Inventario valorizado", pesos(datos.valorizado_total)]]} />
-    {datos.filas.length === 0 ? SIN_DATOS : (
+    {datos.filas.length === 0 ? SIN_DATOS : (<>
+      {/* con una sola ubicación el gráfico no compara nada: alcanza con la tarjeta */}
+      {tarjetas.length > 1 && (
+        <GraficoBarras titulo="Inventario valorizado por ubicación ($)" formato={pesos} horizontal
+          datos={Object.entries(datos.valorizado_por_ubicacion).map(([nombre, valor]) => ({ nombre, valor: Number(valor) }))} />
+      )}
       <Tabla>
         <thead><tr><th>Ubicación</th><th>Producto</th><th className="num">Hay</th><th className="num">Mínimo</th>
           <th className="num">Falta</th><th className="num">Valor</th></tr></thead>
@@ -193,7 +218,7 @@ function ReporteExistencias({ datos }) {
           ))}
         </tbody>
       </Tabla>
-    )}
+    </>)}
   </>);
 }
 
@@ -203,7 +228,10 @@ function ReporteMermas({ datos }) {
       ["Valor perdido", pesos(datos.valor_perdido_total)]]} />
     {datos.por_sucursal.length === 0
       ? <Vacio icono="✅" titulo="Sin mermas" texto="No hay bultos verificados ni rechazados con estos filtros." />
-      : (
+      : (<>
+        <GraficoBarras titulo="Valor perdido por local ($)" formato={pesos} horizontal
+          datos={datos.por_sucursal.map((s) => ({ nombre: s.sucursal, valor: Number(s.valor_perdido),
+            detalle: `${s.bultos_rechazados} de ${s.bultos_verificados} bultos rechazados (${porcentaje(s.tasa_rechazo)})` }))} />
         <Tabla>
           <thead><tr><th>Local</th><th className="num">Bultos verificados</th><th className="num">Rechazados</th>
             <th className="num">% rechazo</th><th className="num">Unidades perdidas</th><th className="num">Valor perdido</th></tr></thead>
@@ -215,7 +243,7 @@ function ReporteMermas({ datos }) {
             ))}
           </tbody>
         </Tabla>
-      )}
+      </>)}
     {datos.filas.length > 0 && (<>
       <h2 className="titulo-seccion espacio-arriba">Qué se perdió</h2>
       <Tabla>
@@ -235,12 +263,17 @@ function ReporteMermas({ datos }) {
 }
 
 function ReporteTransito({ datos }) {
-  const horas = (h) => (h === null || h === undefined ? "—" : `${h.toLocaleString("es-AR")} h`);
+  // Menos de una hora se lee mejor en minutos ("17 min" y no "0,28 h")
+  const horas = (h) => (h === null || h === undefined ? "—"
+    : h < 1 ? `${Math.round(h * 60)} min` : `${h.toLocaleString("es-AR")} h`);
   return (<>
     <Tarjetas items={[["Bultos recibidos", datos.bultos], ["Promedio general", horas(datos.horas_promedio_general)]]} />
     {datos.filas.length === 0
       ? <Vacio icono="🚚" titulo="Todavía no se recibió ningún bulto" texto="Cuando un local reciba un envío, acá vas a ver cuánto tardó." />
-      : (
+      : (<>
+        <GraficoBarras titulo="Tiempo promedio del CD a cada local" formato={horas} formatoEje={horas} horizontal
+          datos={datos.filas.map((f) => ({ nombre: f.sucursal, valor: Number(f.horas_promedio),
+            detalle: `${f.bultos} bultos · entre ${horas(f.horas_minimo)} y ${horas(f.horas_maximo)}` }))} />
         <Tabla>
           <thead><tr><th>Local</th><th className="num">Bultos</th><th className="num">Promedio</th><th className="num">Más rápido</th>
             <th className="num">Más lento</th></tr></thead>
@@ -251,6 +284,6 @@ function ReporteTransito({ datos }) {
             ))}
           </tbody>
         </Tabla>
-      )}
+      </>)}
   </>);
 }

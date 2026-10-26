@@ -59,6 +59,8 @@ export default function App() {
   const [usuario, setUsuario] = useState(undefined);  // undefined = revisando la sesión; null = sin sesión
   const [motivo, setMotivo] = useState(null);          // por qué se volvió al login
   const [activa, setActiva] = useState("inicio");
+  const [parametros, setParametros] = useState(null);  // lo que una pantalla le pasa a otra (ej: un pedido precargado)
+  const [visita, setVisita] = useState(0);             // cada navegación arranca la pantalla de cero
 
   useEffect(() => {
     sesion.alVencer((mensaje) => { setUsuario(null); setMotivo(mensaje); });
@@ -88,9 +90,11 @@ export default function App() {
   const { Pantalla, tema } = permitidas.find((p) => p.clave === activa) ?? permitidas[0];
   const puedeIr = (clave) => permitidas.some((p) => p.clave === clave);
 
-  function irA(clave) {
+  function irA(clave, nuevosParametros = null) {
     if (!puedeIr(clave)) return;
     setActiva(clave);
+    setParametros(nuevosParametros);
+    setVisita((v) => v + 1);
     window.scrollTo({ top: 0 });
   }
 
@@ -123,7 +127,7 @@ export default function App() {
       </nav>
       <main className={`contenido ${tema}`}>
         {/* key: al cambiar de pantalla arranca de cero */}
-        <Pantalla key={activa} irA={irA} puedeIr={puedeIr} usuario={usuario} />
+        <Pantalla key={`${activa}-${visita}`} irA={irA} puedeIr={puedeIr} usuario={usuario} parametros={parametros} />
       </main>
     </div>
   );

@@ -75,32 +75,51 @@ function textoDelError(cuerpo) {
   return "Error desconocido";
 }
 
-async function pedir(metodo, ruta, datos) {
+async function enviar(metodo, ruta, datos) {
   const headers = {};
   if (datos) headers["Content-Type"] = "application/json";
   if (sesion.token()) headers.Authorization = `Bearer ${sesion.token()}`;
-  let respuesta;
   try {
-    respuesta = await fetch(`/api${ruta}`, { method: metodo, headers, body: datos ? JSON.stringify(datos) : undefined });
+    return await fetch(`/api${ruta}`, { method: metodo, headers, body: datos ? JSON.stringify(datos) : undefined });
   } catch {
     throw new ErrorApi(0, "No se pudo conectar con el backend");
   }
+}
 
-  if (respuesta.status === 204) return null; // OK sin contenido (bajas, asignaciones)
-
+// Convierte una respuesta con error en un ErrorApi con el mensaje para el usuario
+async function errorDe(respuesta) {
   const cuerpo = await respuesta.json().catch(() => null);
-  if (!respuesta.ok) {
-    // Sin JSON: el proxy de Vite no encontró al backend
-    if (cuerpo === null) throw new ErrorApi(respuesta.status, "No se pudo conectar con el backend. ¿Está corriendo uvicorn?");
-    const error = new ErrorApi(respuesta.status, textoDelError(cuerpo));
-    // 401 con una sesión abierta = venció o la cerraron: se vuelve al login
-    if (respuesta.status === 401 && sesion.token()) {
-      sesion.borrar();
-      alVencerSesion(error.message);
-    }
-    throw error;
+  // Sin JSON: el proxy de Vite no encontró al backend
+  if (cuerpo === null) return new ErrorApi(respuesta.status, "No se pudo conectar con el backend. ¿Está corriendo uvicorn?");
+  const error = new ErrorApi(respuesta.status, textoDelError(cuerpo));
+  // 401 con una sesión abierta = venció o la cerraron: se vuelve al login
+  if (respuesta.status === 401 && sesion.token()) {
+    sesion.borrar();
+    alVencerSesion(error.message);
   }
-  return cuerpo;
+  return error;
+}
+
+async function pedir(metodo, ruta, datos) {
+  const respuesta = await enviar(metodo, ruta, datos);
+  if (!respuesta.ok) throw await errorDe(respuesta);
+  if (respuesta.status === 204) return null; // OK sin contenido (bajas, asignaciones)
+  return respuesta.json();
+}
+
+// Baja un archivo (ej: un PDF) con el nombre que manda el back. No alcanza con
+// un enlace común: el pedido tiene que llevar el token.
+async function descargar(ruta) {
+  const respuesta = await enviar("GET", ruta);
+  if (!respuesta.ok) throw await errorDe(respuesta);
+  const nombre = /filename="([^"]+)"/.exec(respuesta.headers.get("Content-Disposition") ?? "")?.[1] ?? "documento.pdf";
+  const url = URL.createObjectURL(await respuesta.blob());
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombre;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return nombre;
 }
 
 export const api = {
@@ -120,4 +139,5 @@ export const api = {
   borrar: (ruta) => pedir("DELETE", ruta),
   asociar: (ruta) => pedir("POST", ruta),
   accion: (ruta) => pedir("POST", ruta), // acciones sin datos, ej: /categorias/3/reactivar
+  descargar,
 };

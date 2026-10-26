@@ -1,6 +1,7 @@
 # Endpoints de reportes (ventas por período, más vendidos, existencias, etc.).
 # Llaman a reportes_service y nada más. Quien ve toda la red (administrador y
-# CD) puede filtrar por cualquier local; un local ve solo los suyos.
+# CD) puede filtrar por cualquier local; un local ve solo los suyos. Los de
+# ventas (ventas y más vendidos) exigen ve_ventas: el CD no los ve.
 # Acá NO va lógica de negocio ni acceso a la base.
 #
 # Devuelven JSON directo (sin un modelo Pydantic por fila): son vistas de solo
@@ -9,7 +10,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 
-from backend.api.dependencias import ubicacion_para_filtrar, usuario_actual
+from backend.api.dependencias import requiere, ubicacion_para_filtrar, usuario_actual
 from backend.servicios.reportes_service import ReportesService
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
@@ -21,14 +22,15 @@ HASTA = Query(None, description="Fecha final, inclusive (AAAA-MM-DD)")
 
 @router.get("/ventas")
 def ventas_por_periodo(desde: date | None = DESDE, hasta: date | None = HASTA, sucursal_id: int | None = None,
-                       agrupar: str = Query("dia", description="dia, mes o total"), usuario=Depends(usuario_actual)):
+                       agrupar: str = Query("dia", description="dia, mes o total"),
+                       usuario=Depends(requiere("ve_ventas"))):
     """Ventas, devoluciones e ingreso neto por período, local y medio de pago."""
     return service.ventas(desde, hasta, ubicacion_para_filtrar(usuario, sucursal_id), agrupar)
 
 
 @router.get("/productos-mas-vendidos")
 def productos_mas_vendidos(desde: date | None = DESDE, hasta: date | None = HASTA, sucursal_id: int | None = None,
-                           limite: int = 10, usuario=Depends(usuario_actual)):
+                           limite: int = 10, usuario=Depends(requiere("ve_ventas"))):
     """Ranking por unidades netas de devoluciones, con ingreso, costo y margen
     (ganancia o pérdida) con los precios del momento de cada venta."""
     return service.productos_mas_vendidos(desde, hasta, ubicacion_para_filtrar(usuario, sucursal_id), limite)

@@ -138,7 +138,7 @@ export default function Productos({ irA }) {
       )}
 
       {editando && (
-        <CajonProducto producto={editando} categorias={categorias} ejecutar={ejecutar} irA={irA}
+        <CajonProducto producto={editando} categorias={categorias} todosLosProveedores={proveedores} ejecutar={ejecutar} irA={irA}
           alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); cargar(); }}
           alDarDeBaja={() => pedirBaja(editando)} />
       )}
@@ -146,10 +146,12 @@ export default function Productos({ irA }) {
   );
 }
 
-function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuardar, alDarDeBaja }) {
+function CajonProducto({ producto, categorias, todosLosProveedores, ejecutar, irA, alCerrar, alGuardar, alDarDeBaja }) {
   const nuevo = !producto.id;
   const [form, setForm] = useState(nuevo ? VACIO : { ...producto, categoria_id: String(producto.categoria_id) });
-  const [proveedores, setProveedores] = useState(null);
+  const [proveedores, setProveedores] = useState(null);   // los que ya lo venden (al editar)
+  const [elegidos, setElegidos] = useState([]);           // los que se tildan al crearlo
+  const alternarProveedor = (id) => setElegidos((actual) => (actual.includes(id) ? actual.filter((x) => x !== id) : [...actual, id]));
   const parecidos = useParecidos();
   const cambiar = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
 
@@ -167,7 +169,8 @@ function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuarda
       };
       // Al modificar no se manda el código: es la identidad del producto
       const ok = nuevo
-        ? await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos }), `Producto «${form.nombre.trim()}» creado`)
+        ? await ejecutar(() => api.crear("/productos", { codigo: form.codigo, ...datos, proveedor_ids: elegidos }),
+          `Producto «${form.nombre.trim()}» creado`)
         : await ejecutar(() => api.modificar(`/productos/${producto.id}`, datos), "Cambios guardados");
       if (ok) alGuardar();
     });
@@ -206,6 +209,20 @@ function CajonProducto({ producto, categorias, ejecutar, irA, alCerrar, alGuarda
           <input type="number" min="0" step="1" value={form.stock_minimo} onChange={cambiar("stock_minimo")} />
           <span className="ayuda-campo">Si en algún lugar queda menos que esto, aparece como «Reponer».</span>
         </label>
+        {nuevo && (
+          <div>
+            <span className="etiqueta-campo">¿Quién lo vende? <span className="ayuda-campo">(opcional, se puede asignar después)</span></span>
+            {todosLosProveedores.length === 0 && <p className="nota">Todavía no hay proveedores cargados.</p>}
+            <div className="lista-tildes">
+              {todosLosProveedores.map((pr) => (
+                <label key={pr.id} className="check">
+                  <input type="checkbox" checked={elegidos.includes(pr.id)} onChange={() => alternarProveedor(pr.id)} />
+                  {pr.razon_social}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </form>
       <ConfirmacionParecidos pendiente={parecidos.pendiente} alConfirmar={parecidos.confirmar} alCancelar={parecidos.descartar} />
 

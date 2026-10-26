@@ -22,7 +22,17 @@ import { fecha } from "../formato.js";
 
 const ENTREGADOS = ["VERIFICADO", "VERIFICADO_CON_RECHAZOS"];
 
-export default function Logistica({ usuario }) {
+// Mañana a las 12, en el formato de <input type="datetime-local"> (hora local)
+function mananaAlMediodia() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const dos = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T12:00`;
+}
+
+// parametros.pedido: productos y cantidades para abrir un pedido ya cargado
+// (viene de la bandeja de Inicio o de "Reponer" en Stock)
+export default function Logistica({ usuario, parametros }) {
   const catalogos = useCatalogos();
   const permisos = {
     preparar: puede(usuario, "puede_preparar_envios"),
@@ -36,7 +46,7 @@ export default function Logistica({ usuario }) {
   const [remitos, setRemitos] = useState(null);
   const [seleccionados, setSeleccionados] = useState([]);
   const [remitoAbierto, setRemitoAbierto] = useState(null);
-  const [nuevoPedido, setNuevoPedido] = useState(false);
+  const [nuevoPedido, setNuevoPedido] = useState(Boolean(parametros?.pedido) && permisos.pedir);
   const [verTodosEntregados, setVerTodosEntregados] = useState(false);
 
   const cargar = () => ejecutar(async () => {
@@ -138,10 +148,11 @@ export default function Logistica({ usuario }) {
             <div className="columna-titulo">🚚 En camino <span className="contador">{enCamino.length}</span></div>
             {enCamino.map((r) => {
               const listos = r.bultos.filter((b) => ["VERIFICADO", "RECHAZADO"].includes(b.estado)).length;
+              const llegada = r.llegada_estimada ? `llega ${fecha(r.llegada_estimada)}` : "sin llegada estimada";
               return (
                 <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
                   accion={permisos.recibir ? "Recibir y verificar →" : "Ver detalle"} progreso={listos / r.bultos.length}
-                  detalle={`${listos} de ${r.bultos.length} bultos revisados`} />
+                  detalle={`${listos} de ${r.bultos.length} bultos revisados · ${llegada}`} demorado={r.demorado} />
               );
             })}
             {enCamino.length === 0 && <p className="columna-vacia">No hay envíos viajando.</p>}
@@ -168,7 +179,8 @@ export default function Logistica({ usuario }) {
       )}
 
       {nuevoPedido && (
-        <CajonNuevoPedido usuario={usuario} catalogos={catalogos} accion={accion} alCerrar={() => setNuevoPedido(false)} />
+        <CajonNuevoPedido usuario={usuario} catalogos={catalogos} accion={accion} lineasIniciales={parametros?.pedido}
+          alCerrar={() => setNuevoPedido(false)} />
       )}
       {remitoAbierto && (
         <CajonRemito key={remitoAbierto.id} remito={remitoAbierto} orden={ordenes.find((o) => o.id === remitoAbierto.orden_id)}
@@ -186,10 +198,11 @@ function siguienteEnArmado(remito) {
   return "Listo para despachar →";
 }
 
-function FichaRemito({ remito, catalogos, alAbrir, accion, progreso, detalle }) {
+function FichaRemito({ remito, catalogos, alAbrir, accion, progreso, detalle, demorado = false }) {
   return (
-    <button className="ficha" onClick={alAbrir}>
+    <button className={`ficha ${demorado ? "demorada" : ""}`} onClick={alAbrir}>
       <div className="ficha-titulo">{catalogos.nombreUbicacion(remito.destino_id)}<span className="numero-ficha">Remito #{remito.id}</span></div>
+      {demorado && <span className="estado estado-rojo">Demorado</span>}
       <span className="ficha-detalle">
         {detalle ?? `${remito.bultos.length} bulto${remito.bultos.length === 1 ? "" : "s"}`}
       </span>
@@ -201,8 +214,11 @@ function FichaRemito({ remito, catalogos, alAbrir, accion, progreso, detalle }) 
 
 // --------------------------------------------------------------- Nuevo pedido
 
-function CajonNuevoPedido({ usuario, catalogos, accion, alCerrar }) {
-  const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
+function CajonNuevoPedido({ usuario, catalogos, accion, lineasIniciales, alCerrar }) {
+  const precargado = Boolean(lineasIniciales?.length);
+  const [lineas, setLineas] = useState(precargado
+    ? lineasIniciales.map((i) => ({ producto_id: String(i.producto_id), cantidad: String(i.cantidad) }))
+    : [{ ...LINEA_VACIA }]);
 
   // El local del pedido es el del usuario: lo pone el back
   async function crear() {
@@ -217,6 +233,7 @@ function CajonNuevoPedido({ usuario, catalogos, accion, alCerrar }) {
       </>}>
       <div className="seccion-cajon">
         <h3>¿Qué necesita?</h3>
+        {precargado && <p className="nota" style={{ marginBottom: 10 }}>Ya está cargado lo que te falta para llegar al mínimo. Podés cambiar las cantidades.</p>}
         <LineasProductos lineas={lineas} alCambiar={setLineas} productos={catalogos.productosActivos} />
       </div>
     </Cajon>
@@ -240,6 +257,7 @@ function avanceDelRemito(remito, orden) {
 
 function CajonRemito({ remito, orden, catalogos, accion, confirmacion, permisos, alCerrar }) {
   const [lineas, setLineas] = useState([{ ...LINEA_VACIA }]);
+  const [llegada, setLlegada] = useState(mananaAlMediodia());   // día y hora estimados de llegada al local
   const armando = remito.estado === "ABIERTO" && permisos.preparar;
   const avance = avanceDelRemito(remito, orden);
   const faltante = avance.filter((a) => a.falta > 0);
@@ -257,21 +275,39 @@ function CajonRemito({ remito, orden, catalogos, accion, confirmacion, permisos,
       detalle: (<>
         <p>Salen del CD {remito.bultos.length} bulto{remito.bultos.length === 1 ? "" : "s"} con:</p>
         <ul>{remito.total_por_producto.map((i) => <li key={i.producto_id}>{i.cantidad} × {catalogos.nombreProducto(i.producto_id)}</li>)}</ul>
+        <p>Llegada estimada al local: <strong>{fecha(llegada)}</strong></p>
         <p>El stock sale del CD en este momento. <strong>No se puede deshacer.</strong></p>
       </>),
-    }, async () => { if (await accion(() => api.accion(`/remitos/${remito.id}/despachar`), "Despachado: el envío está en camino")) alCerrar(); });
+    }, async () => {
+      if (await accion(() => api.crear(`/remitos/${remito.id}/despachar`, { llegada_estimada: llegada }),
+        "Despachado: el envío está en camino")) alCerrar();
+    });
   }
 
   const sinPrecintar = remito.bultos.filter((b) => b.estado === "PREPARADO").length;
 
   return (
     <Cajon ancho titulo={`${catalogos.nombreUbicacion(remito.origen_id)} → ${catalogos.nombreUbicacion(remito.destino_id)}`}
-      subtitulo={`Remito #${remito.id} · ${fecha(remito.fecha)}`} alCerrar={alCerrar}
+      subtitulo={`Remito #${remito.id} · ${fecha(remito.fecha)}`
+        + (remito.llegada_estimada ? ` · llegada estimada ${fecha(remito.llegada_estimada)}` : "")}
+      alCerrar={alCerrar}
       pie={armando ? (<>
         {remito.bultos.length === 0 && <span className="nota">Armá al menos un bulto para poder despachar.</span>}
         {sinPrecintar > 0 && <span className="nota">Precintá todos los bultos para poder despachar.</span>}
-        <button onClick={despachar} disabled={remito.bultos.length === 0 || sinPrecintar > 0}>Despachar →</button>
-      </>) : <button className="secundario" onClick={alCerrar}>Cerrar</button>}>
+        {remito.bultos.length > 0 && sinPrecintar === 0 && (
+          <label className="llegada">Llegada estimada al local
+            <input type="datetime-local" value={llegada} onChange={(e) => setLlegada(e.target.value)} />
+          </label>
+        )}
+        <button onClick={despachar} disabled={remito.bultos.length === 0 || sinPrecintar > 0 || !llegada}>Despachar →</button>
+      </>) : (<>
+        {/* El remito se descarga una vez despachado: es el papel que viaja con los bultos */}
+        {remito.estado !== "ABIERTO" && (
+          <button className="secundario izquierda" onClick={() => accion(() => api.descargar(`/remitos/${remito.id}/remito.pdf`),
+            `Remito #${remito.id} descargado`)}>⬇ Remito PDF</button>
+        )}
+        <button className="secundario" onClick={alCerrar}>Cerrar</button>
+      </>)}>
 
       <div><Estado valor={remito.estado} /></div>
 
@@ -340,8 +376,11 @@ function Bulto({ bulto, catalogos, accion, confirmacion, permisos }) {
         <p>Si el número no es el que se puso en el CD o el precinto no llegó sano, el bulto queda <strong>Rechazado</strong> y
           su mercadería no se vende. <strong>No se puede deshacer.</strong></p>
       </>),
+    // El mensaje anticipa lo que va a decidir el back (el State), solo para avisar bien
     }, () => accion(() => api.crear(`/bultos/${bulto.id}/verificar`, { nro_leido: leido, intacto: sano }),
-      "Bulto revisado (la mercadería entra al local cuando se revisan todos los bultos)"));
+      sano && leido.trim() === bulto.nro_precinto
+        ? "Bulto verificado: su mercadería entra al local cuando se revisen todos los bultos del envío"
+        : "Bulto rechazado: su mercadería no entra al local (queda como merma)"));
   }
 
   return (

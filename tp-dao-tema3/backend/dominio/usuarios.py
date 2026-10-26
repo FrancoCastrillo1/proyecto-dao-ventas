@@ -153,6 +153,10 @@ class Usuario(ABC):
         """Stock y reportes de todas las ubicaciones (si no, solo de la suya)."""
         return False
 
+    def ve_ventas(self):
+        """Ventas, caja, comprobantes y reportes de ventas. El CD no: solo abastece."""
+        return False
+
     # ----------------------------------------------------------- Baja lógica
 
     def dar_de_baja(self):
@@ -182,6 +186,9 @@ class UsuarioAdministrador(Usuario):
         return True
 
     def ve_toda_la_red(self):
+        return True
+
+    def ve_ventas(self):
         return True
 
 
@@ -220,6 +227,9 @@ class UsuarioSucursal(Usuario):
         return True
 
     def puede_vender(self):
+        return True
+
+    def ve_ventas(self):
         return True
 
 

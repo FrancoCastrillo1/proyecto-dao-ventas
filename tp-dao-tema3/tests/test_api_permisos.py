@@ -5,6 +5,8 @@
 # operación. La base es la temporal de conftest.py (TP_DAO_DB), compartida
 # por este módulo. Acá NO se prueban las reglas del negocio: eso ya lo
 # prueban los tests de cada service.
+from datetime import datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,7 +83,7 @@ def test_login_incorrecto(red):
 def test_yo_dice_quien_soy_y_que_puedo_hacer(red):
     yo = pedir(red, "a", "GET", "/auth/yo").json()
     assert (yo["nombre_usuario"], yo["perfil"], yo["ubicacion_id"]) == ("per.a", "SUCURSAL", red["a"])
-    assert set(yo["capacidades"]) == {"puede_pedir_reposicion", "puede_recibir", "puede_vender"}
+    assert set(yo["capacidades"]) == {"puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_ventas"}
     assert "contrasena" not in yo and "hash_contrasena" not in yo
 
 
@@ -163,9 +165,18 @@ def test_un_local_ve_su_stock_pero_no_el_de_otro(red):
 
 
 @pytest.mark.parametrize("quien", ["admin", "cd"])
-def test_el_administrador_y_el_cd_ven_toda_la_red(red, quien):
+def test_el_administrador_y_el_cd_ven_el_stock_de_toda_la_red(red, quien):
     assert pedir(red, quien, "GET", f"/stock/{red['b']}").status_code == 200
-    assert pedir(red, quien, "GET", f"/caja/{red['b']}").status_code == 200
+
+
+def test_las_ventas_las_ve_el_administrador_pero_no_el_cd(red):
+    assert pedir(red, "admin", "GET", f"/caja/{red['b']}").status_code == 200
+    assert pedir(red, "admin", "GET", "/reportes/ventas").status_code == 200
+    for ruta in (f"/caja/{red['b']}", "/ventas", "/reportes/ventas", "/reportes/productos-mas-vendidos"):
+        respuesta = pedir(red, "cd", "GET", ruta)
+        assert respuesta.status_code == 403, ruta
+        assert "no ve las ventas" in respuesta.json()["detail"]
+    assert pedir(red, "cd", "GET", "/reportes/mermas").status_code == 200   # los de logística, sí
 
 
 def test_un_local_no_ve_reportes_ni_caja_de_otro(red):
@@ -193,7 +204,10 @@ def test_circuito_completo_cada_uno_en_lo_suyo(red):
     remito = pedir(red, "cd", "POST", "/remitos", json={"orden_id": orden["id"], "destino_id": red["a"]}).json()
     bulto = pedir(red, "cd", "POST", f"/remitos/{remito['id']}/bultos", json={"items": item}).json()
     assert pedir(red, "cd", "POST", f"/bultos/{bulto['id']}/precintar", json={"nro_precinto": "PER-P1"}).status_code == 200
-    assert pedir(red, "cd", "POST", f"/remitos/{remito['id']}/despachar").status_code == 200
+    manana = (datetime.now() + timedelta(days=1)).isoformat(timespec="minutes")
+    despacho = pedir(red, "cd", "POST", f"/remitos/{remito['id']}/despachar", json={"llegada_estimada": manana})
+    assert despacho.status_code == 200
+    assert despacho.json()["llegada_estimada"].startswith(manana) and not despacho.json()["demorado"]
     assert quien_hizo("ordenes_reposicion", orden["id"]) == "per.cd"
     assert quien_hizo("remitos", remito["id"]) == "per.cd"
 
@@ -202,6 +216,13 @@ def test_circuito_completo_cada_uno_en_lo_suyo(red):
     assert ajeno.status_code == 403
     assert ajeno.json()["detail"] == "Ese bulto no es de tu local"
     assert pedir(red, "b", "GET", f"/remitos/{remito['id']}").status_code == 403
+
+    # El remito en PDF lo baja el local destino (y el CD), no otro local
+    pdf = pedir(red, "a", "GET", f"/remitos/{remito['id']}/remito.pdf")
+    assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+    assert 'filename="remito-' in pdf.headers["content-disposition"]
+    assert pedir(red, "cd", "GET", f"/remitos/{remito['id']}/remito.pdf").status_code == 200
+    assert pedir(red, "b", "GET", f"/remitos/{remito['id']}/remito.pdf").status_code == 403
 
     # El local A lo recibe y lo verifica: el stock entra a su local
     assert pedir(red, "a", "POST", f"/bultos/{bulto['id']}/recibir").status_code == 200

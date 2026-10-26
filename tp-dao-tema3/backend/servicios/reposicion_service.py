@@ -199,13 +199,14 @@ class ReposicionService:
 
     # --------------------------------------------------------------- Despacho
 
-    def despachar(self, remito_id, usuario_id=None):
+    def despachar(self, remito_id, llegada_estimada=None, usuario_id=None):
         """Sale el remito del CD: todos los bultos pasan a EN_TRANSITO y se
         descuenta del CD lo que llevan (decisión del grupo: al despachar, no al
-        preparar). Si un producto no alcanza no se despacha nada."""
+        preparar). Si un producto no alcanza no se despacha nada. El CD informa
+        cuándo se espera que llegue (el dominio la exige y la valida)."""
         with self.remito_dao.transaccion() as cx:
             remito = self.obtener_remito(remito_id, cx)
-            remito.despachar()  # valida que esté abierto/cerrado y todo precintado
+            remito.despachar(llegada_estimada)  # valida la llegada, que esté abierto y todo precintado
             for bulto in remito.bultos:
                 for detalle in bulto.items:
                     try:

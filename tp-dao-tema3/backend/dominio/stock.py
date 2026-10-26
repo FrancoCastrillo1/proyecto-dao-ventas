@@ -96,6 +96,10 @@ class Stock:
     def esta_bajo_minimo(self):
         return self._cantidad < self._stock_minimo
 
+    # Cuánto habría que pedir para volver al mínimo (0 si no está bajo el mínimo)
+    def faltante_para_el_minimo(self):
+        return max(0, self._stock_minimo - self._cantidad)
+
     def ingresar(self, cantidad, tipo, referencia=""):
         self._validar_movimiento(cantidad, tipo, TIPOS_DE_INGRESO, "ingreso")
         self._registrar(cantidad, tipo, referencia)

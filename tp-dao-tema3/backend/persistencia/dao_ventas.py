@@ -50,6 +50,15 @@ class VentaDAO:
         ).fetchone()
         return fila[0]
 
+    # Las notas de crédito se numeran aparte, también correlativas por local.
+    # El local de una devolución es el de su venta.
+    def siguiente_numero_nota_credito(self, cx, sucursal_id):
+        fila = cx.execute(
+            "SELECT COALESCE(MAX(d.nro_nota_credito), 0) + 1 FROM devoluciones d "
+            "JOIN ventas v ON v.id = d.venta_id WHERE v.sucursal_id = ?", (sucursal_id,)
+        ).fetchone()
+        return fila[0]
+
     def crear(self, cx, venta, usuario_id=None):
         pago = venta.pago
         cur = cx.execute(
@@ -70,9 +79,10 @@ class VentaDAO:
 
     def crear_devolucion(self, cx, devolucion, usuario_id=None):
         cur = cx.execute(
-            "INSERT INTO devoluciones (venta_id, fecha, motivo, importe, usuario_id) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO devoluciones (venta_id, fecha, motivo, importe, usuario_id, nro_nota_credito) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (devolucion.venta_id, a_texto(devolucion.fecha), devolucion.motivo, a_centavos(devolucion.importe),
-             usuario_id),
+             usuario_id, devolucion.nota_credito.numero if devolucion.nota_credito else None),
         )
         devolucion.id = cur.lastrowid
         cx.executemany(
@@ -155,5 +165,19 @@ class VentaDAO:
                 "SELECT * FROM detalles_devolucion WHERE devolucion_id = ? ORDER BY rowid", (fila["id"],)
             ).fetchall()
         ]
+        fecha = datetime.fromisoformat(fila["fecha"])
+        nota_credito = (Comprobante(venta["sucursal_id"], fila["nro_nota_credito"], fecha)
+                        if fila["nro_nota_credito"] else None)
         return Devolucion(fila["venta_id"], venta["sucursal_id"], venta["medio_pago"], fila["motivo"], detalles,
-                          datetime.fromisoformat(fila["fecha"]), fila["id"])
+                          fecha, fila["id"], nota_credito)
+
+    # Nombre de quien hizo la venta o la devolución (para el comprobante), o
+    # None si se hizo antes de que hubiera usuarios
+    def quien_hizo(self, tabla, id):
+        if tabla not in ("ventas", "devoluciones"):
+            raise ValueError(f"Tabla inesperada: {tabla}")
+        with self._conn() as cx:
+            fila = cx.execute(
+                f"SELECT u.nombre_completo FROM {tabla} t JOIN usuarios u ON u.id = t.usuario_id WHERE t.id = ?", (id,)
+            ).fetchone()
+        return fila[0] if fila else None

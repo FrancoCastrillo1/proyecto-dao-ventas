@@ -55,6 +55,11 @@ export default function Stock({ irA, puedeIr, usuario }) {
   }
 
   const bajoMinimo = (existencias ?? []).filter((f) => f.bajo_minimo).length;
+  // Un local puede pedir lo que le falta: abre el pedido al CD ya cargado (hasta el mínimo)
+  const puedePedir = puede(usuario, "puede_pedir_reposicion") && ubicacionId === usuario.ubicacion_id && puedeIr("logistica");
+  const pedir = (filas) => irA("logistica", {
+    pedido: filas.map((f) => ({ producto_id: f.producto_id, cantidad: f.stock_minimo - f.cantidad })),
+  });
   const visibles = (existencias ?? [])
     .filter((f) => filtro === "todos" || f.bajo_minimo)
     .filter((f) => coincide(f.nombre, busqueda) || coincide(f.codigo, busqueda));
@@ -66,6 +71,8 @@ export default function Stock({ irA, puedeIr, usuario }) {
         {/* Se pregunta por la capacidad del usuario (como el backend), no por su perfil */}
         {puede(usuario, "puede_comprar") && ubicacionId === usuario.ubicacion_id &&
           <button onClick={() => setComprando(true)}>+ Registrar compra</button>}
+        {puedePedir && bajoMinimo > 0 &&
+          <button onClick={() => pedir(existencias.filter((f) => f.bajo_minimo))}>Pedir lo que falta ({bajoMinimo})</button>}
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
@@ -106,7 +113,9 @@ export default function Stock({ irA, puedeIr, usuario }) {
                   <td>{f.nombre}<span className="secundario-texto">{f.codigo}</span></td>
                   <td className="num"><strong>{f.cantidad}</strong></td>
                   <td className="num">{f.stock_minimo}</td>
-                  <td>{f.bajo_minimo && <span className="estado estado-rojo">Reponer</span>}</td>
+                  <td>{f.bajo_minimo && (puedePedir
+                    ? <button className="estado estado-rojo boton-estado" onClick={() => pedir([f])} title="Pedirle al CD lo que falta">Reponer →</button>
+                    : <span className="estado estado-rojo">Reponer</span>)}</td>
                   <td><div className="acciones-fila">
                     <button className="fantasma chico" onClick={() => verMovimientos(f)}>Ver movimientos</button>
                   </div></td>

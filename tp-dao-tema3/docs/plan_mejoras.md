@@ -22,9 +22,12 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
   - Proveedor: crear un producto desde "Productos que vende".
   - Títulos más grandes en todo el front.
   - Notas de la prueba del paso 3 (23/10):
-    - **CD:** no le sirven las ventas ni los reportes de ventas (solo envía y despacha). Que vea reportes de logística, por ejemplo los locales que más devuelven o rechazan mercadería. Se junta con el paso 9 (reportes por perfil).
+    - **CD:** no le sirven las ventas ni los reportes de ventas (solo envía y despacha). ~~Que no las vea~~ (hecho el 26/10, capacidad `ve_ventas`). Falta que vea reportes de logística, por ejemplo los locales que más devuelven o rechazan mercadería. Se junta con el paso 9 (reportes por perfil).
     - **CD, compras:** al registrar una compra, poder adjuntar el PDF de la factura. Se junta con el paso 8 (compras a proveedores).
     - **Local, stock:** que "Reponer" sea un botón que abra el pedido al CD ya cargado con lo que falta (hasta el mínimo). Se junta con el paso 10 (reposición sugerida).
+- [x] ~~**1e. Arreglos de la prueba del 26/10** (Geronimo probó hasta el 9.9 de `docs/recorrido_front.md`).~~
+  - Hecho el 26/10 en la rama `feature/productos`, sin commitear: el CD ya no ve ventas (capacidad `ve_ventas`), remito descargable en PDF (Template Method), proveedores al crear el producto, efectivo solo con números, comprobante sin vuelto, mensaje claro al devolver de más y gráficos en los 5 reportes (Recharts). Además: el menú ya no ensancha la página en el celular. 762 tests.
+  - **Pendiente, para después:** repensar cómo se hacen las devoluciones (a Geronimo le resulta raro cómo se manejan hoy).
 - [x] ~~**2. Usuarios y perfiles en el back.** Que el back separe las funciones de cada perfil y registre quién hizo cada operación.~~
   - Administrador (sin ubicación): locales, CD, productos, categorías, proveedores y usuarios; ve los reportes de toda la red. No opera.
   - Local: pedir reposición, ver sus pedidos y remitos, recibir y verificar los bultos de su local, vender, devolver, caja, ver su stock y el catálogo, reportes de su local.
@@ -41,11 +44,14 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
   - Hecho el 23/10 en la rama `feature/usuarios`: login, menú por capacidades, Vender/Envíos/Stock/Reportes según el perfil, pantalla de Usuarios. Probado de punta a punta en Chrome con los tres perfiles (sección 0 de `docs/recorrido_front.md`).
 - [x] ~~**4. Reglas del producto y filtros.** Restringir lo que se puede cargar como producto y buscar productos con filtros.~~
   - Hecho el 23/10 en la rama `feature/productos` (sale de `feature/usuarios`): nombre sin repetir entre activos, no dar de baja con stock, y `GET /productos` con filtros (texto, categoría, proveedor, rango de precio). 717 tests.
-- [ ] **5. Comprobante descargable** de cada venta y nota de crédito de cada devolución. Un local solo descarga los suyos. Opciones: formato y librería.
-- [ ] **6. Bandeja de tareas y transporte.** Inicio muestra los pendientes de cada perfil y lleva a la pantalla donde se resuelve cada uno; el CD registra el transporte de cada remito al despacharlo. Opciones: qué tareas mostrar a cada perfil (varias) y qué datos del transporte guardar.
-- [ ] **7. Cierre para el 29/10:** diagrama de clases, diagrama de estados del bulto, `docs/guia_oral.md` y `docs/presentacion_preliminar.md` actualizados con las decisiones nuevas, y README con los usuarios de prueba. Opciones: cómo armar los diagramas. Al final, correr todos los tests y levantar todo desde cero con el seed.
+- [x] ~~**5. Comprobante descargable** de cada venta y nota de crédito de cada devolución. Un local solo descarga los suyos.~~
+  - Hecho el 23/10 en la rama `feature/productos`: PDF con fpdf2, Template Method en `dominio/documentos.py`, notas de crédito numeradas por local, botones de descarga en Vender. 736 tests.
+- [x] ~~**6. Bandeja de tareas y transporte.** Inicio muestra los pendientes de cada perfil y lleva a la pantalla donde se resuelve cada uno; el CD registra el transporte de cada remito al despacharlo.~~
+  - Hecho el 23/10 en la rama `feature/productos`: `GET /tareas` según las capacidades, bandeja "Para hacer" en Inicio, pedido precargado (bandeja y Stock), llegada estimada obligatoria al despachar y envíos demorados. 754 tests.
+- [x] ~~**7. Cierre para el 29/10:** diagrama de clases, diagrama de estados del bulto, `docs/guia_oral.md` y `docs/presentacion_preliminar.md` actualizados con las decisiones nuevas, y README con los usuarios de prueba.~~
+  - Hecho el 23/10 en la rama `feature/productos`: `docs/diagramas.md` (Mermaid: estados del bulto y del remito, tres de clases y uno de capas; PNG en `docs/img/` con `node docs/img/generar.mjs`), `docs/patrones.md`, `docs/guion_demo.md` (probado entero desde cero con el seed), guía del oral, presentación y README actualizados. 754 tests.
 - [ ] **8. Compras a proveedores.** El CD registra compras y la mercadería entra a su stock; no se le compra a un proveedor un producto que no provee. Opciones: cómo modelar la compra y cómo actualizar el costo del producto.
-- [ ] **9. Reportes nuevos con gráficos exportables**, y que cada perfil vea solo los suyos. Entre los nuevos, los locales que más devuelven mercadería. Opciones: qué reportes (varios), librería de gráficos y formato de exportación.
+- [ ] **9. Reportes nuevos con gráficos exportables**, y que cada perfil vea solo los suyos. Entre los nuevos, los locales que más devuelven mercadería. Opciones: qué reportes (varios) y formato de exportación. (Ya hecho en el 1e: los gráficos de los 5 reportes con Recharts y que el CD no vea los de ventas.)
 - [ ] **10. Envíos demorados y reposición sugerida:** el CD ve qué envíos vienen atrasados y el sistema le sugiere qué reponer a cada local.
 - [ ] **11. Limpieza:** precios de Producto como `Decimal`, y ninguna función que arranque con guion bajo. Mostrar la lista de cambios antes de renombrar.
 
@@ -70,6 +76,29 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el Administrador. El CD solo opera.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
+
+### Paso 1e: arreglos de la prueba del 26/10 (decidido el 26/10)
+- **El CD no ve ventas:** capacidad nueva `ve_ventas` (administrador y local sí, CD no), exigida con `requiere("ve_ventas")` en las rutas de ventas, caja, comprobantes y los reportes de ventas y más vendidos. El front esconde esas pestañas e indicadores con la misma capacidad. Descartado: filtrar con `if perfil ==`.
+- **Remito en PDF:** `GET /remitos/{id}/remito.pdf`, con el mismo **Template Method** (`RemitoDocumento` hereda de `DocumentoComercial`). Se agregan dos ganchos: `columnas()` (el remito muestra bulto y precinto en vez de precio) y `etiqueta_responsable()` ("Preparó" en vez de "Atendió"). Se descarga una vez despachado (antes no es definitivo); lo baja el CD o el local destino (otro local: 403).
+- **Proveedores al crear el producto:** opcionales, uno o varios (`proveedor_ids`), en la misma transacción que el producto. El service controla que existan y estén activos.
+- **Gráficos:** con **Recharts** (v3), un gráfico de barras arriba de cada tabla, una sola serie en azul y en rojo los valores negativos (productos vendidos a pérdida). Barras acostadas y ordenadas de mayor a menor para comparar locales o productos; paradas y en orden para el tiempo (ventas por día o mes). Sin gráfico si hay una sola barra. Las cuentas siguen en el back; el componente `componentes/Graficos.jsx` solo dibuja. Descartados: Chart.js (no es de React) y dibujar a mano con SVG.
+- **Chicos:** el efectivo solo acepta números; el vuelto se ve al cobrar pero no en el comprobante; al devolver de más: "No se puede devolver más de lo que se vendió: de 'X' se vendieron N (M ya se devolvieron), así que se pueden devolver hasta K".
+
+### Paso 7: cierre para el oral (decidido el 23/10)
+- **Diagramas en Mermaid** dentro de `docs/diagramas.md`: GitHub los dibuja solos y se corrigen como texto. Las imágenes para la presentación se generan con `docs/img/generar.mjs` (Chrome sin ventana + la librería de Mermaid), que además falla si un diagrama tiene un error. Descartados: PlantUML (necesita Java o un servidor) y draw.io (no se regenera desde el texto).
+- Se suman un **guion de demo de 5 minutos** (`docs/guion_demo.md`, armado sobre el estado del seed) y una **tabla de patrones** (`docs/patrones.md`). Descartados: diagrama de secuencia y diagrama de la base.
+
+### Paso 6: bandeja de tareas y llegada estimada (decidido el 23/10)
+- **Bandeja:** `GET /tareas` (servicio `TareasService`) arma los pendientes según las capacidades del usuario, sin `if perfil ==`. CD (`puede_preparar_envios`): pedidos sin preparar, remitos para armar, precintar o despachar. Local (`puede_recibir`): envíos en camino y bultos para verificar; (`puede_pedir_reposicion`): productos bajo el mínimo que todavía no pidió. Lo urgente (un envío demorado) sale primero. El administrador no tiene tareas.
+- **Pedido precargado:** "Pedir" (bandeja) y "Reponer" / "Pedir lo que falta" (Stock del local) abren el pedido al CD cargado con lo que falta para llegar al mínimo (`Stock.faltante_para_el_minimo()`). `irA(pantalla, parametros)` lleva los datos de una pantalla a otra.
+- **Transporte:** solo la **llegada estimada** (día y hora). Transportista, patente y chofer se descartaron (no aportan al circuito). Dominio: `Remito.despachar(llegada_estimada)` la exige, posterior al despacho y a no más de 30 días, y `esta_demorado()`; base: columna `llegada_estimada` y trigger que no deja pasar a EN_TRANSITO sin ella (los remitos viejos siguen funcionando). El front sugiere mañana a las 12 y muestra "Demorado".
+
+### Paso 5: comprobante y nota de crédito en PDF (decidido el 23/10)
+- **Formato:** PDF armado en el back con **fpdf2** (Python puro, una dependencia). `GET /ventas/{id}/comprobante.pdf` y `GET /ventas/{id}/devoluciones/{devolucion_id}/nota-credito.pdf`. Los descarga quien puede ver la venta (el local que la hizo, o quien ve toda la red); otro local recibe 403.
+- **Patrón Template Method:** `DocumentoComercial.armar()` fija el orden (encabezado del comercio y del local, renglones, totales, notas) y `ComprobanteVenta` y `NotaCredito` redefinen solo los pasos (título, número, renglones, totales, notas). `notas()` es un gancho con valor por defecto. El dominio arma QUÉ dice el documento (`ContenidoDocumento`); `servicios/documentos_pdf.py` lo dibuja sin saber cuál es.
+- **Numeración:** la nota de crédito es correlativa por local, como el comprobante (`NC 0002-00000001`), y reutiliza la clase `Comprobante`. Columna `nro_nota_credito` en `devoluciones`, trigger que impide repetir el número en un local (el local está en la venta, por eso no es un UNIQUE), y migración que numera las devoluciones viejas en orden.
+- **Datos:** el comercio (razón social, CUIT y dirección, ficticios) en `config.py`; quién atendió sale del `usuario_id` de la venta o la devolución.
+- Descartado: reportlab (más pesado), HTML para imprimir (no se testea ni lo controla el back), leyenda "no válido como factura" y devoluciones al pie del comprobante.
 
 ### Paso 4: reglas del producto y filtros (decidido el 23/10)
 - **Nombre sin repetir:** dos productos ACTIVOS no se llaman igual (sin mayúsculas, tildes ni espacios de más). Dominio: `Producto.nombre_normalizado`; service: `validar_nombre_libre` al crear, modificar y reactivar; base: índice único parcial `productos_nombre_activo` (`WHERE activo = 1`). Uno dado de baja libera el nombre; lo parecido sigue siendo solo un aviso. La migración agrega el código al nombre de los repetidos que ya hubiera.

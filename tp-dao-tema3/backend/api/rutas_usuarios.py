@@ -24,7 +24,7 @@ class UsuarioSalida(BaseModel):
 
 CAPACIDADES = [
     "puede_gestionar_maestros", "puede_consultar_proveedores", "puede_comprar", "puede_preparar_envios",
-    "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red",
+    "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red", "ve_ventas",
 ]
 
 

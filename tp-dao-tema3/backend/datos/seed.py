@@ -13,6 +13,7 @@
 #   .venv\Scripts\python -m backend.datos.seed              carga solo si la base está vacía
 #   .venv\Scripts\python -m backend.datos.seed --reiniciar  BORRA la base local y la vuelve a cargar
 import sys
+from datetime import datetime, timedelta
 
 from backend.config import DB_PATH
 from backend.dominio.stock import TipoMovimiento
@@ -61,6 +62,10 @@ USUARIOS = [
     ("SUCURSAL", "norte", "Nico de Norte", "Sucursal Norte"),
     ("SUCURSAL", "sur", "Sofía de Sur", "Sucursal Sur"),
 ]
+
+
+# Llegada estimada de los envíos del seed: mañana a las 12
+MANANA_AL_MEDIODIA = (datetime.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 def base_vacia():
@@ -131,7 +136,7 @@ def cargar_datos_prueba():
                                              u["cd.central"])
             reposicion.precintar(bulto.id_bulto, f"{prefijo}-{i:03d}", u["cd.central"])
             ids.append((bulto.id_bulto, f"{prefijo}-{i:03d}"))
-        reposicion.despachar(remito.id_remito, u["cd.central"])
+        reposicion.despachar(remito.id_remito, MANANA_AL_MEDIODIA, u["cd.central"])
         return ids
 
     # Centro: todo llega bien

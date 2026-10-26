@@ -36,6 +36,7 @@ MENSAJES_SIN_PERMISO = {
     "puede_pedir_reposicion": "Solo un local puede pedir reposición",
     "puede_recibir": "Solo un local recibe y verifica los envíos",
     "puede_vender": "Solo un local vende y hace devoluciones",
+    "ve_ventas": "Tu perfil no ve las ventas: el Centro de Distribución solo abastece a los locales",
 }
 
 

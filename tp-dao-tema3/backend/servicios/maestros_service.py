@@ -86,7 +86,19 @@ class ProductoService:
         if otro and otro.id != producto.id:
             raise EntidadDuplicada(f"Ya existe el producto '{otro.nombre}' (código {otro.codigo})")
 
-    def crear(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0):
+    # Los proveedores que se eligen al crear el producto: tienen que existir y
+    # estar activos. Se valida todo antes de guardar nada.
+    def validar_proveedores(self, proveedor_ids):
+        ids = list(dict.fromkeys(proveedor_ids or ()))   # sin repetidos, en el orden en que vinieron
+        for proveedor_id in ids:
+            proveedor = self.proveedor_dao.obtener_por_id(proveedor_id)
+            if proveedor is None:
+                raise NoEncontrado(f"No se encontro el proveedor {proveedor_id}")
+            if not proveedor.activo:
+                raise DatoInvalido(f"El proveedor '{proveedor.razon_social}' está dado de baja")
+        return ids
+
+    def crear(self, codigo, nombre, categoria_id, precio_venta, costo, stock_minimo=0, proveedor_ids=()):
         # Primero el dominio valida el formato, después lo que necesita la base
         producto = Producto(codigo, nombre, categoria_id, precio_venta, costo, stock_minimo)
         existente = self.dao.obtener_por_codigo(producto.codigo)
@@ -94,7 +106,8 @@ class ProductoService:
             raise EntidadDuplicada(mensaje_duplicado(f"Ya existe un producto con el código '{producto.codigo}'", existente))
         self.validar_nombre_libre(producto)
         self.validar_categoria(producto.categoria_id)
-        return self.dao.crear(producto)
+        proveedor_ids = self.validar_proveedores(proveedor_ids)
+        return self.dao.crear(producto, proveedor_ids)   # el producto y sus proveedores, todo junto
 
     def obtener(self, id):
         producto = self.dao.obtener_por_id(id)
