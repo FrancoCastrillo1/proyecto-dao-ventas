@@ -2,12 +2,12 @@
 // pasan ya calculado: las cuentas las hace el backend y el agrupado, la
 // pantalla. Va siempre arriba de la tabla, que sigue siendo la vista exacta.
 //
-// Una sola serie por gráfico (sin leyenda: el título dice qué es), en azul; si
+// Una sola serie por gráfico (sin leyenda: el título dice qué es), en miel; si
 // hay valores negativos (ej. un producto que se vende a pérdida), esas barras
 // van en rojo. Grilla y ejes tenues para que resalten los datos.
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const COLORES = { serie: "#2a78d6", negativo: "#e34948", grilla: "#e1e0d9", eje: "#c3c2b7", rotulo: "#898781" };
+const COLORES = { serie: "#c98a1b", negativo: "#b23a3a", grilla: "#ece3d3", eje: "#d6c9b3", rotulo: "#8a7862" };
 const ALTO_POR_FILA = 34;
 const ROTULOS = { fill: COLORES.rotulo, fontSize: 12 };
 

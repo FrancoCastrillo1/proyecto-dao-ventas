@@ -11,6 +11,7 @@ import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
+import Icono from "../componentes/Icono.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { Buscador, Cargando, coincide, Vacio } from "../componentes/Controles.jsx";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
@@ -93,7 +94,7 @@ export default function Ventas({ usuario }) {
 
   return (
     <section>
-      <Cabecera icono="🛒" titulo={`Vender en ${usuario.ubicacion_nombre ?? "tu local"}`}
+      <Cabecera icono="carrito" titulo={`Vender en ${usuario.ubicacion_nombre ?? "tu local"}`}
         subtitulo="Tocá los productos para sumarlos al ticket y cobrá" />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
@@ -204,7 +205,7 @@ export default function Ventas({ usuario }) {
         </div>
       )}
       {ventas === null && <Cargando />}
-      {ventas?.length === 0 && <Vacio icono="🧾" titulo="Este local todavía no vendió nada" texto="Las ventas que cobres aparecen acá." />}
+      {ventas?.length === 0 && <Vacio icono="recibo" titulo="Este local todavía no vendió nada" texto="Las ventas que cobres aparecen acá." />}
       {ventas?.length > 0 && (
         <div className="tarjeta-tabla">
           <table>
@@ -228,7 +229,7 @@ export default function Ventas({ usuario }) {
       {comprobante && (
         <Cajon titulo={`Comprobante ${comprobante.comprobante}`} subtitulo={`${catalogos.nombreUbicacion(comprobante.sucursal_id)} · ${fecha(comprobante.fecha)}`}
           alCerrar={() => setComprobante(null)} pie={<>
-            <button className="secundario" onClick={() => descargarComprobante(comprobante)}>⬇ Descargar PDF</button>
+            <button className="secundario" onClick={() => descargarComprobante(comprobante)}><Icono nombre="descargar" tamano={16} /> Descargar PDF</button>
             <button onClick={() => setComprobante(null)}>Listo</button>
           </>}>
           <DetalleVenta venta={comprobante} catalogos={catalogos} />
@@ -287,7 +288,7 @@ function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar, alDescarg
   return (
     <Cajon titulo={`Venta ${venta.comprobante}`} subtitulo={fecha(venta.fecha)} alCerrar={alCerrar}
       pie={<>
-        <button className="secundario izquierda" onClick={alDescargar}>⬇ Comprobante PDF</button>
+        <button className="secundario izquierda" onClick={alDescargar}><Icono nombre="descargar" tamano={16} /> Comprobante PDF</button>
         <button className="secundario" onClick={alCerrar}>Cerrar</button>
         <button onClick={devolver}>Registrar devolución</button>
       </>}>
@@ -305,7 +306,7 @@ function CajonVenta({ venta, catalogos, ejecutar, alCambiar, alCerrar, alDescarg
                 {d.nota_credito && (
                   <button className="fantasma chico" onClick={() => ejecutar(
                     () => api.descargar(`/ventas/${venta.id}/devoluciones/${d.id}/nota-credito.pdf`),
-                    `Nota de crédito ${d.nota_credito} descargada`)}>⬇ PDF</button>
+                    `Nota de crédito ${d.nota_credito} descargada`)}><Icono nombre="descargar" tamano={16} /> PDF</button>
                 )}
               </li>
             ))}

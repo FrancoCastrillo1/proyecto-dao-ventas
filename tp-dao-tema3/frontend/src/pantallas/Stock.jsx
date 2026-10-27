@@ -10,6 +10,7 @@ import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
+import Icono from "../componentes/Icono.jsx";
 import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import { puede } from "../componentes/Permisos.js";
 import { fecha } from "../formato.js";
@@ -66,7 +67,7 @@ export default function Stock({ irA, puedeIr, usuario }) {
 
   return (
     <section>
-      <Cabecera icono="📦" titulo="Stock"
+      <Cabecera icono="caja" titulo="Stock"
         subtitulo={veTodaLaRed ? "Cuánto hay de cada producto en cada lugar" : `Lo que hay en ${ubicacion?.nombre ?? "tu local"}`}>
         {/* Se pregunta por la capacidad del usuario (como el backend), no por su perfil */}
         {puede(usuario, "puede_comprar") && ubicacionId === usuario.ubicacion_id &&
@@ -79,7 +80,7 @@ export default function Stock({ irA, puedeIr, usuario }) {
       {veTodaLaRed && (
         <div className="barra">
           <Segmentado etiqueta="Ubicación" valor={ubicacionId} alCambiar={setUbicacionId}
-            opciones={catalogos.ubicacionesActivas.map((u) => ({ valor: u.id, texto: `${u.puede_despachar ? "🏭" : "🏬"} ${u.nombre}` }))} />
+            opciones={catalogos.ubicacionesActivas.map((u) => ({ valor: u.id, texto: <><Icono nombre={u.puede_despachar ? "cd" : "local"} tamano={16} /> {u.nombre}</> }))} />
         </div>
       )}
       <div className="barra">
@@ -99,8 +100,8 @@ export default function Stock({ irA, puedeIr, usuario }) {
 
       {existencias === null ? <Cargando /> : visibles.length === 0 ? (
         filtro === "bajo" && !busqueda
-          ? <Vacio icono="🎉" titulo="Nada bajo el mínimo" texto="Todos los productos de esta ubicación tienen stock suficiente." />
-          : <Vacio icono="🔍" titulo="No hay productos para mostrar" texto={busqueda ? "Probá con otra búsqueda." : "Esta ubicación todavía no tiene productos."} />
+          ? <Vacio icono="festejo" titulo="Nada bajo el mínimo" texto="Todos los productos de esta ubicación tienen stock suficiente." />
+          : <Vacio icono="buscar" titulo="No hay productos para mostrar" texto={busqueda ? "Probá con otra búsqueda." : "Esta ubicación todavía no tiene productos."} />
       ) : (
         <div className="tarjeta-tabla">
           <table>

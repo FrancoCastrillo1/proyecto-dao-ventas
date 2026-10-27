@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
+import Icono from "../componentes/Icono.jsx";
 import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
@@ -91,7 +92,7 @@ export default function Logistica({ usuario, parametros }) {
 
   return (
     <section>
-      <Cabecera icono="🚚" titulo={permisos.preparar ? "Envíos a locales" : "Envíos a mi local"}
+      <Cabecera icono="camion" titulo={permisos.preparar ? "Envíos a locales" : "Envíos a mi local"}
         subtitulo={permisos.preparar ? "La mercadería viaja del CD a los locales en bultos precintados"
           : "Pedile mercadería al CD y recibí lo que te llega, revisando el precinto"}>
         {permisos.pedir && <button onClick={() => setNuevoPedido(true)}>+ Nuevo pedido</button>}
@@ -103,7 +104,7 @@ export default function Logistica({ usuario, parametros }) {
         <div className="tablero">
           {/* ------------------------------------------------ Pedidos */}
           <div className="columna">
-            <div className="columna-titulo">📝 {permisos.preparar ? "Pedidos de locales" : "Mis pedidos"} <span className="contador">{pedidos?.length ?? 0}</span></div>
+            <div className="columna-titulo"><Icono nombre="pedido" tamano={17} /> {permisos.preparar ? "Pedidos de locales" : "Mis pedidos"} <span className="contador">{pedidos?.length ?? 0}</span></div>
             <p className="columna-ayuda">{permisos.preparar ? "Elegí los que vas a preparar juntos." : "Esperando que el CD los prepare."}</p>
             {(pedidos ?? []).map((p) => (
               <div key={p.id} className="ficha">
@@ -125,7 +126,7 @@ export default function Logistica({ usuario, parametros }) {
 
           {/* ------------------------------------------- Armando en el CD */}
           <div className="columna">
-            <div className="columna-titulo">📦 Armando en el CD <span className="contador">{armando.length + sinRemito.length}</span></div>
+            <div className="columna-titulo"><Icono nombre="caja" tamano={17} /> Armando en el CD <span className="contador">{armando.length + sinRemito.length}</span></div>
             {sinRemito.map(({ orden, destino }) => (
               <div key={`${orden.id}-${destino}`} className="ficha">
                 <div className="ficha-titulo">{catalogos.nombreUbicacion(destino)}<span className="numero-ficha">Orden #{orden.id}</span></div>
@@ -145,7 +146,7 @@ export default function Logistica({ usuario, parametros }) {
 
           {/* --------------------------------------------------- En camino */}
           <div className="columna">
-            <div className="columna-titulo">🚚 En camino <span className="contador">{enCamino.length}</span></div>
+            <div className="columna-titulo"><Icono nombre="camion" tamano={17} /> En camino <span className="contador">{enCamino.length}</span></div>
             {enCamino.map((r) => {
               const listos = r.bultos.filter((b) => ["VERIFICADO", "RECHAZADO"].includes(b.estado)).length;
               const llegada = r.llegada_estimada ? `llega ${fecha(r.llegada_estimada)}` : "sin llegada estimada";
@@ -160,7 +161,7 @@ export default function Logistica({ usuario, parametros }) {
 
           {/* --------------------------------------------------- Entregados */}
           <div className="columna">
-            <div className="columna-titulo">✅ Entregados <span className="contador">{entregados.length}</span></div>
+            <div className="columna-titulo"><Icono nombre="listo" tamano={17} /> Entregados <span className="contador">{entregados.length}</span></div>
             {(verTodosEntregados ? entregados : entregados.slice(0, 4)).map((r) => {
               const rechazados = r.bultos.filter((b) => b.estado === "RECHAZADO").length;
               return (
@@ -304,7 +305,7 @@ function CajonRemito({ remito, orden, catalogos, accion, confirmacion, permisos,
         {/* El remito se descarga una vez despachado: es el papel que viaja con los bultos */}
         {remito.estado !== "ABIERTO" && (
           <button className="secundario izquierda" onClick={() => accion(() => api.descargar(`/remitos/${remito.id}/remito.pdf`),
-            `Remito #${remito.id} descargado`)}>⬇ Remito PDF</button>
+            `Remito #${remito.id} descargado`)}><Icono nombre="descargar" tamano={16} /> Remito PDF</button>
         )}
         <button className="secundario" onClick={alCerrar}>Cerrar</button>
       </>)}>

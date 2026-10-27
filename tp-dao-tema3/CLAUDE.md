@@ -167,3 +167,9 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - PDF en el back con fpdf2; lo descarga quien puede ver la venta.
 - **Template Method** (`dominio/documentos.py`): `DocumentoComercial.armar()` fija el orden; `ComprobanteVenta` y `NotaCredito` completan los pasos. El dibujo del PDF (`servicios/documentos_pdf.py`) no sabe qué documento es.
 - Nota de crédito correlativa por local (`nro_nota_credito`, trigger de unicidad, migración). Datos del comercio en `config.py`; quién atendió, del `usuario_id`.
+
+### Rediseño cálido del front (decidido el 26/10, rama `feature/front-calido`)
+- Paleta "miel y café": fondo marfil, menú lateral café, botones principales en caramelo oscuro (se lee con texto blanco), miel para lo seleccionado y alertas en naranja quemado para no confundirse con el miel. Todo en variables de `estilos.css`; se mantuvieron los nombres de clase.
+- Íconos con `lucide-react`, pedidos por nombre en castellano a un solo componente (`componentes/Icono.jsx`); sin emojis en la interfaz.
+- Fuente Nunito Sans incluida con `@fontsource-variable/nunito-sans` (funciona sin internet).
+- Login en dos mitades (qué es el sistema + formulario) con los usuarios de prueba del seed a un clic. El usuario y "Salir" van abajo del menú lateral.

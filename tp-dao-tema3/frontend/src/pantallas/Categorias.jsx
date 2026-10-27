@@ -38,7 +38,7 @@ export default function Categorias() {
 
   return (
     <section>
-      <Cabecera icono="🏷️" titulo="Categorías" subtitulo="Agrupan los productos: Bebidas, Almacén, Limpieza…">
+      <Cabecera icono="etiqueta" titulo="Categorías" subtitulo="Agrupan los productos: Bebidas, Almacén, Limpieza…">
         <button onClick={() => setEditando({})}>+ Nueva categoría</button>
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
@@ -53,10 +53,10 @@ export default function Categorias() {
       </div>
 
       {categorias === null ? <Cargando /> : visibles.length === 0 ? (
-        busqueda ? <Vacio icono="🔍" titulo={`Nada coincide con «${busqueda}»`} />
-          : verActivas ? <Vacio icono="🏷️" titulo="Todavía no hay categorías" texto="Creá la primera para poder cargar productos."
+        busqueda ? <Vacio icono="buscar" titulo={`Nada coincide con «${busqueda}»`} />
+          : verActivas ? <Vacio icono="etiqueta" titulo="Todavía no hay categorías" texto="Creá la primera para poder cargar productos."
             accion="+ Nueva categoría" alAccionar={() => setEditando({})} />
-            : <Vacio icono="✨" titulo="No hay categorías dadas de baja" />
+            : <Vacio icono="nuevo" titulo="No hay categorías dadas de baja" />
       ) : (
         <div className="tarjeta-tabla">
           <table>

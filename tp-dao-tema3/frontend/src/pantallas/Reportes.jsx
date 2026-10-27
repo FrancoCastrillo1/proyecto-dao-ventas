@@ -9,6 +9,7 @@ import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
+import Icono from "../componentes/Icono.jsx";
 import { puede } from "../componentes/Permisos.js";
 import { Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import { GraficoBarras, agrupar } from "../componentes/Graficos.jsx";
@@ -16,11 +17,11 @@ import { fecha, nombreMedio, pesos, porcentaje } from "../formato.js";
 
 // requiere: la capacidad que hace falta para ver el reporte (los de ventas, el CD no los ve)
 const REPORTES = [
-  { valor: "ventas", texto: "💰 Ventas", pregunta: "¿Cuánto se vendió, dónde y cómo se cobró?", fechas: true, sucursal: true, requiere: "ve_ventas" },
-  { valor: "productos-mas-vendidos", texto: "🏆 Más vendidos", pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true, requiere: "ve_ventas" },
-  { valor: "existencias", texto: "📦 Existencias", pregunta: "¿Cuánto hay, cuánto vale y qué falta reponer?", ubicacion: true },
-  { valor: "mermas", texto: "⚠️ Mermas", pregunta: "¿Cuántos bultos llegaron con el precinto roto y cuánto se perdió?", fechas: true, sucursal: true },
-  { valor: "tiempos-transito", texto: "⏱️ Tiempos de envío", pregunta: "¿Cuánto tarda un bulto del CD a cada local?", fechas: true, sucursal: true },
+  { valor: "ventas", texto: <><Icono nombre="plata" tamano={16} /> Ventas</>, pregunta: "¿Cuánto se vendió, dónde y cómo se cobró?", fechas: true, sucursal: true, requiere: "ve_ventas" },
+  { valor: "productos-mas-vendidos", texto: <><Icono nombre="trofeo" tamano={16} /> Más vendidos</>, pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true, requiere: "ve_ventas" },
+  { valor: "existencias", texto: <><Icono nombre="caja" tamano={16} /> Existencias</>, pregunta: "¿Cuánto hay, cuánto vale y qué falta reponer?", ubicacion: true },
+  { valor: "mermas", texto: <><Icono nombre="alerta" tamano={16} /> Mermas</>, pregunta: "¿Cuántos bultos llegaron con el precinto roto y cuánto se perdió?", fechas: true, sucursal: true },
+  { valor: "tiempos-transito", texto: <><Icono nombre="reloj" tamano={16} /> Tiempos de envío</>, pregunta: "¿Cuánto tarda un bulto del CD a cada local?", fechas: true, sucursal: true },
 ];
 
 const FILTROS_INICIALES = { desde: "", hasta: "", sucursal_id: "", ubicacion_id: "", agrupar: "dia", limite: "10", solo_bajo_minimo: false };
@@ -56,7 +57,7 @@ export default function Reportes({ usuario }) {
 
   return (
     <section>
-      <Cabecera icono="📊" titulo="Reportes" subtitulo={reporte.pregunta} />
+      <Cabecera icono="grafico" titulo="Reportes" subtitulo={reporte.pregunta} />
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <div className="barra">
@@ -132,7 +133,7 @@ function Tabla({ children }) {
   return <div className="tarjeta-tabla"><table>{children}</table></div>;
 }
 
-const SIN_DATOS = <Vacio icono="🔍" titulo="No hay datos para estos filtros" texto="Probá con otras fechas o con todos los locales." />;
+const SIN_DATOS = <Vacio icono="buscar" titulo="No hay datos para estos filtros" texto="Probá con otras fechas o con todos los locales." />;
 
 // "2026-10-20" → "20/10"; "2026-10" → "10/2026"
 function periodoCorto(periodo) {
@@ -227,7 +228,7 @@ function ReporteMermas({ datos }) {
     <Tarjetas items={[["Bultos rechazados", datos.por_sucursal.reduce((suma, s) => suma + s.bultos_rechazados, 0)],
       ["Valor perdido", pesos(datos.valor_perdido_total)]]} />
     {datos.por_sucursal.length === 0
-      ? <Vacio icono="✅" titulo="Sin mermas" texto="No hay bultos verificados ni rechazados con estos filtros." />
+      ? <Vacio icono="listo" titulo="Sin mermas" texto="No hay bultos verificados ni rechazados con estos filtros." />
       : (<>
         <GraficoBarras titulo="Valor perdido por local ($)" formato={pesos} horizontal
           datos={datos.por_sucursal.map((s) => ({ nombre: s.sucursal, valor: Number(s.valor_perdido),
@@ -269,7 +270,7 @@ function ReporteTransito({ datos }) {
   return (<>
     <Tarjetas items={[["Bultos recibidos", datos.bultos], ["Promedio general", horas(datos.horas_promedio_general)]]} />
     {datos.filas.length === 0
-      ? <Vacio icono="🚚" titulo="Todavía no se recibió ningún bulto" texto="Cuando un local reciba un envío, acá vas a ver cuánto tardó." />
+      ? <Vacio icono="camion" titulo="Todavía no se recibió ningún bulto" texto="Cuando un local reciba un envío, acá vas a ver cuánto tardó." />
       : (<>
         <GraficoBarras titulo="Tiempo promedio del CD a cada local" formato={horas} formatoEje={horas} horizontal
           datos={datos.filas.map((f) => ({ nombre: f.sucursal, valor: Number(f.horas_promedio),

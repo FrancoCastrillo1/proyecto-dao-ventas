@@ -67,7 +67,7 @@ export default function Productos({ irA }) {
 
   return (
     <section>
-      <Cabecera icono="🧃" titulo="Productos" subtitulo="Lo que se compra, se reparte y se vende">
+      <Cabecera icono="producto" titulo="Productos" subtitulo="Lo que se compra, se reparte y se vende">
         <button onClick={() => setEditando({})} disabled={categorias.length === 0}
           title={categorias.length === 0 ? "Primero creá una categoría" : ""}>+ Nuevo producto</button>
       </Cabecera>
@@ -102,13 +102,13 @@ export default function Productos({ irA }) {
       </div>
 
       {productos === null ? <Cargando /> : visibles.length === 0 ? (
-        hayFiltros ? <Vacio icono="🔍" titulo="Ningún producto coincide con los filtros" texto="Probá con otros valores o tocá «Limpiar filtros»."
+        hayFiltros ? <Vacio icono="buscar" titulo="Ningún producto coincide con los filtros" texto="Probá con otros valores o tocá «Limpiar filtros»."
           accion="Limpiar filtros" alAccionar={() => setFiltros(SIN_FILTROS)} />
-          : !verActivos ? <Vacio icono="✨" titulo="No hay productos dados de baja" />
+          : !verActivos ? <Vacio icono="nuevo" titulo="No hay productos dados de baja" />
             : categorias.length === 0
-              ? <Vacio icono="🏷️" titulo="Primero creá una categoría" texto="Todo producto pertenece a una categoría."
+              ? <Vacio icono="etiqueta" titulo="Primero creá una categoría" texto="Todo producto pertenece a una categoría."
                 accion="Ir a Categorías" alAccionar={() => irA("categorias")} />
-              : <Vacio icono="🧃" titulo="Todavía no hay productos" accion="+ Nuevo producto" alAccionar={() => setEditando({})} />
+              : <Vacio icono="producto" titulo="Todavía no hay productos" accion="+ Nuevo producto" alAccionar={() => setEditando({})} />
       ) : (
         <div className="tarjeta-tabla">
           <table>

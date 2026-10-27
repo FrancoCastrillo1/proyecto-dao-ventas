@@ -1,6 +1,7 @@
 // Controles chicos que se repiten en todas las pantallas: buscador, botones
 // segmentados (filtros de una sola opción), el estado vacío con su acción y la
 // fila de "Cargando…". Acá NO va lógica de ninguna entidad.
+import Icono from "./Icono.jsx";
 
 export function Buscador({ valor, alCambiar, placeholder = "Buscar…" }) {
   return (
@@ -30,7 +31,7 @@ export function Segmentado({ opciones, valor, alCambiar, etiqueta }) {
 export function Vacio({ icono, titulo, texto, accion, alAccionar }) {
   return (
     <div className="vacio-grande">
-      <span className="icono-vacio" aria-hidden="true">{icono}</span>
+      <span className="icono-vacio"><Icono nombre={icono} tamano={28} /></span>
       <strong>{titulo}</strong>
       {texto && <p>{texto}</p>}
       {accion && <button onClick={alAccionar}>{accion}</button>}

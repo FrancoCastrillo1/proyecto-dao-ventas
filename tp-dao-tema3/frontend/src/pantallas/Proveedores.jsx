@@ -44,7 +44,7 @@ export default function Proveedores() {
 
   return (
     <section>
-      <Cabecera icono="🤝" titulo="Proveedores" subtitulo="Las empresas que le venden mercadería al comercio">
+      <Cabecera icono="proveedor" titulo="Proveedores" subtitulo="Las empresas que le venden mercadería al comercio">
         <button onClick={() => setEditando({})}>+ Nuevo proveedor</button>
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
@@ -59,9 +59,9 @@ export default function Proveedores() {
       </div>
 
       {proveedores === null ? <Cargando /> : visibles.length === 0 ? (
-        busqueda ? <Vacio icono="🔍" titulo={`Nada coincide con «${busqueda}»`} />
-          : verActivos ? <Vacio icono="🤝" titulo="Todavía no hay proveedores" accion="+ Nuevo proveedor" alAccionar={() => setEditando({})} />
-            : <Vacio icono="✨" titulo="No hay proveedores dados de baja" />
+        busqueda ? <Vacio icono="buscar" titulo={`Nada coincide con «${busqueda}»`} />
+          : verActivos ? <Vacio icono="proveedor" titulo="Todavía no hay proveedores" accion="+ Nuevo proveedor" alAccionar={() => setEditando({})} />
+            : <Vacio icono="nuevo" titulo="No hay proveedores dados de baja" />
       ) : (
         <div className="tarjeta-tabla">
           <table>

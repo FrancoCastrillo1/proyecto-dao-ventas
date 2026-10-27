@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 
 import { api, sesion } from "./api.js";
+import Icono from "./componentes/Icono.jsx";
 import { descripcionDelPerfil, puedeAlguna } from "./componentes/Permisos.js";
 import Categorias from "./pantallas/Categorias.jsx";
 import Inicio from "./pantallas/Inicio.jsx";
@@ -25,22 +26,22 @@ const GRUPOS = [
   {
     titulo: "Operación",
     pantallas: [
-      { clave: "inicio", icono: "🏠", titulo: "Inicio", tema: "tema-lavanda", Pantalla: Inicio },
-      { clave: "ventas", icono: "🛒", titulo: "Vender", tema: "tema-durazno", Pantalla: Ventas, requiere: ["puede_vender"] },
-      { clave: "logistica", icono: "🚚", titulo: "Envíos", tema: "tema-cielo", Pantalla: Logistica,
+      { clave: "inicio", icono: "inicio", titulo: "Inicio", tema: "tema-miel", Pantalla: Inicio },
+      { clave: "ventas", icono: "carrito", titulo: "Vender", tema: "tema-terracota", Pantalla: Ventas, requiere: ["puede_vender"] },
+      { clave: "logistica", icono: "camion", titulo: "Envíos", tema: "tema-petroleo", Pantalla: Logistica,
         requiere: ["puede_preparar_envios", "puede_pedir_reposicion", "puede_recibir"] },
-      { clave: "stock", icono: "📦", titulo: "Stock", tema: "tema-menta", Pantalla: Stock },
-      { clave: "reportes", icono: "📊", titulo: "Reportes", tema: "tema-rosa", Pantalla: Reportes },
+      { clave: "stock", icono: "caja", titulo: "Stock", tema: "tema-salvia", Pantalla: Stock },
+      { clave: "reportes", icono: "grafico", titulo: "Reportes", tema: "tema-ciruela", Pantalla: Reportes },
     ],
   },
   {
     titulo: "Datos",
     pantallas: [
-      { clave: "productos", icono: "🧃", titulo: "Productos", tema: "tema-manteca", Pantalla: Productos, requiere: MAESTROS },
-      { clave: "categorias", icono: "🏷️", titulo: "Categorías", tema: "tema-manteca", Pantalla: Categorias, requiere: MAESTROS },
-      { clave: "proveedores", icono: "🤝", titulo: "Proveedores", tema: "tema-manteca", Pantalla: Proveedores, requiere: MAESTROS },
-      { clave: "ubicaciones", icono: "🏬", titulo: "Locales y CD", tema: "tema-manteca", Pantalla: Ubicaciones, requiere: MAESTROS },
-      { clave: "usuarios", icono: "👤", titulo: "Usuarios", tema: "tema-manteca", Pantalla: Usuarios, requiere: MAESTROS },
+      { clave: "productos", icono: "producto", titulo: "Productos", tema: "tema-lino", Pantalla: Productos, requiere: MAESTROS },
+      { clave: "categorias", icono: "etiqueta", titulo: "Categorías", tema: "tema-lino", Pantalla: Categorias, requiere: MAESTROS },
+      { clave: "proveedores", icono: "proveedor", titulo: "Proveedores", tema: "tema-lino", Pantalla: Proveedores, requiere: MAESTROS },
+      { clave: "ubicaciones", icono: "local", titulo: "Locales y CD", tema: "tema-lino", Pantalla: Ubicaciones, requiere: MAESTROS },
+      { clave: "usuarios", icono: "usuario", titulo: "Usuarios", tema: "tema-lino", Pantalla: Usuarios, requiere: MAESTROS },
     ],
   },
 ];
@@ -102,28 +103,35 @@ export default function App() {
     <div className="app">
       <nav className="lateral" aria-label="Secciones">
         <div className="marca">
-          <span className="marca-logo">V</span>
+          <span className="marca-logo"><Icono nombre="caja" tamano={20} /></span>
           <div><strong>Ventas e Inventario</strong><span>TP DAO · Tema 3</span></div>
         </div>
-        <div className="quien-soy">
-          <span className="avatar" aria-hidden="true">{usuario.nombre_completo.charAt(0)}</span>
-          <div>
-            <strong>{usuario.nombre_completo}</strong>
-            <span>{descripcionDelPerfil(usuario)}</span>
-            <button className="fantasma chico" onClick={salir} title="Cerrar la sesión">Salir</button>
-          </div>
+        <div className="menu">
+          {grupos.map((grupo) => (
+            <div key={grupo.titulo} className="grupo-menu">
+              <div className="grupo-menu-titulo">{grupo.titulo}</div>
+              {grupo.pantallas.map((p) => (
+                <button key={p.clave} className={`item-menu ${p.tema} ${p.clave === activa ? "activo" : ""}`}
+                  onClick={() => irA(p.clave)} aria-current={p.clave === activa ? "page" : undefined}>
+                  <span className="icono-menu"><Icono nombre={p.icono} tamano={19} /></span> {p.titulo}
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
-        {grupos.map((grupo) => (
-          <div key={grupo.titulo} className="grupo-menu">
-            <div className="grupo-menu-titulo">{grupo.titulo}</div>
-            {grupo.pantallas.map((p) => (
-              <button key={p.clave} className={`item-menu ${p.tema} ${p.clave === activa ? "activo" : ""}`}
-                onClick={() => irA(p.clave)} aria-current={p.clave === activa ? "page" : undefined}>
-                <span className="icono-menu" aria-hidden="true">{p.icono}</span> {p.titulo}
-              </button>
-            ))}
+        {/* Quién entró, abajo del menú, con la salida a mano */}
+        <div className="quien-soy">
+          <div className="quien-soy-datos">
+            <span className="avatar" aria-hidden="true">{usuario.nombre_completo.charAt(0)}</span>
+            <div>
+              <strong>{usuario.nombre_completo}</strong>
+              <span>{descripcionDelPerfil(usuario)}</span>
+            </div>
           </div>
-        ))}
+          <button className="boton-salir" onClick={salir} title="Cerrar la sesión">
+            <Icono nombre="salir" tamano={16} /> Salir
+          </button>
+        </div>
       </nav>
       <main className={`contenido ${tema}`}>
         {/* key: al cambiar de pantalla arranca de cero */}

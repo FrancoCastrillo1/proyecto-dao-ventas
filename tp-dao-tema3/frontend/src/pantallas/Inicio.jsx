@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Cabecera from "../componentes/Cabecera.jsx";
 import { Cargando, Vacio } from "../componentes/Controles.jsx";
+import Icono from "../componentes/Icono.jsx";
 import { puede } from "../componentes/Permisos.js";
 import { pesos } from "../formato.js";
 
@@ -18,7 +19,7 @@ function hoy() {
 }
 
 const ICONOS_TAREA = {
-  pedidos: "📝", armar: "📦", precintar: "🔒", despachar: "🚚", recibir: "📥", verificar: "🔍", reponer: "🛒",
+  pedidos: "pedido", armar: "caja", precintar: "precinto", despachar: "camion", recibir: "recibir", verificar: "verificar", reponer: "carrito",
 };
 
 export default function Inicio({ irA, puedeIr, usuario }) {
@@ -57,17 +58,17 @@ export default function Inicio({ irA, puedeIr, usuario }) {
 
   return (
     <section>
-      <Cabecera icono="🏠" titulo={`Hola, ${usuario.nombre_completo.split(" ")[0]}`}
+      <Cabecera icono="inicio" titulo={`Hola, ${usuario.nombre_completo.split(" ")[0]}`}
         subtitulo={usuario.ubicacion_nombre ? `Lo que está pasando hoy en ${usuario.ubicacion_nombre}` : "Lo que está pasando hoy en el comercio"} />
 
       {error && (
-        <Vacio icono="🔌" titulo="No hay conexión con el sistema"
+        <Vacio icono="conexion" titulo="No hay conexión con el sistema"
           texto="El backend no está corriendo. Levantalo con: .venv\Scripts\python -m uvicorn backend.main:app --reload" />
       )}
       {!error && datos === null && <Cargando />}
 
       {datos && !datos.hayProductos && (
-        <Vacio icono="🌱" titulo="Todavía no hay datos cargados"
+        <Vacio icono="empezar" titulo="Todavía no hay datos cargados"
           texto="Empezá por los productos y los locales. Para probar con datos de ejemplo, corré: .venv\Scripts\python -m backend.datos.seed --reiniciar"
           accion={puedeIr("productos") ? "Cargar productos" : undefined} alAccionar={() => irA("productos")} />
       )}
@@ -77,10 +78,10 @@ export default function Inicio({ irA, puedeIr, usuario }) {
         {puedeIr("logistica") && (
           <div className="bandeja">
             <h2 className="titulo-seccion">Para hacer</h2>
-            {datos.tareas.length === 0 && <p className="vacio-chico">🎉 No tenés nada pendiente.</p>}
+            {datos.tareas.length === 0 && <p className="vacio-chico"><Icono nombre="festejo" tamano={18} /> No tenés nada pendiente.</p>}
             {datos.tareas.map((t, i) => (
               <div key={i} className={`tarea ${t.urgente ? "urgente" : ""}`}>
-                <span className="tarea-icono" aria-hidden="true">{ICONOS_TAREA[t.tipo] ?? "•"}</span>
+                <span className="tarea-icono"><Icono nombre={ICONOS_TAREA[t.tipo]} /></span>
                 <div className="tarea-textos">
                   <strong>{t.titulo}</strong>
                   <span>{t.detalle}</span>
@@ -94,31 +95,31 @@ export default function Inicio({ irA, puedeIr, usuario }) {
 
         <div className="indicadores">
           {puede(usuario, "ve_ventas") && (
-            <Indicador tema="tema-durazno" icono="🛒" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
+            <Indicador tema="tema-terracota" icono="carrito" valor={datos.ventasHoy} texto={`ventas hoy · ${pesos(datos.ingresoHoy)}`}
               pie={puedeIr("ventas") ? "Ir a vender →" : "Ver reportes →"} alTocar={() => irA(puedeIr("ventas") ? "ventas" : "reportes")} />
           )}
           {puedeIr("logistica") && (<>
-            <Indicador tema="tema-cielo" icono="📝" valor={datos.pedidosPendientes}
+            <Indicador tema="tema-petroleo" icono="pedido" valor={datos.pedidosPendientes}
               texto={puede(usuario, "puede_preparar_envios") ? "pedidos de locales sin preparar" : "pedidos tuyos esperando al CD"}
               pie="Ver envíos →" atencion={datos.pedidosPendientes > 0 && puede(usuario, "puede_preparar_envios")}
               alTocar={() => irA("logistica")} />
-            <Indicador tema="tema-cielo" icono="🚚" valor={datos.enCamino} texto={`envíos en camino · ${datos.armando} armándose`}
+            <Indicador tema="tema-petroleo" icono="camion" valor={datos.enCamino} texto={`envíos en camino · ${datos.armando} armándose`}
               pie="Ver envíos →" atencion={datos.enCamino > 0 && puede(usuario, "puede_recibir")} alTocar={() => irA("logistica")} />
           </>)}
-          <Indicador tema="tema-menta" icono="⚠️" valor={datos.bajoMinimo}
+          <Indicador tema="tema-salvia" icono="alerta" valor={datos.bajoMinimo}
             texto={puede(usuario, "ve_toda_la_red") ? "faltantes para reponer, sumando todos los lugares" : "productos para reponer"}
             pie="Ver stock →" atencion={datos.bajoMinimo > 0} alTocar={() => irA("stock")} />
         </div>
 
         <h2 className="titulo-seccion">Accesos rápidos</h2>
         <div className="accesos">
-          {puedeIr("ventas") && <Acceso tema="tema-durazno" icono="🛒" titulo="Nueva venta" texto="Cobrar en el local" alTocar={() => irA("ventas")} />}
-          {puede(usuario, "puede_pedir_reposicion") && <Acceso tema="tema-cielo" icono="📝" titulo="Pedir mercadería" texto="Y recibir lo que llega" alTocar={() => irA("logistica")} />}
-          {puede(usuario, "puede_preparar_envios") && <Acceso tema="tema-cielo" icono="🚚" titulo="Reponer los locales" texto="Pedidos, bultos y despacho" alTocar={() => irA("logistica")} />}
-          {puede(usuario, "puede_comprar") && <Acceso tema="tema-menta" icono="📦" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />}
-          {puedeIr("usuarios") && <Acceso tema="tema-manteca" icono="👤" titulo="Usuarios" texto="Quién entra y qué puede hacer" alTocar={() => irA("usuarios")} />}
-          {puedeIr("productos") && <Acceso tema="tema-manteca" icono="🧃" titulo="Productos y precios" texto="Catálogo, costos y mínimos" alTocar={() => irA("productos")} />}
-          <Acceso tema="tema-rosa" icono="📊" titulo="Ver reportes"
+          {puedeIr("ventas") && <Acceso tema="tema-terracota" icono="carrito" titulo="Nueva venta" texto="Cobrar en el local" alTocar={() => irA("ventas")} />}
+          {puede(usuario, "puede_pedir_reposicion") && <Acceso tema="tema-petroleo" icono="pedido" titulo="Pedir mercadería" texto="Y recibir lo que llega" alTocar={() => irA("logistica")} />}
+          {puede(usuario, "puede_preparar_envios") && <Acceso tema="tema-petroleo" icono="camion" titulo="Reponer los locales" texto="Pedidos, bultos y despacho" alTocar={() => irA("logistica")} />}
+          {puede(usuario, "puede_comprar") && <Acceso tema="tema-salvia" icono="caja" titulo="Registrar una compra" texto="Mercadería que entra al CD" alTocar={() => irA("stock")} />}
+          {puedeIr("usuarios") && <Acceso tema="tema-lino" icono="usuario" titulo="Usuarios" texto="Quién entra y qué puede hacer" alTocar={() => irA("usuarios")} />}
+          {puedeIr("productos") && <Acceso tema="tema-lino" icono="producto" titulo="Productos y precios" texto="Catálogo, costos y mínimos" alTocar={() => irA("productos")} />}
+          <Acceso tema="tema-ciruela" icono="grafico" titulo="Ver reportes"
             texto={puede(usuario, "ve_ventas") ? "Ventas, márgenes y mermas" : "Existencias, mermas y tiempos de envío"}
             alTocar={() => irA("reportes")} />
         </div>
@@ -130,7 +131,7 @@ export default function Inicio({ irA, puedeIr, usuario }) {
 function Indicador({ tema, icono, valor, texto, pie, atencion, alTocar }) {
   return (
     <button className={`indicador ${tema} ${atencion ? "atencion" : ""}`} onClick={alTocar}>
-      <span className="indicador-icono" aria-hidden="true">{icono}</span>
+      <span className="indicador-icono"><Icono nombre={icono} /></span>
       <strong>{valor}</strong>
       <span>{texto}</span>
       <span className="indicador-pie">{pie}</span>
@@ -141,7 +142,7 @@ function Indicador({ tema, icono, valor, texto, pie, atencion, alTocar }) {
 function Acceso({ tema, icono, titulo, texto, alTocar }) {
   return (
     <button className={`acceso ${tema}`} onClick={alTocar}>
-      <span className="indicador-icono" aria-hidden="true">{icono}</span>
+      <span className="indicador-icono"><Icono nombre={icono} /></span>
       <span>{titulo}<small>{texto}</small></span>
     </button>
   );

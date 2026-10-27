@@ -9,14 +9,15 @@ import { api } from "../api.js";
 import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
+import Icono from "../componentes/Icono.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { Buscador, Cargando, coincide, Segmentado, Vacio } from "../componentes/Controles.jsx";
 
 const PERFILES = {
-  ADMIN: { icono: "🛡️", nombre: "Administrador", que: "Maneja locales, productos, proveedores y usuarios. Ve toda la red, no opera." },
-  CD: { icono: "🏭", nombre: "Centro de Distribución", que: "Compra, arma los envíos y los despacha a los locales." },
-  SUCURSAL: { icono: "🏬", nombre: "Local", que: "Pide mercadería, la recibe y vende. Ve solo su local." },
+  ADMIN: { icono: "admin", nombre: "Administrador", que: "Maneja locales, productos, proveedores y usuarios. Ve toda la red, no opera." },
+  CD: { icono: "cd", nombre: "Centro de Distribución", que: "Compra, arma los envíos y los despacha a los locales." },
+  SUCURSAL: { icono: "local", nombre: "Local", que: "Pide mercadería, la recibe y vende. Ve solo su local." },
 };
 
 export default function Usuarios({ usuario: yo }) {
@@ -56,7 +57,7 @@ export default function Usuarios({ usuario: yo }) {
 
   return (
     <section>
-      <Cabecera icono="👤" titulo="Usuarios" subtitulo="Quién entra al sistema y qué puede hacer cada uno">
+      <Cabecera icono="usuario" titulo="Usuarios" subtitulo="Quién entra al sistema y qué puede hacer cada uno">
         <button onClick={() => setEditando({})}>+ Nuevo usuario</button>
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
@@ -66,7 +67,7 @@ export default function Usuarios({ usuario: yo }) {
         <Buscador valor={busqueda} alCambiar={setBusqueda} placeholder="Buscar por nombre o usuario" />
         <Segmentado etiqueta="Perfil" valor={perfil} alCambiar={setPerfil} opciones={[
           { valor: "", texto: "Todos" },
-          ...Object.entries(PERFILES).map(([clave, p]) => ({ valor: clave, texto: `${p.icono} ${p.nombre}` })),
+          ...Object.entries(PERFILES).map(([clave, p]) => ({ valor: clave, texto: <><Icono nombre={p.icono} tamano={16} /> {p.nombre}</> })),
         ]} />
         <Segmentado etiqueta="Mostrar" valor={verActivos} alCambiar={setVerActivos} opciones={[
           { valor: true, texto: "Activos", contador: lista.length - deBaja },
@@ -75,9 +76,9 @@ export default function Usuarios({ usuario: yo }) {
       </div>
 
       {usuarios === null ? <Cargando /> : visibles.length === 0 ? (
-        busqueda || perfil ? <Vacio icono="🔍" titulo="Ningún usuario coincide" texto="Probá con otra búsqueda u otro perfil." />
-          : verActivos ? <Vacio icono="👤" titulo="Todavía no hay usuarios" accion="+ Nuevo usuario" alAccionar={() => setEditando({})} />
-            : <Vacio icono="✨" titulo="No hay usuarios dados de baja" />
+        busqueda || perfil ? <Vacio icono="buscar" titulo="Ningún usuario coincide" texto="Probá con otra búsqueda u otro perfil." />
+          : verActivos ? <Vacio icono="usuario" titulo="Todavía no hay usuarios" accion="+ Nuevo usuario" alAccionar={() => setEditando({})} />
+            : <Vacio icono="nuevo" titulo="No hay usuarios dados de baja" />
       ) : (
         <div className="tarjeta-tabla">
           <table>
@@ -87,7 +88,7 @@ export default function Usuarios({ usuario: yo }) {
                 <tr key={u.id} className={u.activo ? "fila-clic" : "fila-baja"} onClick={u.activo ? () => setEditando(u) : undefined}>
                   <td><strong>{u.nombre_completo}</strong>{u.id === yo.id && <span className="etiqueta etiqueta-baja">Vos</span>}
                     <span className="secundario-texto">{u.nombre_usuario}</span></td>
-                  <td>{PERFILES[u.perfil].icono} {PERFILES[u.perfil].nombre}</td>
+                  <td><span className="con-icono"><Icono nombre={PERFILES[u.perfil].icono} tamano={17} /> {PERFILES[u.perfil].nombre}</span></td>
                   <td>{dondeTrabaja(u)}</td>
                   <td><div className="acciones-fila">
                     {u.activo
@@ -156,7 +157,7 @@ function CajonUsuario({ usuario, catalogos, ejecutar, dondeTrabaja, alCerrar, al
               {Object.entries(PERFILES).map(([clave, p]) => (
                 <button type="button" key={clave} className={`opcion-grande ${form.perfil === clave ? "activo" : ""}`}
                   onClick={() => setForm({ ...form, perfil: clave })}>
-                  <span className="opcion-icono">{p.icono}</span>
+                  <span className="opcion-icono"><Icono nombre={p.icono} tamano={24} /></span>
                   <strong>{p.nombre}</strong>
                   <small>{p.que}</small>
                 </button>

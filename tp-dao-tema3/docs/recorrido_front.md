@@ -229,7 +229,7 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** salir "Despachado: el envío está en camino"; el panel se cierra y la tarjeta pasa a "En camino" con una barra de progreso en 0 de 2.
 - [check] **7.4 Hacé:** mirá Stock → *CD Central*.
   **Debería:** haber X − 10 Lavandinas. En "Ver movimientos" aparece "Despacho a un local −6" y "−4".
-- [ ] **7.5 Hacé:** abrí el envío que acabás de despachar (columna "En camino") y tocá "⬇ Remito PDF".
+- [ ] **7.5 Hacé:** abrí el envío que acabás de despachar (columna "En camino") y tocá "Remito PDF".
   **Debería:** bajarse `remito-0001-0000000X.pdf` con el CD, el número, cada producto con su bulto y su precinto, el total de bultos y unidades, el destino, la llegada estimada y "Preparó: Carlos del CD". Mientras el remito se está armando, el botón no aparece. El local destino también lo puede bajar. (Nuevo el 26/10.)
 
 ## 8. Recepción verificando el precinto
@@ -251,7 +251,7 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   - la tarjeta pasa a "Entregados" con "⚠ 1 bulto rechazado".
 - [ check] **8.6 Hacé:** Stock → *Sucursal Norte* → Lavandina → "Ver movimientos".
   **Debería:** aparecer **solo** la recepción del bulto bueno (6 o 4). La del rechazado **no entró**. (solo aparece el que entro el que fue rechazado ni aparece)
-- [check ] **8.7 Hacé:** Reportes → "⚠️ Mermas".
+- [check ] **8.7 Hacé:** Reportes → "Mermas".
   **Debería:** aparecer el bulto rechazado en "Qué se perdió", con su valor.
 
 ## 9. Ventas, cobro, comprobante y devoluciones (Operación → Vender)
@@ -287,11 +287,11 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 > Entrá como `centro`.
 
-- [S ] **9b.1 Hacé:** vendé algo y, en el comprobante que se abre, tocá "⬇ Descargar PDF".
+- [S ] **9b.1 Hacé:** vendé algo y, en el comprobante que se abre, tocá "Descargar PDF".
   **Debería:** bajarse `comprobante-0002-0000000X.pdf` con: el comercio (Minorista del Centro S.A., CUIT), el local, el número, los productos, el descuento o recargo del medio de pago, el total destacado y "Atendió: Lucía de Centro".
 - [S ] **9b.2 Hacé:** en la lista de ventas abrí la `0002-00000002` (la del seed que tiene una devolución).
-  **Debería:** aparecer "NC 0002-00000001" en "Devoluciones anteriores", con su botón "⬇ PDF".
-- [ S] **9b.3 Hacé:** tocá "⬇ PDF" de esa devolución.
+  **Debería:** aparecer "NC 0002-00000001" en "Devoluciones anteriores", con su botón "PDF".
+- [ S] **9b.3 Hacé:** tocá "PDF" de esa devolución.
   **Debería:** bajarse `nota-credito-0002-00000001.pdf` con lo devuelto, el total reintegrado, la venta de origen y el motivo.
 - [ ] **9b.4 Hacé:** registrá una devolución nueva en otra venta del local.
   **Debería:** salir con la nota de crédito siguiente del local (`NC 0002-00000002`); en Norte la numeración arranca aparte.

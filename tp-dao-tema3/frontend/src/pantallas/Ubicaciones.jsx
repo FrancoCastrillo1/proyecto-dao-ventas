@@ -9,13 +9,14 @@ import { Aviso, useAviso } from "../componentes/Aviso.jsx";
 import { textoBaja } from "../componentes/Bajas.jsx";
 import Cabecera from "../componentes/Cabecera.jsx";
 import Cajon from "../componentes/Cajon.jsx";
+import Icono from "../componentes/Icono.jsx";
 import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { ConfirmacionParecidos, useParecidos } from "../componentes/ConfirmacionParecidos.jsx";
 import { Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
 
 const TIPOS = {
-  SUCURSAL: { icono: "🏬", nombre: "Local", que: "Recibe mercadería del CD y la vende" },
-  CD: { icono: "🏭", nombre: "Centro de Distribución", que: "Compra, guarda y despacha a los locales. Hay uno solo activo." },
+  SUCURSAL: { icono: "local", nombre: "Local", que: "Recibe mercadería del CD y la vende" },
+  CD: { icono: "cd", nombre: "Centro de Distribución", que: "Compra, guarda y despacha a los locales. Hay uno solo activo." },
 };
 
 export default function Ubicaciones() {
@@ -47,7 +48,7 @@ export default function Ubicaciones() {
 
   return (
     <section>
-      <Cabecera icono="🏬" titulo="Locales y CD" subtitulo="El CD despacha la mercadería; los locales la reciben y la venden">
+      <Cabecera icono="local" titulo="Locales y CD" subtitulo="El CD despacha la mercadería; los locales la reciben y la venden">
         <button onClick={() => setEditando({})}>+ Nueva ubicación</button>
       </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
@@ -55,7 +56,7 @@ export default function Ubicaciones() {
 
       <div className="barra">
         <Segmentado etiqueta="Tipo" valor={tipo} alCambiar={setTipo} opciones={[
-          { valor: "", texto: "Todas" }, { valor: "SUCURSAL", texto: "🏬 Locales" }, { valor: "CD", texto: "🏭 CD" },
+          { valor: "", texto: "Todas" }, { valor: "SUCURSAL", texto: <><Icono nombre="local" tamano={16} /> Locales</> }, { valor: "CD", texto: <><Icono nombre="cd" tamano={16} /> CD</> },
         ]} />
         <Segmentado etiqueta="Mostrar" valor={verActivas} alCambiar={setVerActivas} opciones={[
           { valor: true, texto: "Activas", contador: lista.length - deBaja },
@@ -64,11 +65,11 @@ export default function Ubicaciones() {
       </div>
 
       {ubicaciones === null ? <Cargando /> : visibles.length === 0 ? (
-        !verActivas ? <Vacio icono="✨" titulo="No hay ubicaciones dadas de baja" />
+        !verActivas ? <Vacio icono="nuevo" titulo="No hay ubicaciones dadas de baja" />
           : lista.length === 0
-            ? <Vacio icono="🏭" titulo="Empezá por el Centro de Distribución" texto="Después creá los locales que se abastecen de él."
+            ? <Vacio icono="cd" titulo="Empezá por el Centro de Distribución" texto="Después creá los locales que se abastecen de él."
               accion="+ Nueva ubicación" alAccionar={() => setEditando({ tipo: "CD" })} />
-            : <Vacio icono="🔍" titulo="No hay ubicaciones de este tipo" />
+            : <Vacio icono="buscar" titulo="No hay ubicaciones de este tipo" />
       ) : (
         <div className="tarjeta-tabla">
           <table>
@@ -77,7 +78,7 @@ export default function Ubicaciones() {
               {visibles.map((u) => (
                 <tr key={u.id} className={u.activo ? "fila-clic" : "fila-baja"} onClick={u.activo ? () => setEditando(u) : undefined}>
                   <td><strong>{u.nombre}</strong><span className="secundario-texto">{u.direccion}</span></td>
-                  <td>{TIPOS[u.tipo].icono} {TIPOS[u.tipo].nombre}</td>
+                  <td><span className="con-icono"><Icono nombre={TIPOS[u.tipo].icono} tamano={17} /> {TIPOS[u.tipo].nombre}</span></td>
                   <td><div className="capacidades">
                     {u.puede_vender && <span className="etiqueta estado-naranja">Vende</span>}
                     {u.puede_despachar && <span className="etiqueta estado-azul">Despacha</span>}
@@ -124,7 +125,7 @@ function CajonUbicacion({ ubicacion, hayCD, ejecutar, alCerrar, alGuardar, alDar
 
   return (
     <Cajon titulo={nueva ? "Nueva ubicación" : ubicacion.nombre}
-      subtitulo={nueva ? null : `${TIPOS[ubicacion.tipo].icono} ${TIPOS[ubicacion.tipo].nombre}`} alCerrar={alCerrar}
+      subtitulo={nueva ? null : TIPOS[ubicacion.tipo].nombre} alCerrar={alCerrar}
       pie={<>
         {!nueva && <button className="peligro izquierda" onClick={alDarDeBaja}>Dar de baja</button>}
         <button className="secundario" onClick={alCerrar}>Cancelar</button>
@@ -138,7 +139,7 @@ function CajonUbicacion({ ubicacion, hayCD, ejecutar, alCerrar, alGuardar, alDar
               {Object.entries(TIPOS).map(([clave, t]) => (
                 <button type="button" key={clave} className={`opcion-grande ${form.tipo === clave ? "activo" : ""}`}
                   onClick={() => setForm({ ...form, tipo: clave })}>
-                  <span className="opcion-icono">{t.icono}</span>
+                  <span className="opcion-icono"><Icono nombre={t.icono} tamano={24} /></span>
                   <strong>{t.nombre}</strong>
                   <small>{t.que}</small>
                 </button>
