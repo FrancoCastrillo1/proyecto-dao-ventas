@@ -61,6 +61,7 @@ docs/                  guia_oral.md, presentacion_preliminar.md
   base se guarda el texto y `crear_estado()` vuelve a armar el objeto.
 - **Fábricas simples** (diccionario nombre → clase): `crear_estado`, `crear_medio_pago`, `crear_ubicacion`, `crear_usuario`.
 - **Template Method:** `DocumentoComercial` (comprobante de venta y nota de crédito), desde el paso 5.
+- **Singleton:** `BaseDeDatos` en `persistencia/conexion.py` (28/10): una sola instancia que sabe dónde está la base, configura cada conexión y crea las tablas; entrega una conexión nueva por operación (no se comparte una conexión entre hilos).
 - **Inmutabilidad en la base:** triggers que rechazan UPDATE y DELETE en
   `historial_bultos`, `movimientos_stock` y `movimientos_caja`.
 - **Stock del CD:** se descuenta al despachar el remito, en una transacción.
@@ -78,7 +79,10 @@ docs/                  guia_oral.md, presentacion_preliminar.md
 ## Reportes (`GET /reportes/...`)
 `ventas` (período, local, medio de pago), `productos-mas-vendidos` (con margen),
 `existencias` (bajo mínimo y valorización), `mermas` (bultos rechazados),
-`tiempos-transito` (CD → local según el historial).
+`tiempos-transito` (CD → local según el historial), `productos-mas-pedidos`
+(CD y admin: demanda de los locales y si alcanza el stock del CD) y
+`devoluciones` (local y admin: por producto y motivo). Todos aceptan
+`formato=pdf` para descargarlos.
 
 ## Cómo se levanta (desde `tp-dao-tema3/`)
 ```powershell
@@ -99,14 +103,15 @@ cd frontend; npm install; npm run dev                        # http://localhost:
   bulto por bulto o por remito; rechazado merma o vuelve al CD; reserva de stock
   al preparar; control de cantidades en la recepción; DAO como patrón;
   proveedores N:M vs uno por producto; usuarios.
-- Próximos pasos (al 26/10 están hechos los pasos 1 a 7 y el 1e del plan, los
-  5 a 7 y el 1e sin commitear): repensar las devoluciones, 1d (arreglos del
-  recorrido), compras a proveedores con factura en PDF (8), reportes nuevos por
-  perfil y exportables (9; los gráficos ya están), envíos demorados y reposición
-  sugerida (10), limpieza (11). También: control de cantidades en la recepción y
-  eliminación física de maestros. Ver `docs/plan_mejoras.md`.
-- Ramas: `feature/usuarios` (pasos 2 y 3, para el pull request a `main`) y
-  `feature/productos` (pasos 4 a 7, sale de `feature/usuarios`).
+- Próximos pasos (al 28/10 están hechos los pasos 1 a 7, el 1e y el 9a del
+  plan): repensar las devoluciones, 1d (arreglos del recorrido), compras a
+  proveedores con factura en PDF (8), más reportes por perfil (9), reposición
+  sugerida (10), limpieza (11), Observer para el stock bajo (opcional). También:
+  control de cantidades en la recepción y eliminación física de maestros. Ver
+  `docs/plan_mejoras.md`.
+- Ramas: `feature/productos` (pasos 2 a 7 y 1e, para el pull request a `main`),
+  `feature/front-calido` (rediseño de Franco, sale de `feature/productos`) y
+  `feature/reportes-singleton` (paso 9a, sale de `feature/front-calido`).
 
 ## Cómo trabajamos los pasos
 - Cuando te diga lo que quiero hacer, no empieces a codear. Primero mirá el código y después usá la herramienta AskUserQuestion para darme las opciones de cada decisión: hasta 4 por pregunta, la recomendada primero con "(Recomendada)", y una línea de qué implica cada una. Si una opción suma un patrón de diseño, decilo.
@@ -154,6 +159,13 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 ### Paso 6 del plan: bandeja de tareas y llegada estimada (decidido el 23/10)
 - `GET /tareas` arma los pendientes según las capacidades (CD prepara; local recibe, verifica y repone). "Pedir" abre el pedido precargado hasta el mínimo; también desde Stock.
 - Transporte: solo la llegada estimada (día y hora), obligatoria al despachar (dominio, trigger). `Remito.esta_demorado()`.
+
+### Paso 9a: reportes por perfil, PDF y Singleton (decidido el 28/10, rama `feature/reportes-singleton`)
+- **Singleton** `BaseDeDatos`: guarda la configuración y entrega una conexión nueva por operación. Descartados: una sola conexión compartida (con los hilos de FastAPI se mezclan las transacciones) y una instancia por archivo.
+- Reportes nuevos: **más pedidos** (CD y admin, `ve_toda_la_red`) y **devoluciones** (local y admin, `ve_ventas`). Al CD se le abre primero "Más pedidos".
+- Exportar: **PDF desde el back** con fpdf2 (`formato=pdf` en la misma ruta y con el mismo permiso). `servicios/informes.py` arma qué dice el informe y `servicios/informes_pdf.py` lo dibuja sin saber cuál es.
+- El gráfico de más vendidos pasa a unidades (el "top 10"); la ganancia queda en el globito y en la tabla.
+- Observer para el stock bajo: no por ahora (opcional).
 
 ### Paso 1e del plan: arreglos de la prueba del 26/10 (decidido el 26/10)
 - Capacidad `ve_ventas` (admin y local sí, CD no): rutas de ventas, caja, comprobantes y reportes de ventas/más vendidos; el front esconde lo mismo.

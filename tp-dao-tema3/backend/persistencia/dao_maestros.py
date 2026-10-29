@@ -1,16 +1,15 @@
 # DAO de los maestros: alta, baja, modificación y consultas de Producto, Categoria,
 # Proveedor, Ubicacion, Sucursal y CentroDistribucion contra la base.
 # Acá NO se valida el negocio, solo se lee y escribe en SQLite.
-from backend.config import DB_PATH
 from backend.dominio.maestros import Categoria, Producto, Proveedor, crear_ubicacion, normalizar_texto
-from backend.persistencia.conexion import get_conexion
+from backend.persistencia.conexion import BaseDeDatos
 
 class CategoriaDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def _a_objeto(self, fila): #funcion para transformar de una fila de la db a un objeto (el famoso materializar y desmaterializar)
         return Categoria(nombre=fila["nombre"], id=fila["id"], activo=bool(fila["activo"]))
@@ -56,11 +55,11 @@ class CategoriaDAO:
 
 
 class ProductoDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def _a_objeto(self, fila):
         return Producto(
@@ -181,11 +180,11 @@ class ProductoDAO:
 
 
 class ProveedorDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def _a_objeto(self, fila):
         return Proveedor(
@@ -269,11 +268,11 @@ class ProveedorDAO:
 
 
 class UbicacionDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     # La columna "tipo" decide la clase (Sucursal o CentroDistribucion)
     def _a_objeto(self, fila):

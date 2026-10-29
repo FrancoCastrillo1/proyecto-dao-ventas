@@ -7,21 +7,20 @@
 from contextlib import nullcontext
 from datetime import datetime
 
-from backend.config import DB_PATH
 from backend.dominio.stock import MovimientoStock, Stock, TipoMovimiento
-from backend.persistencia.conexion import get_conexion, transaccion
+from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_maestros import ProductoDAO
 
 
 class StockDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def transaccion(self):
-        return transaccion(self.db_path)
+        return BaseDeDatos.instancia().transaccion(self.db_path)
 
     def obtener(self, producto_id, ubicacion_id, cx=None):
         """Arma el Stock del par producto-ubicación. Si todavía no tiene fila

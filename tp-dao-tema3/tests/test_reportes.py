@@ -192,3 +192,96 @@ def test_tiempo_promedio_con_fechas_conocidas(tmp_path):
     (local,) = reporte["filas"]
     assert (local["horas_promedio"], local["horas_minimo"], local["horas_maximo"]) == (6.0, 4.0, 8.0)
     assert reporte["horas_promedio_general"] == 6.0
+
+
+# ---------------------------- 6. Productos más pedidos por los locales (CD)
+
+def servicios_de(db):
+    stock = StockService(StockDAO(db), ProductoDAO(db), UbicacionDAO(db))
+    repo = ReposicionService(PedidoDAO(db), OrdenDAO(db), RemitoDAO(db), BultoDAO(db),
+                             ProductoDAO(db), UbicacionDAO(db), stock)
+    return repo, VentasService(VentaDAO(db), stock, ProductoDAO(db), UbicacionDAO(db))
+
+
+def test_mas_pedidos_cuenta_lo_que_pidieron_los_locales(r):
+    filas = {f["codigo"]: f for f in r.service.productos_mas_pedidos()["filas"]}
+    coca = filas["BEB-1"]
+    assert (coca["unidades"], coca["pedidos"], coca["locales"]) == (10, 1, 1)
+    assert (coca["sin_preparar"], coca["stock_cd"], coca["falta_en_cd"]) == (0, 90, 0)   # ya se preparó
+    assert list(filas) == ["BEB-1", "BEB-2"]                                            # de más a menos
+
+
+def test_mas_pedidos_avisa_si_lo_que_falta_preparar_no_alcanza_en_el_cd(r):
+    repo, _ = servicios_de(r.db)
+    repo.crear_pedido(r.norte.id, [(r.coca.id, 200)])          # pendiente: en el CD hay 90
+    reporte = r.service.productos_mas_pedidos()
+    coca = reporte["filas"][0]
+    assert (coca["unidades"], coca["pedidos"], coca["locales"]) == (210, 2, 2)
+    assert (coca["sin_preparar"], coca["falta_en_cd"]) == (200, 110)
+    assert reporte["productos_que_faltan"] == 1
+
+
+def test_mas_pedidos_filtrado_por_local_y_con_limite(r):
+    assert r.service.productos_mas_pedidos(sucursal_id=r.norte.id)["filas"] == []
+    assert len(r.service.productos_mas_pedidos(limite=1)["filas"]) == 1
+    with pytest.raises(DatoInvalido):
+        r.service.productos_mas_pedidos(limite=101)
+
+
+# --------------------------------- 7. Devoluciones por producto y motivo
+
+def test_devoluciones_por_producto(r):
+    reporte = r.service.devoluciones()
+    (coca,) = reporte["filas"]
+    assert (coca["codigo"], coca["unidades"], coca["importe"]) == ("BEB-1", 1, Decimal("850.00"))
+    assert (coca["vendidas"], coca["porcentaje_devuelto"], coca["motivo_principal"]) == (6, 16.67, "Falla")
+    assert (reporte["cantidad_devoluciones"], reporte["total_reintegrado"]) == (1, Decimal("850.00"))
+
+
+def test_el_motivo_se_agrupa_sin_importar_mayusculas_ni_espacios(r):
+    _, ventas = servicios_de(r.db)
+    venta = ventas.vender(r.centro.id, [(r.coca.id, 1)], "DEBITO")
+    ventas.devolver(venta.id, [(r.coca.id, 1)], "  falla ")
+    reporte = r.service.devoluciones()
+    (motivo,) = reporte["por_motivo"]
+    assert (motivo["motivo"], motivo["devoluciones"], motivo["importe"]) == ("Falla", 2, Decimal("1850.00"))
+    assert reporte["filas"][0]["unidades"] == 2
+
+
+def test_devoluciones_de_otro_local_o_de_otro_periodo(r):
+    assert r.service.devoluciones(sucursal_id=r.norte.id)["filas"] == []
+    assert r.service.devoluciones(hasta=HOY - timedelta(days=1))["por_motivo"] == []
+
+
+# --------------------------------------------------- Exportar a PDF
+
+@pytest.mark.parametrize("clave, metodo, titulo", [
+    ("ventas", "ventas", b"Reporte: Ventas"),
+    ("productos-mas-vendidos", "productos_mas_vendidos", b"Productos m"),
+    ("existencias", "existencias", b"Reporte: Existencias"),
+    ("mermas", "mermas", b"Reporte: Mermas"),
+    ("tiempos-transito", "tiempos_transito", b"Tiempos de env"),
+    ("productos-mas-pedidos", "productos_mas_pedidos", b"Productos m"),
+    ("devoluciones", "devoluciones", b"Reporte: Devoluciones"),
+])
+def test_cada_reporte_sale_en_pdf(r, clave, metodo, titulo):
+    datos = getattr(r.service, metodo)()
+    nombre, contenido = r.service.pdf(clave, datos, r.service.describir_filtros(), "Dora")
+    assert nombre.startswith(f"reporte-{clave}-") and nombre.endswith(".pdf")
+    assert contenido.startswith(b"%PDF")
+    assert titulo in contenido
+    assert b"por Dora" in contenido
+
+
+def test_el_pdf_lleva_los_filtros_y_el_grafico(r):
+    datos = r.service.productos_mas_pedidos()
+    filtros = r.service.describir_filtros(HOY, HOY, r.centro.id)
+    _, contenido = r.service.pdf("productos-mas-pedidos", datos, filtros, "Carlos")
+    assert f"del {HOY:%d/%m/%Y} al {HOY:%d/%m/%Y}".encode() in contenido
+    assert b"Local Centro" in contenido
+    assert b"Unidades pedidas por producto" in contenido   # el gráfico: hay dos productos
+
+
+def test_describir_filtros(r):
+    assert r.service.describir_filtros() == ["Período: todo", "Ubicación: toda la red"]
+    assert r.service.describir_filtros(desde=HOY, con_fechas=False, ubicacion_id=r.cd.id) == ["Ubicación: CD Central"]

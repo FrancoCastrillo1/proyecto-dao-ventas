@@ -1,40 +1,83 @@
-# Manejo de la conexión a SQLite: abrirla, cerrarla, y crear las tablas
-# a partir de esquema.sql si la base no existe.
+# La base de datos SQLite: abrir conexiones, transacciones, y crear las tablas
+# a partir de esquema.sql (con las migraciones de las bases viejas).
 # Acá NO van consultas de ninguna entidad, eso lo hace cada DAO.
+#
+# Patrón Singleton: BaseDeDatos tiene una sola instancia en toda la app. Es el
+# único lugar que sabe dónde está la base y cómo se configura cada conexión;
+# los DAOs le piden la conexión a ella (BaseDeDatos.instancia().conexion()).
+# Lo único que hay una sola vez es ese objeto: cada operación recibe su propia
+# conexión, porque FastAPI atiende varios pedidos a la vez en distintos hilos
+# y una conexión de SQLite compartida mezclaría las transacciones.
 import sqlite3
+import threading
 from contextlib import contextmanager
 
 from backend.config import DB_PATH, ESQUEMA_PATH
 from backend.dominio.maestros import normalizar_texto
 
-def get_conexion(db_path= DB_PATH):
-    conexion = sqlite3.connect(db_path)
-    conexion.row_factory = sqlite3.Row
-    conexion.execute("PRAGMA foreign_keys = ON")
-    return conexion
+
+class BaseDeDatos:
+    unica = None                    # la instancia, cuando ya se creó
+    candado = threading.Lock()      # para que dos hilos no la creen a la vez
+
+    def __new__(cls):
+        # Python llama a __new__ para crear el objeto: si ya existe, se devuelve
+        # el mismo. Así BaseDeDatos() y BaseDeDatos.instancia() dan siempre ese.
+        with cls.candado:
+            if cls.unica is None:
+                instancia = super().__new__(cls)
+                instancia.ruta = DB_PATH
+                cls.unica = instancia
+        return cls.unica
+
+    @classmethod
+    def instancia(cls):
+        return cls()
+
+    def conexion(self, ruta=None):
+        """Una conexión nueva, configurada igual siempre. ruta: otra base que no
+        sea la de la app (los tests usan bases temporales)."""
+        cx = sqlite3.connect(ruta or self.ruta)
+        cx.row_factory = sqlite3.Row                # filas que se leen por nombre de columna
+        cx.execute("PRAGMA foreign_keys = ON")      # SQLite no controla las FK si no se pide
+        return cx
+
+    # Para operaciones que tocan varias filas y tienen que guardarse todas juntas o
+    # ninguna (un despacho descuenta varios productos y cambia el estado del bulto).
+    # Quien la abre le pasa la conexión a cada DAO; si algo falla adentro del with,
+    # se deshace todo. BEGIN IMMEDIATE toma el permiso de escritura desde el
+    # principio: así dos pedidos simultáneos no leen la misma cantidad y uno pisa
+    # lo que guardó el otro.
+    @contextmanager
+    def transaccion(self, ruta=None):
+        cx = self.conexion(ruta)
+        try:
+            with cx:  # commit si sale bien, rollback si hubo una excepción
+                cx.execute("BEGIN IMMEDIATE")
+                yield cx
+        finally:
+            cx.close()
+
+    def crear_tablas(self, ruta=None):
+        # Corre siempre que se pide (no recuerda si ya lo hizo): todo el esquema es
+        # "IF NOT EXISTS" y así una base vieja se migra aunque la app ya esté andando
+        with self.conexion(ruta) as cx:
+            migrar(cx)
+            cx.executescript(ESQUEMA_PATH.read_text(encoding="utf-8"))
+            completar_migracion(cx)
 
 
-# Para operaciones que tocan varias filas y tienen que guardarse todas juntas o
-# ninguna (un despacho descuenta varios productos y cambia el estado del bulto).
-# Quien la abre le pasa la conexión a cada DAO; si algo falla adentro del with,
-# se deshace todo. BEGIN IMMEDIATE toma el permiso de escritura desde el
-# principio: así dos pedidos simultáneos no leen la misma cantidad y uno pisa
-# lo que guardó el otro.
-@contextmanager
-def transaccion(db_path=DB_PATH):
-    cx = get_conexion(db_path)
-    try:
-        with cx:  # commit si sale bien, rollback si hubo una excepción
-            cx.execute("BEGIN IMMEDIATE")
-            yield cx
-    finally:
-        cx.close()
+# Atajos a la única instancia, para los scripts y los tests
+def get_conexion(ruta=None):
+    return BaseDeDatos.instancia().conexion(ruta)
 
-def crear_tablas(db_path=DB_PATH):
-    with get_conexion(db_path) as cx:
-        migrar(cx)
-        cx.executescript(ESQUEMA_PATH.read_text(encoding="utf-8"))
-        completar_migracion(cx)
+
+def transaccion(ruta=None):
+    return BaseDeDatos.instancia().transaccion(ruta)
+
+
+def crear_tablas(ruta=None):
+    BaseDeDatos.instancia().crear_tablas(ruta)
 
 
 # Columnas que se agregaron cuando el grupo ya tenía bases creadas. CREATE TABLE

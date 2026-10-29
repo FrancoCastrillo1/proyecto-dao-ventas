@@ -1,7 +1,7 @@
 # Guía para el oral: patrones y decisiones del TP
 
-Cada integrante tiene que poder explicar los tres patrones (State, Strategy y
-Template Method) y defender las decisiones de diseño. Esta guía arma la
+Cada integrante tiene que poder explicar los cuatro patrones (State, Strategy,
+Template Method y Singleton) y defender las decisiones de diseño. Esta guía arma la
 explicación en el orden en que conviene contarla: **qué problema hay → cómo
 lo resuelve el patrón → dónde está en el código → qué preguntas pueden venir**.
 
@@ -171,6 +171,44 @@ pasos que cada hija completa.
   `armar()` y el dibujo del PDF no se tocan (hay un test que lo hace).
 - **¿Por qué el PDF no está en el dominio?** Porque es cómo se ve, no una
   regla: el dominio arma el contenido y otra capa lo dibuja.
+
+---
+
+## 3b. Patrón Singleton: la base de datos
+
+### El problema
+Toda la app trabaja sobre **una misma base**. Antes, cada DAO guardaba su
+propia ruta y llamaba a una función suelta para abrir la conexión: la
+configuración (dónde está el archivo, activar las claves foráneas, leer las
+filas por nombre de columna) no tenía un dueño.
+
+### La solución
+**Singleton** asegura que de una clase haya **una sola instancia** y da un
+único punto de acceso a ella.
+
+| Pieza del patrón | En el TP |
+|---|---|
+| **La clase con una sola instancia** | `BaseDeDatos` en `backend/persistencia/conexion.py` |
+| **Cómo se garantiza que sea una** | `__new__` (lo que Python llama para crear el objeto): la primera vez la crea y la guarda en `BaseDeDatos.unica`; las siguientes devuelve esa. Un candado (`threading.Lock`) evita que dos hilos la creen a la vez |
+| **Punto de acceso** | `BaseDeDatos.instancia()` (o `BaseDeDatos()`, que da la misma) |
+| **Qué hace** | Sabe dónde está la base (`ruta`), entrega conexiones configuradas siempre igual (`conexion()`), abre transacciones (`transaccion()`) y crea o migra las tablas (`crear_tablas()`) |
+| **Quién la usa** | Todos los DAOs: `BaseDeDatos.instancia().conexion(self.db_path)`; `main.py` y el seed para crear las tablas |
+
+- **Lo que hay una sola vez es el objeto, no la conexión:** cada operación
+  pide la suya. FastAPI atiende varios pedidos a la vez en distintos hilos, y
+  una sola conexión de SQLite compartida mezclaría las transacciones.
+
+### Preguntas que pueden venir
+- **¿Por qué no una sola conexión para toda la app?** Por los hilos: si una
+  venta falla y hace rollback, desharía también lo que estaba guardando un
+  despacho en la misma conexión. Hay un test que verifica que cada pedido de
+  conexión es una distinta.
+- **¿Qué críticas tiene el Singleton?** Es estado global y complica los
+  tests. Por eso la instancia acepta otra ruta al pedir la conexión: los
+  tests usan bases temporales sin tocar la de la app.
+- **¿Por qué el CD no es un Singleton?** "Un solo CD activo" es una regla del
+  negocio sobre los datos (se valida en el service y con un índice único en la
+  base), no una restricción técnica de un objeto.
 
 ---
 

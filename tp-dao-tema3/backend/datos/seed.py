@@ -15,9 +15,8 @@
 import sys
 from datetime import datetime, timedelta
 
-from backend.config import DB_PATH
 from backend.dominio.stock import TipoMovimiento
-from backend.persistencia.conexion import crear_tablas
+from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_maestros import ProductoDAO
 from backend.servicios.maestros_service import (
     CategoriaService, ProductoService, ProveedorService, UbicacionService,
@@ -73,7 +72,7 @@ def base_vacia():
 
 
 def cargar_datos_prueba():
-    crear_tablas()
+    BaseDeDatos.instancia().crear_tablas()
     if not base_vacia():
         print("La base ya tiene datos: no se cargó nada. Para empezar de cero usá --reiniciar.")
         return
@@ -192,10 +191,12 @@ def cargar_datos_prueba():
 
 
 def reiniciar():
-    # Borra SOLO la base local de desarrollo (está en .gitignore)
-    if DB_PATH.exists():
-        DB_PATH.unlink()
-        print(f"Base borrada: {DB_PATH}")
+    # Borra SOLO la base local de desarrollo (está en .gitignore). Dónde está lo
+    # sabe la única BaseDeDatos.
+    ruta = BaseDeDatos.instancia().ruta
+    if ruta.exists():
+        ruta.unlink()
+        print(f"Base borrada: {ruta}")
 
 
 if __name__ == "__main__":

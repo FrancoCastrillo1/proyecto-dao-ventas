@@ -11,12 +11,12 @@ import sys
 from getpass import getpass
 
 from backend.dominio.excepciones import ErrorDeNegocio
-from backend.persistencia.conexion import crear_tablas
+from backend.persistencia.conexion import BaseDeDatos
 from backend.servicios.usuarios_service import UsuarioService
 
 
 def crear_admin(nombre_usuario, nombre_completo, contrasena):
-    crear_tablas()
+    BaseDeDatos.instancia().crear_tablas()
     return UsuarioService().crear("ADMIN", nombre_usuario, nombre_completo, None, contrasena)
 
 

@@ -111,7 +111,8 @@ demorados según la llegada estimada.
 |---|---|---|
 | **State** | `dominio/estados_bulto.py` + `Bulto` en `dominio/logistica.py` | El bulto delega cada acción en su estado (Preparado, Precintado, En tránsito, Recibido, Verificado, Rechazado); cada estado permite solo sus transiciones |
 | **Strategy** | `dominio/medios_pago.py` | Cada medio de pago (efectivo, débito, crédito, transferencia) calcula su descuento o recargo y su vuelto; la Venta no sabe con qué le pagan |
-| **Template Method** | `dominio/documentos.py` | `DocumentoComercial.armar()` fija cómo se arma un documento; el comprobante de venta y la nota de crédito completan solo sus pasos |
+| **Template Method** | `dominio/documentos.py` | `DocumentoComercial.armar()` fija cómo se arma un documento; el comprobante de venta, la nota de crédito y el remito completan solo sus pasos |
+| **Singleton** | `persistencia/conexion.py` | Una sola `BaseDeDatos` sabe dónde está la base, configura cada conexión y crea las tablas; cada operación le pide su propia conexión |
 | **Fábrica simple** | `crear_estado`, `crear_medio_pago`, `crear_ubicacion`, `crear_usuario` | Vuelve a armar el objeto correcto a partir del texto guardado en la base |
 | **DAO** | `persistencia/dao_*.py` | Todo el SQL de cada entidad en un solo lugar |
 
@@ -153,8 +154,13 @@ y está en tres lugares: dominio, service y base.
 | `existencias` | Stock por ubicación, productos bajo mínimo y valorización del inventario a costo |
 | `mermas` | Bultos rechazados por precinto: qué se perdió, cuánto vale y la tasa de rechazo por local |
 | `tiempos-transito` | Horas entre que el bulto sale del CD y llega al local, según el historial |
+| `productos-mas-pedidos` | Lo que más piden los locales al CD: unidades, pedidos, locales, cuánto falta preparar y si alcanza el stock del CD |
+| `devoluciones` | Qué se devuelve, qué parte de lo vendido, el motivo más repetido y cuánto se reintegró por motivo |
 
-Un local ve solo los suyos; el administrador y el CD, los de toda la red.
+Cada perfil ve los que le sirven: el CD no ve los de ventas (ventas, más
+vendidos, devoluciones) y "más pedidos" lo ven solo el CD y el administrador.
+Un local ve solo lo suyo; el administrador y el CD, toda la red. Todos tienen
+un gráfico y se descargan en PDF (`?formato=pdf`, botón "Descargar PDF").
 
 ## Decisiones de diseño
 

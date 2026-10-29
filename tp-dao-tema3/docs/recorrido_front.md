@@ -323,11 +323,19 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 - [S ] **11.3 Hacé:** poné una fecha "Desde" de mañana.
   **Debería:** aparecer "No hay datos para estos filtros" y el botón "Limpiar filtros".
 - [S ] **11.4 Hacé:** "🏆 Más vendidos".
-  **Debería:** verse una barrita por producto, proporcional a las unidades; el yogur tiene la ganancia en rojo.
-- [ ] **11.6 Hacé:** recorré las 5 pestañas como `admin` y pasá el mouse por las barras de cada gráfico.
-  **Debería:** arriba de cada tabla, un gráfico de barras: ingreso neto por día (con "Todo junto", por medio de pago), ganancia por producto (el yogur en rojo, a la izquierda del 0), inventario por ubicación, valor perdido por local y tiempo promedio de envío. Al pasar el mouse aparece un globito con el valor exacto. (Nuevo el 26/10.)
+  **Debería:** verse el gráfico de unidades vendidas por producto (el ranking) y, en la tabla, el yogur con la ganancia en rojo. (Cambió el 28/10: antes el gráfico era de ganancia.)
+- [ ] **11.6 Hacé:** recorré las 7 pestañas como `admin` y pasá el mouse por las barras de cada gráfico.
+  **Debería:** arriba de cada tabla, un gráfico de barras: ingreso neto por día (con "Todo junto", por medio de pago), unidades vendidas por producto (en el globito, la ganancia), unidades devueltas, unidades pedidas, inventario por ubicación, valor perdido por local y tiempo promedio de envío. Al pasar el mouse aparece un globito con el valor exacto. (Nuevo el 26/10.)
 - [ ] **11.7 Hacé:** lo mismo como `norte`.
   **Debería:** ver solo los gráficos que comparan más de una cosa (por ejemplo "Más vendidos"); donde hay un solo dato (su local) alcanza con la tarjeta y no aparece gráfico.
+- [ ] **11.8 Hacé:** entrá como `cd.central` → Reportes. (Nuevo el 28/10.)
+  **Debería:** abrirse directo "Más pedidos", con el gráfico de unidades pedidas por producto y la tabla con "Sin preparar", "En el CD" y "Falta". No aparecen Ventas, Más vendidos ni Devoluciones.
+- [ ] **11.9 Hacé:** como `norte`, pedí 300 Leches al CD (Envíos → nuevo pedido) y volvé a entrar como `cd.central` → Reportes → Más pedidos.
+  **Debería:** la Leche tener "Sin preparar" 300 y, si en el CD hay menos, "Falta" con un número y la fila marcada: con lo que hay no alcanza.
+- [ ] **11.10 Hacé:** como `centro` → Reportes → "Devoluciones".
+  **Debería:** verse qué productos se devolvieron, qué parte de lo vendido y el motivo principal, y abajo "Por qué se devuelve" con cada motivo y lo reintegrado. Como local no aparece "Más pedidos".
+- [ ] **11.11 Hacé:** en cualquier reporte, tocá "Descargar PDF" (probá con filtros puestos).
+  **Debería:** bajarse `reporte-<nombre>-<fecha>.pdf` con el título, los filtros, las tarjetas, el gráfico de barras y la tabla, y abajo "Generado el … por <tu nombre>".
 - [S ] **11.5 Hacé:** "📦 Existencias" con "Solo lo que falta reponer".
   **Debería:** aparecer los faltantes de los locales, con la columna "Falta".
 

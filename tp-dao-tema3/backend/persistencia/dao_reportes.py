@@ -6,8 +6,7 @@
 # se devuelven como Decimal; el costo de los productos es REAL.
 from decimal import Decimal
 
-from backend.config import DB_PATH
-from backend.persistencia.conexion import get_conexion
+from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_ventas import desde_centavos
 
 # Agrupaciones de período permitidas. Se arma el SQL con estas expresiones
@@ -38,11 +37,11 @@ def a_dinero(valor):
 
 
 class ReporteDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
-    def _consultar(self, sql, parametros):
-        with get_conexion(self.db_path) as cx:
+    def consultar(self, sql, parametros):
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             return [dict(fila) for fila in cx.execute(sql, parametros).fetchall()]
 
     # ------------------------------------------- 1. Ventas e ingresos por período
@@ -55,7 +54,7 @@ class ReporteDAO:
         if sucursal_id is not None:
             condiciones.append("mc.sucursal_id = ?")
             parametros.append(sucursal_id)
-        filas = self._consultar(
+        filas = self.consultar(
             f"SELECT {periodo} AS periodo, mc.sucursal_id, u.nombre AS sucursal, mc.medio_pago, "
             "SUM(CASE WHEN mc.tipo = 'VENTA' THEN 1 ELSE 0 END) AS cantidad_ventas, "
             "SUM(CASE WHEN mc.tipo = 'VENTA' THEN mc.importe ELSE 0 END) AS vendido, "
@@ -84,7 +83,7 @@ class ReporteDAO:
             condiciones.append("v.sucursal_id = ?")
             parametros.append(sucursal_id)
         filtro = donde(condiciones)
-        filas = self._consultar(
+        filas = self.consultar(
             "WITH vendidos AS ("
             "  SELECT d.producto_id, SUM(d.cantidad) AS unidades,"
             "    SUM(ROUND(d.cantidad * d.precio_unitario * (100 + CAST(v.porcentaje_ajuste AS REAL)) / 100)) AS ingreso,"
@@ -123,7 +122,7 @@ class ReporteDAO:
         if ubicacion_id is not None:
             condiciones.append("u.id = ?")
             parametros.append(ubicacion_id)
-        filas = self._consultar(
+        filas = self.consultar(
             "SELECT u.id AS ubicacion_id, u.nombre AS ubicacion, u.tipo, p.id AS producto_id, p.codigo, "
             "p.nombre, COALESCE(s.cantidad, 0) AS cantidad, p.stock_minimo, p.costo "
             "FROM ubicaciones u CROSS JOIN productos p "
@@ -146,7 +145,7 @@ class ReporteDAO:
         if sucursal_id is not None:
             condiciones.append("r.destino_id = ?")
             parametros.append(sucursal_id)
-        filas = self._consultar(
+        filas = self.consultar(
             "SELECT b.id AS bulto_id, b.nro_precinto, r.id AS remito_id, r.destino_id AS sucursal_id, "
             "u.nombre AS sucursal, h.fecha_hora AS fecha_rechazo, h.observacion, "
             "db.producto_id, p.codigo, p.nombre, db.cantidad, p.costo "
@@ -172,7 +171,7 @@ class ReporteDAO:
         if sucursal_id is not None:
             condiciones.append("r.destino_id = ?")
             parametros.append(sucursal_id)
-        return self._consultar(
+        return self.consultar(
             "SELECT r.destino_id AS sucursal_id, u.nombre AS sucursal, "
             "SUM(h.estado_nuevo = 'VERIFICADO') AS verificados, SUM(h.estado_nuevo = 'RECHAZADO') AS rechazados "
             "FROM historial_bultos h "
@@ -193,7 +192,7 @@ class ReporteDAO:
         if sucursal_id is not None:
             condiciones.append("r.destino_id = ?")
             parametros.append(sucursal_id)
-        return self._consultar(
+        return self.consultar(
             "SELECT r.destino_id AS sucursal_id, u.nombre AS sucursal, COUNT(*) AS bultos, "
             "AVG((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) AS horas_promedio, "
             "MIN((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) AS horas_minimo, "
@@ -207,3 +206,88 @@ class ReporteDAO:
             "GROUP BY r.destino_id ORDER BY u.nombre",
             parametros,
         )
+
+    # ------------------------- 6. Productos más pedidos por los locales (CD)
+    def productos_mas_pedidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
+        """Unidades que pidieron los locales de cada producto (según la fecha del
+        pedido), en cuántos pedidos y de cuántos locales; cuánto de eso todavía
+        no se preparó (pedidos PENDIENTES) y cuánto hay hoy en el CD."""
+        condiciones, parametros = [], []
+        filtro_fechas("pr.fecha", desde, hasta, condiciones, parametros)
+        if sucursal_id is not None:
+            condiciones.append("pr.sucursal_id = ?")
+            parametros.append(sucursal_id)
+        return self.consultar(
+            "SELECT p.id AS producto_id, p.codigo, p.nombre, "
+            "SUM(d.cantidad) AS unidades, COUNT(DISTINCT pr.id) AS pedidos, "
+            "COUNT(DISTINCT pr.sucursal_id) AS locales, "
+            "SUM(CASE WHEN pr.estado = 'PENDIENTE' THEN d.cantidad ELSE 0 END) AS sin_preparar, "
+            "COALESCE((SELECT SUM(s.cantidad) FROM stock s JOIN ubicaciones u ON u.id = s.ubicacion_id "
+            "          WHERE s.producto_id = p.id AND u.tipo = 'CD' AND u.activo = 1), 0) AS stock_cd "
+            "FROM detalles_pedido d "
+            "JOIN pedidos_reposicion pr ON pr.id = d.pedido_id "
+            "JOIN productos p ON p.id = d.producto_id"
+            f"{donde(condiciones)} "
+            "GROUP BY p.id ORDER BY unidades DESC, pedidos DESC, p.nombre LIMIT ?",
+            parametros + [limite],
+        )
+
+    # --------------------------------- 7. Devoluciones por producto y motivo
+    def filtro_devoluciones(self, desde, hasta, sucursal_id):
+        # Las devoluciones se cuentan en el período en que se hicieron; el local
+        # es el de la venta
+        condiciones, parametros = [], []
+        filtro_fechas("de.fecha", desde, hasta, condiciones, parametros)
+        if sucursal_id is not None:
+            condiciones.append("v.sucursal_id = ?")
+            parametros.append(sucursal_id)
+        return donde(condiciones), parametros
+
+    def devoluciones_por_producto_y_motivo(self, desde=None, hasta=None, sucursal_id=None):
+        """Una fila por producto y motivo: unidades devueltas y cuánto se
+        reintegró. El motivo se agrupa sin importar mayúsculas ni espacios."""
+        filtro, parametros = self.filtro_devoluciones(desde, hasta, sucursal_id)
+        filas = self.consultar(
+            "SELECT p.id AS producto_id, p.codigo, p.nombre, MIN(TRIM(de.motivo)) AS motivo, "
+            "SUM(dd.cantidad) AS unidades, SUM(dd.importe) AS importe "
+            "FROM detalles_devolucion dd "
+            "JOIN devoluciones de ON de.id = dd.devolucion_id "
+            "JOIN ventas v ON v.id = de.venta_id "
+            "JOIN productos p ON p.id = dd.producto_id"
+            f"{filtro} "
+            "GROUP BY p.id, LOWER(TRIM(de.motivo)) ORDER BY p.nombre",
+            parametros,
+        )
+        for fila in filas:
+            fila["importe"] = desde_centavos(fila["importe"])
+        return filas
+
+    def devoluciones_por_motivo(self, desde=None, hasta=None, sucursal_id=None):
+        """Cuántas devoluciones hubo por cada motivo y cuánto se reintegró (una
+        devolución con varios productos cuenta una vez)."""
+        filtro, parametros = self.filtro_devoluciones(desde, hasta, sucursal_id)
+        filas = self.consultar(
+            "SELECT MIN(TRIM(de.motivo)) AS motivo, COUNT(*) AS devoluciones, SUM(de.importe) AS importe "
+            "FROM devoluciones de JOIN ventas v ON v.id = de.venta_id"
+            f"{filtro} "
+            "GROUP BY LOWER(TRIM(de.motivo)) ORDER BY importe DESC, devoluciones DESC",
+            parametros,
+        )
+        for fila in filas:
+            fila["importe"] = desde_centavos(fila["importe"])
+        return filas
+
+    def unidades_vendidas_por_producto(self, desde=None, hasta=None, sucursal_id=None):
+        """{producto_id: unidades vendidas} en el período (para la tasa de devolución)."""
+        condiciones, parametros = [], []
+        filtro_fechas("v.fecha", desde, hasta, condiciones, parametros)
+        if sucursal_id is not None:
+            condiciones.append("v.sucursal_id = ?")
+            parametros.append(sucursal_id)
+        filas = self.consultar(
+            "SELECT d.producto_id, SUM(d.cantidad) AS unidades "
+            f"FROM detalles_venta d JOIN ventas v ON v.id = d.venta_id{donde(condiciones)} "
+            "GROUP BY d.producto_id",
+            parametros,
+        )
+        return {fila["producto_id"]: fila["unidades"] for fila in filas}

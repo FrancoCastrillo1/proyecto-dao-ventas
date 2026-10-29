@@ -183,6 +183,39 @@ def test_un_local_no_ve_reportes_ni_caja_de_otro(red):
     assert pedir(red, "a", "GET", f"/reportes/ventas?sucursal_id={red['b']}").status_code == 403
     assert pedir(red, "a", "GET", f"/caja/{red['b']}").status_code == 403
     assert pedir(red, "a", "GET", "/reportes/ventas").status_code == 200   # sin filtro: solo lo suyo
+    assert pedir(red, "a", "GET", f"/reportes/devoluciones?sucursal_id={red['b']}").status_code == 403
+
+
+@pytest.mark.parametrize("quien, permitido", [("admin", True), ("cd", True), ("a", False)])
+def test_los_mas_pedidos_los_ven_el_cd_y_el_administrador(red, quien, permitido):
+    # Es la demanda de toda la red: le sirve al que abastece, no a un local
+    respuesta = pedir(red, quien, "GET", "/reportes/productos-mas-pedidos")
+    assert (respuesta.status_code == 200) is permitido
+    if not permitido:
+        assert "toda la red" in respuesta.json()["detail"]
+
+
+@pytest.mark.parametrize("quien, permitido", [("admin", True), ("a", True), ("cd", False)])
+def test_las_devoluciones_las_ven_el_local_y_el_administrador(red, quien, permitido):
+    assert (pedir(red, quien, "GET", "/reportes/devoluciones").status_code == 200) is permitido
+
+
+@pytest.mark.parametrize("ruta", [
+    "/reportes/ventas", "/reportes/productos-mas-vendidos", "/reportes/existencias", "/reportes/mermas",
+    "/reportes/tiempos-transito", "/reportes/devoluciones",
+])
+def test_cada_reporte_se_descarga_en_pdf(red, ruta):
+    respuesta = pedir(red, "a", "GET", f"{ruta}?formato=pdf")
+    assert respuesta.status_code == 200
+    assert respuesta.headers["content-type"] == "application/pdf"
+    assert respuesta.headers["content-disposition"].startswith('attachment; filename="reporte-')
+    assert respuesta.content.startswith(b"%PDF")
+
+
+def test_el_pdf_respeta_los_permisos_y_el_formato_tiene_que_ser_valido(red):
+    assert pedir(red, "cd", "GET", "/reportes/ventas?formato=pdf").status_code == 403
+    assert pedir(red, "cd", "GET", "/reportes/productos-mas-pedidos?formato=pdf").status_code == 200
+    assert pedir(red, "a", "GET", "/reportes/ventas?formato=excel").status_code == 422
 
 
 # ------------------------------- Circuito completo con quién hizo cada cosa

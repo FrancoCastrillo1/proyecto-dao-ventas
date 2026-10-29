@@ -10,6 +10,8 @@ from decimal import Decimal
 from backend.dominio.excepciones import DatoInvalido, NoEncontrado
 from backend.persistencia.dao_maestros import UbicacionDAO
 from backend.persistencia.dao_reportes import PERIODOS, ReporteDAO
+from backend.servicios.informes import armar_informe
+from backend.servicios.informes_pdf import dibujar_informe
 
 CERO = Decimal("0.00")
 
@@ -40,6 +42,28 @@ class ReportesService:
     def validar_ubicacion(self, ubicacion_id):
         if ubicacion_id is not None and self.ubicacion_dao.obtener_por_id(ubicacion_id) is None:
             raise NoEncontrado(f"No se encontro la ubicación {ubicacion_id}")
+
+    def describir_filtros(self, desde=None, hasta=None, ubicacion_id=None, con_fechas=True):
+        """Los filtros en palabras, para el encabezado del PDF de un reporte."""
+        lineas = []
+        if con_fechas:
+            if desde and hasta:
+                lineas.append(f"Período: del {desde:%d/%m/%Y} al {hasta:%d/%m/%Y}")
+            elif desde:
+                lineas.append(f"Período: desde el {desde:%d/%m/%Y}")
+            elif hasta:
+                lineas.append(f"Período: hasta el {hasta:%d/%m/%Y}")
+            else:
+                lineas.append("Período: todo")
+        ubicacion = self.ubicacion_dao.obtener_por_id(ubicacion_id) if ubicacion_id is not None else None
+        lineas.append(f"Ubicación: {ubicacion.nombre}" if ubicacion else "Ubicación: toda la red")
+        return lineas
+
+    def pdf(self, clave, datos, filtros, quien, **opciones):
+        """El PDF de un reporte ya calculado: (nombre del archivo, bytes).
+        filtros: lo que devuelve describir_filtros; quien: el que lo descarga."""
+        informe = armar_informe(clave, datos, filtros, quien, **opciones)
+        return informe.nombre_archivo, dibujar_informe(informe)
 
     # -------------------------------------- 1. Ventas e ingresos por período
     def ventas(self, desde=None, hasta=None, sucursal_id=None, agrupar="dia"):
@@ -129,3 +153,53 @@ class ReportesService:
             round(sum(f["horas_promedio"] * f["bultos"] for f in filas) / total_bultos, 2) if total_bultos else None
         )
         return {"filas": filas, "bultos": total_bultos, "horas_promedio_general": promedio_general}
+
+    # ------------------------- 6. Productos más pedidos por los locales (CD)
+    def productos_mas_pedidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
+        """Lo que más piden los locales: le sirve al CD para saber qué comprar.
+        falta_en_cd = lo que está pedido y sin preparar menos lo que hay en el CD
+        (si da positivo, con lo que hay no alcanza)."""
+        if not 1 <= limite <= 100:
+            raise DatoInvalido("El límite tiene que estar entre 1 y 100")
+        self.validar_ubicacion(sucursal_id)
+        filas = self.dao.productos_mas_pedidos(*self.rango(desde, hasta), sucursal_id, limite)
+        for fila in filas:
+            fila["falta_en_cd"] = max(fila["sin_preparar"] - fila["stock_cd"], 0)
+        return {
+            "filas": filas,
+            "total_unidades": sum(f["unidades"] for f in filas),
+            "total_sin_preparar": sum(f["sin_preparar"] for f in filas),
+            "productos_que_faltan": sum(1 for f in filas if f["falta_en_cd"] > 0),
+        }
+
+    # --------------------------------- 7. Devoluciones por producto y motivo
+    def devoluciones(self, desde=None, hasta=None, sucursal_id=None):
+        """Qué se devuelve, cuánto y por qué. Por producto: unidades devueltas,
+        lo reintegrado, qué parte de lo vendido en el período se devolvió y el
+        motivo más repetido. Por motivo: cuántas devoluciones y cuánta plata."""
+        self.validar_ubicacion(sucursal_id)
+        inicio, fin = self.rango(desde, hasta)
+        vendidas = self.dao.unidades_vendidas_por_producto(inicio, fin, sucursal_id)
+        productos = {}
+        for fila in self.dao.devoluciones_por_producto_y_motivo(inicio, fin, sucursal_id):
+            producto = productos.setdefault(fila["producto_id"], {
+                "producto_id": fila["producto_id"], "codigo": fila["codigo"], "nombre": fila["nombre"],
+                "unidades": 0, "importe": CERO, "motivos": {},
+            })
+            producto["unidades"] += fila["unidades"]
+            producto["importe"] += fila["importe"]
+            producto["motivos"][fila["motivo"]] = producto["motivos"].get(fila["motivo"], 0) + fila["unidades"]
+        for producto in productos.values():
+            motivos = producto.pop("motivos")
+            producto["motivo_principal"] = max(motivos, key=lambda motivo: (motivos[motivo], motivo))
+            producto["vendidas"] = vendidas.get(producto["producto_id"], 0)
+            producto["porcentaje_devuelto"] = porcentaje(producto["unidades"], producto["vendidas"])
+        filas = sorted(productos.values(), key=lambda p: (-p["unidades"], -p["importe"], p["nombre"]))
+        por_motivo = self.dao.devoluciones_por_motivo(inicio, fin, sucursal_id)
+        return {
+            "filas": filas,
+            "por_motivo": por_motivo,
+            "cantidad_devoluciones": sum(m["devoluciones"] for m in por_motivo),
+            "unidades_devueltas": sum(f["unidades"] for f in filas),
+            "total_reintegrado": sum((m["importe"] for m in por_motivo), CERO),
+        }

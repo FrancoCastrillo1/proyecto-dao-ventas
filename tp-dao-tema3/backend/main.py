@@ -10,9 +10,9 @@ from backend.api import (
 from backend.dominio.excepciones import (
     DatoInvalido, EntidadDuplicada, ErrorDeNegocio, NoAutenticado, NoEncontrado, SinPermiso,
 )
-from backend.persistencia.conexion import crear_tablas
+from backend.persistencia.conexion import BaseDeDatos
 
-crear_tablas()  # crea las tablas si no existen
+BaseDeDatos.instancia().crear_tablas()  # crea las tablas si no existen (y migra una base vieja)
 
 app = FastAPI(title="TP DAO - Tema 3")
 

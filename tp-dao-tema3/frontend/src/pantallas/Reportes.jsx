@@ -1,8 +1,10 @@
-// Pantalla de Reportes: los 5 reportes del backend (/reportes/...) con sus
+// Pantalla de Reportes: los 7 reportes del backend (/reportes/...) con sus
 // filtros. Cada cambio de filtro vuelve a consultar solo. Las cuentas las hace
-// el backend; acá solo se muestran, con un gráfico arriba de cada tabla. Un
-// local ve solo los suyos (lo filtra el back), así que no se le muestra el
-// filtro de local.
+// el backend; acá solo se muestran, con un gráfico arriba de cada tabla.
+// Cada perfil ve los suyos según sus capacidades (el CD, los de logística; el
+// local y el administrador, también los de ventas). Un local ve solo lo suyo
+// (lo filtra el back), así que no se le muestra el filtro de local.
+// "Descargar PDF" pide el mismo reporte, con los mismos filtros, en PDF.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
@@ -15,16 +17,36 @@ import { Cargando, Segmentado, Vacio } from "../componentes/Controles.jsx";
 import { GraficoBarras, agrupar } from "../componentes/Graficos.jsx";
 import { fecha, nombreMedio, pesos, porcentaje } from "../formato.js";
 
-// requiere: la capacidad que hace falta para ver el reporte (los de ventas, el CD no los ve)
+// requiere: la capacidad que hace falta para ver el reporte (los de ventas, el
+// CD no los ve; los más pedidos son de toda la red: CD y administrador).
+// ranking: se elige cuántos mostrar (top 5, 10...). El primero que pueda ver
+// cada perfil es el que se abre.
 const REPORTES = [
   { valor: "ventas", texto: <><Icono nombre="plata" tamano={16} /> Ventas</>, pregunta: "¿Cuánto se vendió, dónde y cómo se cobró?", fechas: true, sucursal: true, requiere: "ve_ventas" },
-  { valor: "productos-mas-vendidos", texto: <><Icono nombre="trofeo" tamano={16} /> Más vendidos</>, pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true, requiere: "ve_ventas" },
+  { valor: "productos-mas-vendidos", texto: <><Icono nombre="trofeo" tamano={16} /> Más vendidos</>, pregunta: "¿Qué productos se venden más y cuánto dejan?", fechas: true, sucursal: true, ranking: true, requiere: "ve_ventas" },
+  { valor: "devoluciones", texto: <><Icono nombre="devolucion" tamano={16} /> Devoluciones</>, pregunta: "¿Qué se devuelve, cuánto y por qué?", fechas: true, sucursal: true, requiere: "ve_ventas" },
+  { valor: "productos-mas-pedidos", texto: <><Icono nombre="pedido" tamano={16} /> Más pedidos</>, pregunta: "¿Qué piden más los locales y alcanza lo que hay en el CD?", fechas: true, sucursal: true, ranking: true, requiere: "ve_toda_la_red" },
   { valor: "existencias", texto: <><Icono nombre="caja" tamano={16} /> Existencias</>, pregunta: "¿Cuánto hay, cuánto vale y qué falta reponer?", ubicacion: true },
   { valor: "mermas", texto: <><Icono nombre="alerta" tamano={16} /> Mermas</>, pregunta: "¿Cuántos bultos llegaron con el precinto roto y cuánto se perdió?", fechas: true, sucursal: true },
   { valor: "tiempos-transito", texto: <><Icono nombre="reloj" tamano={16} /> Tiempos de envío</>, pregunta: "¿Cuánto tarda un bulto del CD a cada local?", fechas: true, sucursal: true },
 ];
 
 const FILTROS_INICIALES = { desde: "", hasta: "", sucursal_id: "", ubicacion_id: "", agrupar: "dia", limite: "10", solo_bajo_minimo: false };
+
+// Los filtros que aplican a este reporte, como parámetros de la URL
+function parametrosDe(reporte, filtros) {
+  const parametros = new URLSearchParams();
+  if (reporte.fechas) {
+    if (filtros.desde) parametros.set("desde", filtros.desde);
+    if (filtros.hasta) parametros.set("hasta", filtros.hasta);
+  }
+  if (reporte.sucursal && filtros.sucursal_id) parametros.set("sucursal_id", filtros.sucursal_id);
+  if (reporte.ubicacion && filtros.ubicacion_id) parametros.set("ubicacion_id", filtros.ubicacion_id);
+  if (reporte.valor === "ventas") parametros.set("agrupar", filtros.agrupar);
+  if (reporte.ranking) parametros.set("limite", filtros.limite);
+  if (reporte.valor === "existencias" && filtros.solo_bajo_minimo) parametros.set("solo_bajo_minimo", "true");
+  return parametros;
+}
 
 export default function Reportes({ usuario }) {
   const catalogos = useCatalogos();
@@ -40,24 +62,24 @@ export default function Reportes({ usuario }) {
   const hayFiltros = filtros.desde || filtros.hasta || filtros.sucursal_id || filtros.ubicacion_id || filtros.solo_bajo_minimo;
 
   useEffect(() => {
-    const parametros = new URLSearchParams();
-    if (reporte.fechas) {
-      if (filtros.desde) parametros.set("desde", filtros.desde);
-      if (filtros.hasta) parametros.set("hasta", filtros.hasta);
-    }
-    if (reporte.sucursal && filtros.sucursal_id) parametros.set("sucursal_id", filtros.sucursal_id);
-    if (reporte.ubicacion && filtros.ubicacion_id) parametros.set("ubicacion_id", filtros.ubicacion_id);
-    if (clave === "ventas") parametros.set("agrupar", filtros.agrupar);
-    if (clave === "productos-mas-vendidos") parametros.set("limite", filtros.limite);
-    if (clave === "existencias" && filtros.solo_bajo_minimo) parametros.set("solo_bajo_minimo", "true");
     setDatos(null);
-    ejecutar(async () => setDatos({ clave, ...(await api.obtener(`/reportes/${clave}?${parametros}`)) }))
+    ejecutar(async () => setDatos({ clave, ...(await api.obtener(`/reportes/${clave}?${parametrosDe(reporte, filtros)}`)) }))
       .then((ok) => { if (!ok) setDatos({ clave, error: true }); });  // el error lo muestra el aviso
   }, [clave, filtros]);
 
+  function descargarPdf() {
+    const parametros = parametrosDe(reporte, filtros);
+    parametros.set("formato", "pdf");
+    ejecutar(() => api.descargar(`/reportes/${clave}?${parametros}`), "Reporte descargado en PDF");
+  }
+
   return (
     <section>
-      <Cabecera icono="grafico" titulo="Reportes" subtitulo={reporte.pregunta} />
+      <Cabecera icono="grafico" titulo="Reportes" subtitulo={reporte.pregunta}>
+        <button className="secundario" onClick={descargarPdf} disabled={datos?.clave !== clave || datos.error}>
+          <Icono nombre="descargar" tamano={16} /> Descargar PDF
+        </button>
+      </Cabecera>
       <Aviso aviso={aviso} alCerrar={limpiar} />
 
       <div className="barra">
@@ -97,7 +119,7 @@ export default function Reportes({ usuario }) {
             </select>
           </label>
         )}
-        {clave === "productos-mas-vendidos" && (
+        {reporte.ranking && (
           <label>Mostrar
             <select value={filtros.limite} onChange={cambiar("limite")}>
               <option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option><option value="100">Todos</option>
@@ -110,6 +132,8 @@ export default function Reportes({ usuario }) {
       {datos?.clave !== clave ? <Cargando /> : !datos.error && (<>
         {clave === "ventas" && <ReporteVentas datos={datos} agrupado={filtros.agrupar} />}
         {clave === "productos-mas-vendidos" && <ReporteMasVendidos datos={datos} />}
+        {clave === "devoluciones" && <ReporteDevoluciones datos={datos} />}
+        {clave === "productos-mas-pedidos" && <ReporteMasPedidos datos={datos} />}
         {clave === "existencias" && <ReporteExistencias datos={datos} />}
         {clave === "mermas" && <ReporteMermas datos={datos} />}
         {clave === "tiempos-transito" && <ReporteTransito datos={datos} />}
@@ -169,23 +193,25 @@ function ReporteVentas({ datos, agrupado }) {
   </>);
 }
 
+const unidades = (n) => `${n} u.`;
+
 function ReporteMasVendidos({ datos }) {
-  const maximo = Math.max(1, ...datos.filas.map((f) => f.unidades));
   return (<>
     <Tarjetas items={[["Ingreso", pesos(datos.total_ingreso)], ["Ganancia (margen)", pesos(datos.total_margen)]]} />
     {datos.filas.length === 0 ? SIN_DATOS : (<>
-      {/* en rojo los que se venden a pérdida */}
-      <GraficoBarras titulo="Ganancia por producto ($)" formato={pesos} horizontal
-        datos={datos.filas.map((f) => ({ nombre: f.nombre, valor: Number(f.margen), detalle: `${f.unidades} u. · margen ${porcentaje(f.margen_porcentaje)}` }))} />
+      {/* el ranking en unidades; la ganancia de cada uno, en el globito y en la tabla (en rojo si se vende a pérdida) */}
+      <GraficoBarras titulo="Unidades vendidas por producto" formato={unidades} horizontal
+        datos={datos.filas.map((f) => ({ nombre: f.nombre, valor: f.unidades,
+          detalle: `Ganancia ${pesos(f.margen)} · margen ${porcentaje(f.margen_porcentaje)}` }))} />
       <Tabla>
-        <thead><tr><th>#</th><th>Producto</th><th>Unidades</th><th className="num">Ingreso</th>
+        <thead><tr><th>#</th><th>Producto</th><th className="num">Unidades</th><th className="num">Ingreso</th>
           <th className="num">Costo</th><th className="num">Ganancia</th><th className="num">Margen</th></tr></thead>
         <tbody>
           {datos.filas.map((f, i) => (
             <tr key={f.producto_id}>
               <td>{i + 1}</td>
               <td>{f.nombre}<span className="secundario-texto">{f.codigo}</span></td>
-              <td><div className="barrita"><span style={{ width: `${(f.unidades / maximo) * 100}%` }} /><b>{f.unidades}</b></div></td>
+              <td className="num"><strong>{f.unidades}</strong></td>
               <td className="num">{pesos(f.ingreso)}</td><td className="num">{pesos(f.costo)}</td>
               <td className={`num ${f.margen < 0 ? "negativo" : ""}`}>{pesos(f.margen)}</td>
               <td className={`num ${f.margen < 0 ? "negativo" : ""}`}>{porcentaje(f.margen_porcentaje)}</td>
@@ -193,6 +219,69 @@ function ReporteMasVendidos({ datos }) {
           ))}
         </tbody>
       </Tabla>
+    </>)}
+  </>);
+}
+
+function ReporteDevoluciones({ datos }) {
+  return (<>
+    <Tarjetas items={[["Devoluciones", datos.cantidad_devoluciones], ["Unidades devueltas", datos.unidades_devueltas],
+      ["Reintegrado", pesos(datos.total_reintegrado)]]} />
+    {datos.filas.length === 0
+      ? <Vacio icono="listo" titulo="Sin devoluciones" texto="No se devolvió nada con estos filtros." />
+      : (<>
+        <GraficoBarras titulo="Unidades devueltas por producto" formato={unidades} horizontal
+          datos={datos.filas.map((f) => ({ nombre: f.nombre, valor: f.unidades,
+            detalle: `${porcentaje(f.porcentaje_devuelto)} de lo vendido · sobre todo por "${f.motivo_principal}"` }))} />
+        <Tabla>
+          <thead><tr><th>Producto</th><th className="num">Devueltas</th><th className="num">Vendidas</th>
+            <th className="num">% devuelto</th><th className="num">Reintegrado</th><th>Motivo principal</th></tr></thead>
+          <tbody>
+            {datos.filas.map((f) => (
+              <tr key={f.producto_id}><td>{f.nombre}<span className="secundario-texto">{f.codigo}</span></td>
+                <td className="num"><strong>{f.unidades}</strong></td><td className="num">{f.vendidas}</td>
+                <td className="num">{porcentaje(f.porcentaje_devuelto)}</td><td className="num">{pesos(f.importe)}</td>
+                <td>{f.motivo_principal}</td></tr>
+            ))}
+          </tbody>
+        </Tabla>
+        <h2 className="titulo-seccion espacio-arriba">Por qué se devuelve</h2>
+        <Tabla>
+          <thead><tr><th>Motivo</th><th className="num">Devoluciones</th><th className="num">Reintegrado</th></tr></thead>
+          <tbody>
+            {datos.por_motivo.map((m) => (
+              <tr key={m.motivo}><td>{m.motivo}</td><td className="num">{m.devoluciones}</td><td className="num">{pesos(m.importe)}</td></tr>
+            ))}
+          </tbody>
+        </Tabla>
+      </>)}
+  </>);
+}
+
+function ReporteMasPedidos({ datos }) {
+  return (<>
+    <Tarjetas items={[["Unidades pedidas", datos.total_unidades], ["Sin preparar", datos.total_sin_preparar],
+      ["Productos que faltan en el CD", datos.productos_que_faltan]]} />
+    {datos.filas.length === 0 ? SIN_DATOS : (<>
+      <GraficoBarras titulo="Unidades pedidas por producto" formato={unidades} horizontal
+        datos={datos.filas.map((f) => ({ nombre: f.nombre, valor: f.unidades,
+          detalle: `${f.pedidos} pedidos de ${f.locales} ${f.locales === 1 ? "local" : "locales"} · en el CD hay ${f.stock_cd}` }))} />
+      <Tabla>
+        <thead><tr><th>#</th><th>Producto</th><th className="num">Pedidas</th><th className="num">Pedidos</th>
+          <th className="num">Locales</th><th className="num">Sin preparar</th><th className="num">En el CD</th>
+          <th className="num">Falta</th></tr></thead>
+        <tbody>
+          {datos.filas.map((f, i) => (
+            <tr key={f.producto_id} className={f.falta_en_cd ? "fila-alerta" : ""}>
+              <td>{i + 1}</td><td>{f.nombre}<span className="secundario-texto">{f.codigo}</span></td>
+              <td className="num"><strong>{f.unidades}</strong></td><td className="num">{f.pedidos}</td>
+              <td className="num">{f.locales}</td><td className="num">{f.sin_preparar}</td>
+              <td className="num">{f.stock_cd}</td>
+              <td className={`num ${f.falta_en_cd ? "falta" : ""}`}>{f.falta_en_cd || "—"}</td></tr>
+          ))}
+        </tbody>
+      </Tabla>
+      <p className="nota espacio-arriba">Falta: lo que los locales pidieron y todavía no se preparó, menos lo que hay hoy en el CD. Si aparece un número, con lo que hay no alcanza: hay que comprar.</p>
     </>)}
   </>);
 }

@@ -5,7 +5,7 @@
 import {
   BadgeCheck, ChartColumn, Circle, CircleCheck, ClipboardList, Download, Handshake, House, Lock, LogOut,
   Package, PackageOpen, PartyPopper, Plug, Receipt, Search, ShieldCheck, ShoppingBasket, ShoppingCart, Sparkles,
-  Sprout, Store, Tag, Timer, TriangleAlert, Trophy, Truck, User, Wallet, Warehouse,
+  Sprout, Store, Tag, Timer, TriangleAlert, Trophy, Truck, Undo2, User, Wallet, Warehouse,
 } from "lucide-react";
 
 const ICONOS = {
@@ -38,6 +38,7 @@ const ICONOS = {
   plata: Wallet,
   trofeo: Trophy,
   reloj: Timer,
+  devolucion: Undo2,
 };
 
 export default function Icono({ nombre, tamano = 20, className }) {

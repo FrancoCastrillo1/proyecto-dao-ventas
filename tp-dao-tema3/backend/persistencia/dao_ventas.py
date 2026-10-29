@@ -7,13 +7,12 @@ from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
 
-from backend.config import DB_PATH
 from backend.dominio.dinero import CENTAVO
 from backend.dominio.medios_pago import crear_medio_pago
 from backend.dominio.ventas import (
     Comprobante, DetalleDevolucion, DetalleVenta, Devolucion, MovimientoCaja, Pago, Venta,
 )
-from backend.persistencia.conexion import get_conexion, transaccion
+from backend.persistencia.conexion import BaseDeDatos
 
 
 # Los montos se guardan en centavos (ver esquema.sql). Un Decimal del dominio
@@ -31,14 +30,14 @@ def a_texto(fecha):
 
 
 class VentaDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def transaccion(self):
-        return transaccion(self.db_path)
+        return BaseDeDatos.instancia().transaccion(self.db_path)
 
     # ---------------------------------------------------------------- Escritura
 

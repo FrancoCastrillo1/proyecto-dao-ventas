@@ -5,17 +5,16 @@
 # dentro del objeto Usuario: solo los pide el login.
 # Acá NO se valida el negocio (eso lo hacen el dominio y el service) ni se
 # calcula ningún hash: solo se lee y escribe en SQLite.
-from backend.config import DB_PATH
 from backend.dominio.usuarios import crear_usuario
-from backend.persistencia.conexion import get_conexion
+from backend.persistencia.conexion import BaseDeDatos
 
 
 class UsuarioDAO:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self):
-        return get_conexion(self.db_path)
+        return BaseDeDatos.instancia().conexion(self.db_path)
 
     def _a_objeto(self, fila):
         return crear_usuario(
@@ -90,11 +89,11 @@ class UsuarioDAO:
 
 class SesionDAO:
     # Las fechas se guardan como texto ISO: así se comparan bien en SQL
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def crear(self, token_hash, usuario_id, vence):
-        with get_conexion(self.db_path) as cx:
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             cx.execute(
                 "INSERT INTO sesiones (token_hash, usuario_id, vence) VALUES (?, ?, ?)",
                 (token_hash, usuario_id, vence.isoformat()),
@@ -102,7 +101,7 @@ class SesionDAO:
 
     def usuario_de(self, token_hash, ahora):
         """Id del usuario de una sesión que no venció, o None."""
-        with get_conexion(self.db_path) as cx:
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             fila = cx.execute(
                 "SELECT usuario_id FROM sesiones WHERE token_hash = ? AND vence > ?",
                 (token_hash, ahora.isoformat()),
@@ -110,14 +109,14 @@ class SesionDAO:
         return fila["usuario_id"] if fila else None
 
     def borrar(self, token_hash):
-        with get_conexion(self.db_path) as cx:
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             cx.execute("DELETE FROM sesiones WHERE token_hash = ?", (token_hash,))
 
     def borrar_de_usuario(self, usuario_id):
         # Al dar de baja a alguien o cambiarle la contraseña, se cierran sus sesiones
-        with get_conexion(self.db_path) as cx:
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             cx.execute("DELETE FROM sesiones WHERE usuario_id = ?", (usuario_id,))
 
     def borrar_vencidas(self, ahora):
-        with get_conexion(self.db_path) as cx:
+        with BaseDeDatos.instancia().conexion(self.db_path) as cx:
             cx.execute("DELETE FROM sesiones WHERE vence <= ?", (ahora.isoformat(),))

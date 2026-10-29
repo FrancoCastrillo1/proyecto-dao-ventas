@@ -9,12 +9,11 @@
 from contextlib import nullcontext
 from datetime import datetime
 
-from backend.config import DB_PATH
 from backend.dominio.estados_bulto import crear_estado
 from backend.dominio.logistica import (
     Bulto, CambioEstadoBulto, DetalleBulto, DetallePedido, OrdenReposicion, PedidoReposicion, Remito,
 )
-from backend.persistencia.conexion import get_conexion, transaccion
+from backend.persistencia.conexion import BaseDeDatos
 
 
 def a_texto(fecha):
@@ -22,15 +21,15 @@ def a_texto(fecha):
 
 
 class DAOBase:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         self.db_path = db_path
 
     def _conn(self, cx=None):
         # Si ya hay una transacción abierta se usa esa; si no, una conexión nueva
-        return nullcontext(cx) if cx else get_conexion(self.db_path)
+        return nullcontext(cx) if cx else BaseDeDatos.instancia().conexion(self.db_path)
 
     def transaccion(self):
-        return transaccion(self.db_path)
+        return BaseDeDatos.instancia().transaccion(self.db_path)
 
 
 # --------------------------------------------------------------------- Pedidos
@@ -87,7 +86,7 @@ class PedidoDAO(DAOBase):
 # ------------------------------------------------------------------- Órdenes
 
 class OrdenDAO(DAOBase):
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         super().__init__(db_path)
         self.pedido_dao = PedidoDAO(db_path)
 
@@ -195,7 +194,7 @@ class BultoDAO(DAOBase):
 # ------------------------------------------------------------------- Remitos
 
 class RemitoDAO(DAOBase):
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
         super().__init__(db_path)
         self.bulto_dao = BultoDAO(db_path)
 

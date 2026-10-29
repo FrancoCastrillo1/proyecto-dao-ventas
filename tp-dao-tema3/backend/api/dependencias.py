@@ -37,6 +37,7 @@ MENSAJES_SIN_PERMISO = {
     "puede_recibir": "Solo un local recibe y verifica los envíos",
     "puede_vender": "Solo un local vende y hace devoluciones",
     "ve_ventas": "Tu perfil no ve las ventas: el Centro de Distribución solo abastece a los locales",
+    "ve_toda_la_red": "Esto es de toda la red: lo ven el Centro de Distribución y el administrador",
 }
 
 
