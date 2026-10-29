@@ -46,8 +46,11 @@ python -m venv .venv
 
 El seed carga 10 productos, 3 proveedores, el CD y 3 locales, compras, una
 orden de reposición (un remito verificado, uno con un bulto rechazado y uno en
-camino), 8 ventas, 2 devoluciones y **un usuario de cada perfil**. Solo carga
-si la base está vacía; `--reiniciar` borra la base local y la vuelve a cargar.
+camino), un envío grande a los tres locales, un pedido sin preparar y otro en
+preparación, 8 ventas de hoy, 2 devoluciones, unas 600 ventas de prueba de los
+últimos 60 días (para los tableros) y **un usuario de cada perfil**. Tarda unos
+15 segundos. Solo carga si la base está vacía; `--reiniciar` borra la base
+local y la vuelve a cargar.
 
 Sin el seed, el primer administrador se crea con
 `.venv\Scripts\python -m backend.datos.crear_admin <usuario> "<Nombre completo>"`
@@ -151,7 +154,7 @@ y está en tres lugares: dominio, service y base.
 |---|---|
 | `ventas` | Ventas, devoluciones e ingreso neto por período (día/mes/total), local y medio de pago |
 | `productos-mas-vendidos` | Ranking por unidades, con ingreso, costo y margen (ganancia o pérdida) con los precios del momento de la venta |
-| `existencias` | Stock por ubicación, productos bajo mínimo y valorización del inventario a costo |
+| `existencias` | Stock por ubicación, productos bajo mínimo, días sin salir (stock parado) y valorización del inventario a costo |
 | `mermas` | Bultos rechazados por precinto: qué se perdió, cuánto vale y la tasa de rechazo por local |
 | `tiempos-transito` | Horas entre que el bulto sale del CD y llega al local, según el historial |
 | `productos-mas-pedidos` | Lo que más piden los locales al CD: unidades, pedidos, locales, cuánto falta preparar y si alcanza el stock del CD |
@@ -161,6 +164,27 @@ Cada perfil ve los que le sirven: el CD no ve los de ventas (ventas, más
 vendidos, devoluciones) y "más pedidos" lo ven solo el CD y el administrador.
 Un local ve solo lo suyo; el administrador y el CD, toda la red. Todos tienen
 un gráfico y se descargan en PDF (`?formato=pdf`, botón "Descargar PDF").
+Cada uno trae un resumen de dos o tres frases con lo importante (lo arma el
+back, así la pantalla y el PDF dicen lo mismo), y en pantalla hay atajos de
+período: hoy, últimos 7 días, este mes y el mes pasado.
+
+## Tableros (`GET /tableros/...` · pantalla *Reportes*)
+
+La pantalla Reportes abre con los tableros: indicadores comparados contra el
+período anterior (o el mismo del año pasado) y gráficos. Cada gráfico tiene
+**"Ver detalle"**, que abre el reporte que lo explica (tabla, resumen y PDF).
+Cada perfil abre el suyo, y el tablero también se descarga en PDF con todos
+sus gráficos.
+
+| Tablero | Quién | Qué muestra | Ver detalle abre |
+|---|---|---|---|
+| Ejecutivo | Administrador | Ventas, ganancia, margen y tickets con su variación; evolución contra el período comparado; ranking de locales (clic → ventas de ese local); ventas y ganancia por categoría | Ventas, Más vendidos |
+| Ventas del local | Administrador y local (el suyo) | Tickets, ticket promedio, artículos por ticket; ventas por día en pesos o unidades; mapa de calor día × hora; categorías; lo que más se devuelve | Ventas, Más vendidos, Devoluciones |
+| Productos e inventario | Todos (ranking y márgenes, solo quien ve ventas) | Los más vendidos y la matriz volumen × margen; stock parado por última salida y lo que falta reponer | Más vendidos, Existencias |
+| Abastecimiento | Todos (el local, sus pedidos) | Pedidos por estado y local; tiempo del pedido a la mercadería verificada; mermas; lo más pedido (CD y admin) | Más pedidos, Tiempos de envío, Mermas |
+
+El seed carga 60 días de **ventas de prueba** (inventadas, con semilla fija)
+para que los tableros tengan qué mostrar.
 
 ## Decisiones de diseño
 

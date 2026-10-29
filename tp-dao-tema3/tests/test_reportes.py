@@ -145,6 +145,13 @@ def test_productos_sin_movimientos_aparecen_en_cero_y_bajo_minimo(r):
     assert {f["codigo"] for f in reporte["filas"]} == {"BEB-1", "BEB-2"}
 
 
+def test_dias_sin_salir_desde_la_ultima_venta_o_despacho(r):
+    filas = {(f["ubicacion"], f["codigo"]): f for f in r.service.existencias(hoy=HOY + timedelta(days=10))["filas"]}
+    assert filas[("Local Centro", "BEB-1")]["dias_sin_salir"] == 10    # la última venta fue hoy
+    assert filas[("CD Central", "BEB-1")]["dias_sin_salir"] == 10      # el último despacho fue hoy
+    assert filas[("Local Norte", "BEB-1")]["dias_sin_salir"] is None   # nunca salió nada
+
+
 def test_valorizacion_del_cd_a_costo(r):
     reporte = r.service.existencias(r.cd.id)
     assert reporte["valorizado_total"] == Decimal("63000.00")  # 90 x 600 + 45 x 200
@@ -280,6 +287,29 @@ def test_el_pdf_lleva_los_filtros_y_el_grafico(r):
     assert f"del {HOY:%d/%m/%Y} al {HOY:%d/%m/%Y}".encode() in contenido
     assert b"Local Centro" in contenido
     assert b"Unidades pedidas por producto" in contenido   # el gráfico: hay dos productos
+
+
+@pytest.mark.parametrize("metodo", ["ventas", "productos_mas_vendidos", "existencias", "mermas",
+                                    "tiempos_transito", "productos_mas_pedidos", "devoluciones"])
+def test_cada_reporte_trae_su_resumen(r, metodo):
+    resumen = getattr(r.service, metodo)()["resumen"]
+    assert resumen and all(isinstance(frase, str) and frase.endswith(".") for frase in resumen)
+
+
+def test_el_resumen_sale_de_los_datos_reales(r):
+    # 3 ventas: 2000 débito + 2550 efectivo + 1100 crédito, se devuelven 850
+    assert r.service.ventas()["resumen"][0] == (
+        "Se hicieron 3 ventas por $ 5.650,00; descontando lo devuelto ($ 850,00), el ingreso neto fue $ 4.800,00.")
+    assert "Lo que más se cobró fue con Débito (42 % del ingreso neto)." in r.service.ventas()["resumen"]
+    assert r.service.mermas()["resumen"][0] == (
+        "De 2 bultos revisados, 1 llegó con el precinto roto (50 %): se perdieron $ 1.000,00.")
+
+
+def test_el_pdf_lleva_el_resumen(r):
+    datos = r.service.devoluciones()
+    _, contenido = r.service.pdf("devoluciones", datos, r.service.describir_filtros(), "Dora")
+    assert b"Resumen" in contenido
+    assert b"El motivo m" in contenido and b"Falla" in contenido
 
 
 def test_describir_filtros(r):

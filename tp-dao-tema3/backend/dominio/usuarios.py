@@ -157,6 +157,10 @@ class Usuario(ABC):
         """Ventas, caja, comprobantes y reportes de ventas. El CD no: solo abastece."""
         return False
 
+    def ve_resultados_empresa(self):
+        """El tablero ejecutivo: ventas, ganancia y locales de toda la empresa."""
+        return False
+
     # ----------------------------------------------------------- Baja lógica
 
     def dar_de_baja(self):
@@ -189,6 +193,9 @@ class UsuarioAdministrador(Usuario):
         return True
 
     def ve_ventas(self):
+        return True
+
+    def ve_resultados_empresa(self):
         return True
 
 

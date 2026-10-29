@@ -1,5 +1,5 @@
-# El contenido del PDF de cada reporte: título, filtros, tarjetas con los
-# totales, un gráfico de barras y las tablas. Toma lo que ya devolvió
+# El contenido del PDF de cada reporte: título, filtros, el resumen (lo arma
+# resumenes.py), tarjetas con los totales, un gráfico de barras y las tablas. Toma lo que ya devolvió
 # ReportesService (las cuentas están hechas) y decide qué se muestra y cómo se
 # escribe cada valor. Hay una función por reporte, elegida por su clave.
 # Acá NO se dibuja (eso es informes_pdf.py, que dibuja cualquier informe sin
@@ -20,6 +20,45 @@ class Grafico:
     barras: tuple             # (nombre, valor numérico, texto del valor)
 
 
+# Los gráficos de los tableros (además de las barras de una serie de arriba).
+# Los colores van como (R, G, B); los valores, como números; "texto" escribe
+# un valor (pesos, unidades...) para los ejes y las puntas de las barras.
+@dataclass(frozen=True)
+class Lineas:
+    titulo: str
+    etiquetas: tuple          # lo que va en el eje x (días, semanas)
+    series: tuple             # (nombre, valores, color, punteada); un valor puede ser None (sin dato)
+    texto: object = str
+
+
+@dataclass(frozen=True)
+class Barras:
+    """Barras acostadas de varias series: una al lado de la otra o apiladas."""
+    titulo: str
+    nombres: tuple            # una fila por nombre (local, categoría...)
+    series: tuple             # (nombre, valores, color)
+    texto: object = str
+    apiladas: bool = False
+
+
+@dataclass(frozen=True)
+class MapaDeCalor:
+    titulo: str
+    columnas: tuple           # días de la semana
+    filas: tuple              # (nombre de la fila, valores, textos de cada celda)
+    nota: str = ""
+
+
+@dataclass(frozen=True)
+class Dispersion:
+    titulo: str
+    puntos: tuple             # (rótulo, x, y, tamaño, color)
+    corte_x: float
+    corte_y: float
+    titulo_x: str
+    titulo_y: str
+
+
 @dataclass(frozen=True)
 class Tabla:
     titulo: str
@@ -34,11 +73,13 @@ class Informe:
     pregunta: str             # lo que responde el reporte
     filtros: tuple            # renglones de texto ("Período: ...", "Ubicación: ...")
     generado: str             # cuándo y quién
-    tarjetas: tuple           # (etiqueta, valor ya escrito)
+    tarjetas: tuple           # (etiqueta, valor ya escrito) o, con comparación, (..., cambio escrito, mejoró: bool | None)
     grafico: Grafico | None
     tablas: tuple
     nombre_archivo: str
     notas: tuple = field(default_factory=tuple)
+    resumen: tuple = field(default_factory=tuple)   # las frases de servicios/resumenes.py
+    graficos: tuple = field(default_factory=tuple)  # los de los tableros (Lineas, Barras, MapaDeCalor, Dispersion, Grafico)
 
 
 # ------------------------------------------------------------ Cómo se escribe
@@ -111,11 +152,14 @@ def informe_existencias(datos):
         grafico=grafico("Inventario valorizado por ubicación", list(valorizado.items()), lambda u: u[0],
                         lambda u: u[1], lambda u: pesos(u[1])),
         tablas=(Tabla("Stock por ubicación", (("Ubicación", 3, "L"), ("Producto", 5, "L"), ("Hay", 1.3, "R"),
-                                              ("Mínimo", 1.5, "R"), ("Falta", 1.3, "R"), ("Valor", 2.5, "R")),
+                                              ("Mínimo", 1.5, "R"), ("Falta", 1.3, "R"), ("Valor", 2.5, "R"),
+                                              ("Días sin salir", 2, "R")),
                       tuple((f["ubicacion"], f["nombre"], str(f["cantidad"]), str(f["stock_minimo"]),
-                             str(f["faltante"]) if f["faltante"] else "-", pesos(f["valorizado"]))
+                             str(f["faltante"]) if f["faltante"] else "-", pesos(f["valorizado"]),
+                             "-" if not f["cantidad"] else "nunca" if f["dias_sin_salir"] is None else str(f["dias_sin_salir"]))
                             for f in datos["filas"])),),
-        notas=("Valorizado al costo actual de cada producto.",),
+        notas=("Valorizado al costo actual de cada producto. Días sin salir: desde la última venta (local) o el "
+               "último despacho (CD).",),
     )
 
 
@@ -202,15 +246,17 @@ ARMADOS = {
 }
 
 
-def armar_informe(clave, datos, filtros, quien, ahora=None, **opciones):
+def armar_informe(clave, datos, filtros, quien, ahora=None, armados=None, **opciones):
     """El Informe de un reporte. opciones: lo que cambia la forma (ej: agrupar
-    en ventas). quien: el nombre de quien lo pide, para el pie."""
+    en ventas). quien: el nombre de quien lo pide, para el pie. armados: de
+    dónde sale cada informe (los de los tableros están en informes_tableros)."""
     ahora = ahora or datetime.now()
-    partes = ARMADOS[clave](datos, **opciones)
+    partes = (armados or ARMADOS)[clave](datos, **opciones)
     return Informe(
         comercio=COMERCIO["razon_social"],
         filtros=tuple(filtros),
         generado=f"Generado el {ahora:%d/%m/%Y %H:%M} por {quien}",
         nombre_archivo=f"reporte-{clave}-{ahora:%Y%m%d-%H%M}.pdf",
+        resumen=tuple(datos.get("resumen", ())),
         **partes,
     )

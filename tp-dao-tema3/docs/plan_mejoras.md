@@ -54,6 +54,13 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - [x] ~~**9a. Devolución del profe (28/10): reportes por perfil, exportar y Singleton.**~~
   - Hecho el 28/10 en la rama `feature/reportes-singleton`: patrón **Singleton** `BaseDeDatos` para la conexión; reportes nuevos "Más pedidos" (CD) y "Devoluciones" (local); los 7 reportes se descargan en PDF con su gráfico; más vendidos con gráfico de unidades (el top 10). 798 tests.
   - Observer para avisar cuando un producto se queda sin stock: se decidió no hacerlo por ahora (opcional).
+- [x] ~~**9b. Reportes más profesionales (29/10).**~~
+  - Hecho el 29/10 en la rama `feature/reportes-singleton`: cada reporte trae un **resumen** de dos o tres frases que arma el back (`servicios/resumenes.py`) y se ve en la pantalla y en el PDF; **atajos de período** (Hoy, Últimos 7 días, Este mes, Mes pasado, Todo) en el front.
+  - Quedaron para después: comparar con el período anterior, fila de totales y % del total, membrete formal en el PDF y exportar a Excel.
+- [x] ~~**9c. Tableros por perfil (29/10).**~~
+  - Hecho el 29/10 en la rama `feature/reportes-singleton`: pantalla **Tableros** con cuatro tableros (`GET /tableros/...`): Ejecutivo (admin: ventas, ganancia, margen y tickets contra el período anterior o el año anterior, evolución en líneas, ranking de locales con clic al detalle, ventas y ganancia por categoría), Ventas del local (admin y local: tickets, ticket promedio, ventas por día en $ o unidades, mapa de calor día × hora, categorías y top 20), Productos e inventario (matriz volumen × margen para quien ve ventas; stock parado por la última salida para todos) y Abastecimiento (pedidos por estado y tiempo de reposición). Seed con 60 días de ventas de prueba.
+  - **Unificado con Reportes el mismo 29/10** (ver "Paso 9d").
+  - Del prompt de BI quedaron afuera: marca y subcategoría (no existen en la base), gastos operativos y el tablero financiero (no hay gastos cargados), fill rate/OTIF, Pareto, días de cobertura y reposición sugerida (paso 10), exportar tablas a Excel.
 - [ ] **9. Más reportes por perfil:** por ejemplo los locales que más devuelven o rechazan mercadería, pedidos por local frente a lo despachado (cumplimiento) y cuándo se vende más (día de la semana u hora). Ya hecho: gráficos (1e), CD sin ventas (1e), más pedidos, devoluciones y PDF (9a).
 - [ ] **10. Envíos demorados y reposición sugerida:** el CD ve qué envíos vienen atrasados y el sistema le sugiere qué reponer a cada local.
 - [ ] **11. Limpieza:** precios de Producto como `Decimal`, y ninguna función que arranque con guion bajo. Mostrar la lista de cambios antes de renombrar.
@@ -79,6 +86,32 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - Los maestros (productos, categorías, proveedores, locales) y los usuarios los maneja el Administrador. El CD solo opera.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
+
+### Paso 9d: Reportes y tableros unificados (decidido el 29/10)
+- **Una sola entrada "Reportes"** (la palabra de la consigna) con los 4 tableros arriba. Cada gráfico tiene **"Ver detalle"**, que abre uno de los 7 reportes en la misma pantalla (migas "Reportes › Tablero › Reporte" y "← Volver al tablero"), con los mismos filtros. Además, cada tablero lista sus reportes de detalle, así ninguno queda sin acceso aunque su gráfico no se dibuje. Descartados: una página larga por área (opción 1) y que los 7 reportes absorbieran los tableros (opción 2).
+- Qué abre cada tablero: Ejecutivo → Ventas, Más vendidos; Ventas del local → Ventas, Más vendidos, Devoluciones; Abastecimiento → Más pedidos, Tiempos de envío, Mermas; Productos e inventario → Más vendidos, Existencias.
+- **Productos fusionado:** el top 20 del tablero de ventas se va; queda un ranking (de `ReportesService.productos_mas_vendidos`) y la matriz, en Productos.
+- **Stock en un solo lugar:** Existencias suma la última salida y los "días sin salir" (en la consulta, la tabla y el PDF); el tablero muestra el stock parado por tramos y lo que falta reponer, y su detalle es Existencias. Se borró la consulta propia de los tableros.
+- Los tableros **reusan los reportes** (`TablerosService` tiene un `ReportesService`): devoluciones, mermas, más pedidos, más vendidos y existencias no se calculan dos veces.
+- **PDF del tablero con todos sus gráficos** (`/tableros/...?formato=pdf`): tarjetas con su variación, líneas (la comparada punteada), barras de varias series o apiladas, mapa de calor y dispersión, dibujados por el mismo `informes_pdf` (un dibujo por tipo de gráfico, `DIBUJOS`). Qué dice cada uno está en `servicios/informes_tableros.py`. El detalle sigue con su PDF de reporte.
+- Lugar: un solo filtro; se manda como `sucursal_id` en lo de locales y como `ubicacion_id` en lo de stock.
+
+### Paso 9c: tableros por perfil (decidido el 29/10)
+- **Pantalla nueva "Tableros"**, aparte de Reportes (después se unificaron: paso 9d): el tablero es para mirar de un vistazo y decidir; el reporte, para el detalle y el PDF.
+- **Inicio sigue con la bandeja.** Tableros abre el primero que el perfil puede ver (orden Ejecutivo, Ventas, Abastecimiento, Productos): admin → Ejecutivo, local → Ventas, CD → Abastecimiento. Sin `if perfil ==`.
+- **Capacidad nueva `ve_resultados_empresa`** (solo el administrador) para el Ejecutivo. Ventas exige `ve_ventas`; Productos y Abastecimiento, cualquiera, y un local ve solo lo suyo (`ubicacion_para_filtrar`). La matriz volumen × margen solo si el perfil `ve_ventas` (el CD ve el stock parado, no los márgenes).
+- **Comparación elegible:** período anterior (mismos días justo antes) o mismas fechas del año anterior. `Periodo` (dominio, `dominio/periodo.py`) sabe calcular los dos y valida el rango (máximo un año). Sin fechas, los últimos 30 días.
+- **Indicadores sin porcentajes engañosos:** si antes fue 0, la variación es "sin datos" (no +100 % ni infinito); el margen se compara en puntos, no en %.
+- **Una sola consulta de líneas de venta** (netas de devoluciones, con el costo del momento) de la que salen todos los gráficos de ventas: los números cierran entre sí. Evolución por día hasta 62 días; si no, por semana.
+- **Stock parado:** días desde la última salida del libro de stock (venta en un local, despacho en el CD), en tramos 0–30, 31–60, 61–90, +90 y "Nunca salió".
+- **Abastecimiento:** estado del pedido según su remito (Pendiente, En preparación, En camino, Recibido, Recibido con rechazos); tiempo de reposición desde el pedido hasta que se termina de verificar (recién ahí se puede vender).
+- **Seed con 60 días de ventas de prueba** (semilla fija, a distintas horas, con tendencia y productos que dejaron de venderse). `VentasService.vender` y el movimiento de stock aceptan una `fecha` opcional que solo usa el seed; la api nunca la recibe. Los envíos del seed se hacen en el momento: su tiempo de reposición da 0 (la pantalla lo explica).
+- **Colores** de las series validados para daltonismo: miel `#c98a1b` y azul petróleo `#0082a0`; el período anterior en gris punteado.
+
+### Paso 9b: reportes más profesionales (decidido el 29/10)
+- **Resumen automático arriba de cada reporte**, armado en el back: `servicios/resumenes.py` tiene una función por reporte que toma lo que ya calculó `ReportesService` y lo dice en dos o tres frases (el más vendido y qué parte es, qué se vende a pérdida, qué no alcanza en el CD...). Cada reporte lo devuelve en `resumen`; la pantalla lo muestra en un recuadro y el PDF debajo del encabezado, así dicen exactamente lo mismo. Sin datos, una sola frase que lo dice. Descartado: armarlo en el front (habría que repetirlo para el PDF).
+- **Atajos de período** solo en el front: completan "desde" y "hasta" (con la fecha local, no la de Greenwich); el back recibe las mismas fechas de siempre. Descartado: un parámetro `periodo=` en el back, que duplicaría lo que ya hacen las fechas.
+- El PDF queda como estaba (sin membrete nuevo) y no se exporta a Excel: se priorizó la entrega del 29/10.
 
 ### Paso 9a: reportes por perfil, PDF y Singleton (decidido el 28/10)
 - **Patrón Singleton** para la conexión: `BaseDeDatos` (`persistencia/conexion.py`) tiene una sola instancia (se controla en `__new__`, con un candado para que dos hilos no la creen a la vez). Es el único lugar que sabe dónde está la base y cómo se configura cada conexión (claves foráneas, filas por nombre), abre las transacciones y crea las tablas. Los DAOs le piden la conexión (`BaseDeDatos.instancia().conexion()`). Lo único que hay una sola vez es ese objeto: **cada operación tiene su propia conexión**. Descartados: una sola conexión compartida (FastAPI atiende en varios hilos y las transacciones se mezclarían) y una instancia por archivo de base (ya no es un Singleton puro). Las funciones `get_conexion`, `transaccion` y `crear_tablas` quedan como atajos a la instancia para scripts y tests.

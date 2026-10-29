@@ -5,7 +5,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.api import (
-    rutas_logistica, rutas_maestros, rutas_reportes, rutas_stock, rutas_tareas, rutas_usuarios, rutas_ventas,
+    rutas_logistica, rutas_maestros, rutas_reportes, rutas_stock, rutas_tableros, rutas_tareas, rutas_usuarios,
+    rutas_ventas,
 )
 from backend.dominio.excepciones import (
     DatoInvalido, EntidadDuplicada, ErrorDeNegocio, NoAutenticado, NoEncontrado, SinPermiso,
@@ -51,4 +52,5 @@ app.include_router(rutas_logistica.router_ordenes)
 app.include_router(rutas_logistica.router_remitos)
 app.include_router(rutas_logistica.router_bultos)
 app.include_router(rutas_reportes.router)
+app.include_router(rutas_tableros.router)
 app.include_router(rutas_tareas.router)

@@ -3,8 +3,9 @@
 # Acá NO se modifica nada: los reportes solo leen.
 #
 # El DAO hace las cuentas pesadas en SQL (SUM, GROUP BY); acá se validan los
-# parámetros y se arman los resúmenes (totales, porcentajes, tasas).
-from datetime import datetime, time, timedelta
+# parámetros y se arman los totales, porcentajes y tasas. Cada reporte sale
+# con su "resumen": las frases que dicen lo importante (servicios/resumenes.py).
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from backend.dominio.excepciones import DatoInvalido, NoEncontrado
@@ -12,6 +13,7 @@ from backend.persistencia.dao_maestros import UbicacionDAO
 from backend.persistencia.dao_reportes import PERIODOS, ReporteDAO
 from backend.servicios.informes import armar_informe
 from backend.servicios.informes_pdf import dibujar_informe
+from backend.servicios.resumenes import resumir
 
 CERO = Decimal("0.00")
 
@@ -65,6 +67,12 @@ class ReportesService:
         informe = armar_informe(clave, datos, filtros, quien, **opciones)
         return informe.nombre_archivo, dibujar_informe(informe)
 
+    @staticmethod
+    def con_resumen(clave, datos):
+        """Le agrega a un reporte ya calculado sus frases de resumen."""
+        datos["resumen"] = resumir(clave, datos)
+        return datos
+
     # -------------------------------------- 1. Ventas e ingresos por período
     def ventas(self, desde=None, hasta=None, sucursal_id=None, agrupar="dia"):
         if agrupar not in PERIODOS:
@@ -74,14 +82,14 @@ class ReportesService:
         por_medio = {}
         for fila in filas:
             por_medio[fila["medio_pago"]] = por_medio.get(fila["medio_pago"], CERO) + fila["neto"]
-        return {
+        return self.con_resumen("ventas", {
             "filas": filas,
             "por_medio_pago": por_medio,
             "cantidad_ventas": sum(f["cantidad_ventas"] for f in filas),
             "total_vendido": sum((f["vendido"] for f in filas), CERO),
             "total_devuelto": sum((f["devuelto"] for f in filas), CERO),
             "total_neto": sum((f["neto"] for f in filas), CERO),
-        }
+        })
 
     # ------------------------------------ 2. Productos más vendidos y margen
     def productos_mas_vendidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
@@ -92,30 +100,36 @@ class ReportesService:
         for fila in filas:
             fila["margen"] = fila["ingreso"] - fila["costo"]  # puede ser negativo: venta a pérdida
             fila["margen_porcentaje"] = porcentaje(fila["margen"], fila["ingreso"])
-        return {
+        return self.con_resumen("productos-mas-vendidos", {
             "filas": filas,
             "total_ingreso": sum((f["ingreso"] for f in filas), CERO),
             "total_margen": sum((f["margen"] for f in filas), CERO),
-        }
+        })
 
     # ------------------------- 3. Existencias, bajo mínimo y valorización
-    def existencias(self, ubicacion_id=None, solo_bajo_minimo=False):
+    def existencias(self, ubicacion_id=None, solo_bajo_minimo=False, hoy=None):
+        """Stock de cada producto en cada ubicación: si falta para el mínimo,
+        cuánto vale y hace cuántos días no sale (stock parado). Es el detalle
+        de "Stock" en el tablero de productos e inventario."""
         self.validar_ubicacion(ubicacion_id)
+        hoy = hoy or date.today()
         filas = self.dao.existencias(ubicacion_id)
         for fila in filas:
             fila["bajo_minimo"] = fila["cantidad"] < fila["stock_minimo"]
             fila["faltante"] = max(fila["stock_minimo"] - fila["cantidad"], 0)
+            salida = fila["ultima_salida"]
+            fila["dias_sin_salir"] = (hoy - datetime.fromisoformat(salida).date()).days if salida else None
         valorizado = {}
         for fila in filas:
             valorizado[fila["ubicacion"]] = valorizado.get(fila["ubicacion"], CERO) + fila["valorizado"]
         if solo_bajo_minimo:
             filas = [f for f in filas if f["bajo_minimo"]]
-        return {
+        return self.con_resumen("existencias", {
             "filas": filas,
             "productos_bajo_minimo": sum(1 for f in filas if f["bajo_minimo"]),
             "valorizado_por_ubicacion": valorizado,
             "valorizado_total": sum(valorizado.values(), CERO),
-        }
+        })
 
     # ---------------------------------------- 4. Bultos rechazados y mermas
     def mermas(self, desde=None, hasta=None, sucursal_id=None):
@@ -135,11 +149,11 @@ class ReportesService:
             if fila["sucursal_id"] in resumen:
                 resumen[fila["sucursal_id"]]["unidades_perdidas"] += fila["cantidad"]
                 resumen[fila["sucursal_id"]]["valor_perdido"] += fila["valor_perdido"]
-        return {
+        return self.con_resumen("mermas", {
             "filas": filas,
             "por_sucursal": list(resumen.values()),
             "valor_perdido_total": sum((f["valor_perdido"] for f in filas), CERO),
-        }
+        })
 
     # ---------------------------------- 5. Tiempo de tránsito CD → locales
     def tiempos_transito(self, desde=None, hasta=None, sucursal_id=None):
@@ -152,7 +166,8 @@ class ReportesService:
         promedio_general = (
             round(sum(f["horas_promedio"] * f["bultos"] for f in filas) / total_bultos, 2) if total_bultos else None
         )
-        return {"filas": filas, "bultos": total_bultos, "horas_promedio_general": promedio_general}
+        return self.con_resumen("tiempos-transito",
+                                {"filas": filas, "bultos": total_bultos, "horas_promedio_general": promedio_general})
 
     # ------------------------- 6. Productos más pedidos por los locales (CD)
     def productos_mas_pedidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
@@ -165,12 +180,12 @@ class ReportesService:
         filas = self.dao.productos_mas_pedidos(*self.rango(desde, hasta), sucursal_id, limite)
         for fila in filas:
             fila["falta_en_cd"] = max(fila["sin_preparar"] - fila["stock_cd"], 0)
-        return {
+        return self.con_resumen("productos-mas-pedidos", {
             "filas": filas,
             "total_unidades": sum(f["unidades"] for f in filas),
             "total_sin_preparar": sum(f["sin_preparar"] for f in filas),
             "productos_que_faltan": sum(1 for f in filas if f["falta_en_cd"] > 0),
-        }
+        })
 
     # --------------------------------- 7. Devoluciones por producto y motivo
     def devoluciones(self, desde=None, hasta=None, sucursal_id=None):
@@ -196,10 +211,10 @@ class ReportesService:
             producto["porcentaje_devuelto"] = porcentaje(producto["unidades"], producto["vendidas"])
         filas = sorted(productos.values(), key=lambda p: (-p["unidades"], -p["importe"], p["nombre"]))
         por_motivo = self.dao.devoluciones_por_motivo(inicio, fin, sucursal_id)
-        return {
+        return self.con_resumen("devoluciones", {
             "filas": filas,
             "por_motivo": por_motivo,
             "cantidad_devoluciones": sum(m["devoluciones"] for m in por_motivo),
             "unidades_devueltas": sum(f["unidades"] for f in filas),
             "total_reintegrado": sum((m["importe"] for m in por_motivo), CERO),
-        }
+        })

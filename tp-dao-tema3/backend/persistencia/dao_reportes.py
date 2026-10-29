@@ -116,7 +116,8 @@ class ReporteDAO:
     # ------------------------ 3. Existencias, bajo mínimo y valorización
     def existencias(self, ubicacion_id=None):
         """Cada producto en cada ubicación activa, aunque nunca haya tenido
-        movimientos (aparece en 0: puede estar bajo mínimo)."""
+        movimientos (aparece en 0: puede estar bajo mínimo), con la fecha de su
+        última salida (venta en un local, despacho en el CD)."""
         condiciones = ["u.activo = 1", "(p.activo = 1 OR COALESCE(s.cantidad, 0) > 0)"]
         parametros = []
         if ubicacion_id is not None:
@@ -124,7 +125,8 @@ class ReporteDAO:
             parametros.append(ubicacion_id)
         filas = self.consultar(
             "SELECT u.id AS ubicacion_id, u.nombre AS ubicacion, u.tipo, p.id AS producto_id, p.codigo, "
-            "p.nombre, COALESCE(s.cantidad, 0) AS cantidad, p.stock_minimo, p.costo "
+            "p.nombre, COALESCE(s.cantidad, 0) AS cantidad, p.stock_minimo, p.costo, "
+            "(SELECT MAX(m.fecha) FROM movimientos_stock m WHERE m.stock_id = s.id AND m.cantidad < 0) AS ultima_salida "
             "FROM ubicaciones u CROSS JOIN productos p "
             "LEFT JOIN stock s ON s.producto_id = p.id AND s.ubicacion_id = u.id"
             f"{donde(condiciones)} "

@@ -9,12 +9,20 @@
 # Trae un usuario de cada perfil (ver USUARIOS), todos con la contraseña
 # CLAVE_DE_PRUEBA, y cada operación queda hecha por quien corresponde.
 #
+# Para que los tableros tengan algo que mostrar (mapa de calor, comparación con
+# el período anterior, stock parado), se cargan además DIAS_DE_HISTORIAL días
+# de ventas DE PRUEBA, fechadas hacia atrás a distintas horas. Son inventadas
+# (con una semilla fija: siempre salen iguales) y solo existen en la base de
+# desarrollo; la api no permite fechar una venta.
+#
 # Uso (desde tp-dao-tema3):
 #   .venv\Scripts\python -m backend.datos.seed              carga solo si la base está vacía
 #   .venv\Scripts\python -m backend.datos.seed --reiniciar  BORRA la base local y la vuelve a cargar
+import random
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
+from backend.dominio.excepciones import StockInsuficiente
 from backend.dominio.stock import TipoMovimiento
 from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_maestros import ProductoDAO
@@ -66,6 +74,24 @@ USUARIOS = [
 # Llegada estimada de los envíos del seed: mañana a las 12
 MANANA_AL_MEDIODIA = (datetime.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
 
+# ------------------------------------------------- Historial de ventas de prueba
+DIAS_DE_HISTORIAL = 60
+SEMILLA = 2026                   # misma semilla → mismo historial cada vez
+ENVIO_PARA_EL_HISTORIAL = 300    # unidades de cada producto que se le mandan a cada local
+# Cuánto se elige cada producto en un ticket (lo más vendido, más seguido)
+POPULARIDAD = {"BEB-001": 5, "BEB-002": 4, "LAC-001": 4, "ALM-001": 3, "BEB-003": 2, "ALM-002": 2,
+               "LAC-002": 2, "LIM-001": 1.5, "ALM-003": 1, "LIM-002": 1}
+# Tickets por día en cada local (antes de la tendencia y el día de la semana)
+TICKETS_POR_DIA = {"Sucursal Centro": 5, "Sucursal Norte": 3.5, "Sucursal Sur": 2.5}
+# Lunes a domingo: el fin de semana se vende más
+SEGUN_EL_DIA = [0.9, 0.85, 0.9, 1.0, 1.25, 1.4, 0.8]
+# Qué tan seguido se vende a cada hora (8 a 21): media mañana, mediodía y salida del trabajo
+SEGUN_LA_HORA = {8: 1, 9: 2, 10: 4, 11: 5, 12: 4, 13: 3, 14: 1.5, 15: 1.5, 16: 2, 17: 3, 18: 5, 19: 5, 20: 3, 21: 1}
+MEDIOS = {"EFECTIVO": 4, "DEBITO": 3, "TRANSFERENCIA": 2, "CREDITO": 1}
+# Productos que un local dejó de vender hace tantos días (para ver stock parado)
+DEJO_DE_VENDERSE = {("Sucursal Centro", "ALM-003"): 35, ("Sucursal Norte", "LIM-002"): 40,
+                    ("Sucursal Sur", "ALM-003"): 50, ("Sucursal Norte", "LIM-001"): DIAS_DE_HISTORIAL + 1}
+
 
 def base_vacia():
     return not ProductoDAO().listar(solo_activos=False)
@@ -113,6 +139,9 @@ def cargar_datos_prueba():
     for codigo, producto_id in p.items():
         stock.ingresar(cd, producto_id, 300, TipoMovimiento.COMPRA, f"Factura compra inicial {codigo}",
                        usuario_id=u["cd.central"])
+        # La mercadería que después se manda a los locales para el historial
+        stock.ingresar(cd, producto_id, 3 * ENVIO_PARA_EL_HISTORIAL, TipoMovimiento.COMPRA,
+                       f"Factura compra de temporada {codigo}", usuario_id=u["cd.central"])
 
     # ------------------------------------------------------- Reposición
     reposicion = ReposicionService()
@@ -161,8 +190,23 @@ def cargar_datos_prueba():
     # Sur: despachado y todavía en camino (para ver un remito En tránsito)
     armar(sur, [[("BEB-002", 25), ("LAC-001", 40)]], "PS")
 
+    # Envío grande a los tres locales, con todo verificado: el stock que
+    # consume el historial de ventas
+    todo = [(producto_id, ENVIO_PARA_EL_HISTORIAL) for producto_id in p.values()]
+    pedidos_grandes = [reposicion.crear_pedido(local, todo, del_local[local]).id_pedido for local in (centro, norte, sur)]
+    orden_grande = reposicion.crear_orden(pedidos_grandes, u["cd.central"])
+    for local, prefijo in ((centro, "HC"), (norte, "HN"), (sur, "HS")):
+        remito = reposicion.crear_remito(orden_grande.id_orden, local, u["cd.central"])
+        bulto = reposicion.agregar_bulto(remito.id_remito, todo, u["cd.central"])
+        reposicion.precintar(bulto.id_bulto, f"{prefijo}-001", u["cd.central"])
+        reposicion.despachar(remito.id_remito, MANANA_AL_MEDIODIA, u["cd.central"])
+        recepcion.recibir(bulto.id_bulto, del_local[local])
+        recepcion.verificar(bulto.id_bulto, f"{prefijo}-001", True, del_local[local])
+
     # ------------------------------------------------------------- Ventas
     ventas = VentasService()
+    nombres_local = {centro: "Sucursal Centro", norte: "Sucursal Norte", sur: "Sucursal Sur"}
+    cantidad_historial = cargar_historial(ventas, p, nombres_local, del_local)
 
     def vender(local, items, medio, entregado=None):
         return ventas.vender(local, items, medio, entregado, del_local[local])
@@ -181,13 +225,56 @@ def cargar_datos_prueba():
     ventas.devolver(ventas_hechas[1].id, [(p["LAC-002"], 2)], "Producto vencido", u["centro"])
     ventas.devolver(ventas_hechas[5].id, [(p["BEB-003"], 1)], "Envase dañado", u["norte"])
 
+    # Pedidos en curso, para ver todos los estados en Abastecimiento: uno de Sur
+    # sin preparar y uno de Norte que el CD está armando (remito sin despachar)
+    reposicion.crear_pedido(sur, [(p["ALM-001"], 20), (p["LIM-001"], 10)], u["sur"])
+    pedido_en_preparacion = reposicion.crear_pedido(norte, [(p["LAC-001"], 30), (p["BEB-002"], 20)], u["norte"])
+    orden_en_curso = reposicion.crear_orden([pedido_en_preparacion.id_pedido], u["cd.central"])
+    reposicion.crear_remito(orden_en_curso.id_orden, norte, u["cd.central"])
+
     print("Datos de prueba cargados:")
     print(f"  {len(PRODUCTOS)} productos, {len(PROVEEDORES)} proveedores, CD + 3 sucursales")
-    print("  1 orden de reposición: Centro verificado, Norte con un bulto rechazado, Sur en tránsito")
-    print(f"  {len(ventas_hechas)} ventas y 2 devoluciones")
+    print("  Reposición: Centro verificado, Norte con un bulto rechazado, Sur en tránsito,")
+    print("  un envío grande verificado, un pedido sin preparar y uno en preparación")
+    print(f"  {len(ventas_hechas)} ventas de hoy y 2 devoluciones")
+    print(f"  {cantidad_historial} ventas DE PRUEBA de los últimos {DIAS_DE_HISTORIAL} días (para los tableros)")
     print(f"Usuarios (contraseña de todos: {CLAVE_DE_PRUEBA}):")
     for perfil, nombre_usuario, nombre_completo, ubicacion in USUARIOS:
         print(f"  {nombre_usuario:<11} {perfil:<9} {ubicacion or 'toda la red':<16} {nombre_completo}")
+
+
+def cargar_historial(ventas, p, nombres_local, del_local, hoy=None):
+    """Ventas de prueba de los últimos DIAS_DE_HISTORIAL días (hasta ayer), a
+    distintas horas, por el mismo service que las ventas reales (descuentan
+    stock y pasan por la caja). Venden un poco más a medida que pasan los días
+    (para ver crecimiento contra el período anterior). Devuelve cuántas cargó."""
+    azar = random.Random(SEMILLA)
+    hoy = hoy or date.today()
+    codigos, pesos = list(POPULARIDAD), list(POPULARIDAD.values())
+    horas, pesos_hora = list(SEGUN_LA_HORA), list(SEGUN_LA_HORA.values())
+    medios, pesos_medio = list(MEDIOS), list(MEDIOS.values())
+    cargadas = 0
+    for dias_atras in range(DIAS_DE_HISTORIAL, 0, -1):
+        dia = hoy - timedelta(days=dias_atras)
+        tendencia = 0.75 + 0.4 * (DIAS_DE_HISTORIAL - dias_atras) / DIAS_DE_HISTORIAL
+        for local, nombre in nombres_local.items():
+            esperados = TICKETS_POR_DIA[nombre] * tendencia * SEGUN_EL_DIA[dia.weekday()]
+            tickets = int(esperados) + (azar.random() < esperados % 1)
+            momentos = sorted(datetime.combine(dia, time(azar.choices(horas, pesos_hora)[0], azar.randrange(60)))
+                              for _ in range(tickets))
+            for momento in momentos:
+                elegidos = {c for c in azar.choices(codigos, pesos, k=azar.choice((1, 1, 2, 2, 3)))
+                            if dias_atras > DEJO_DE_VENDERSE.get((nombre, c), 0)}
+                if not elegidos:
+                    continue
+                items = [(p[c], azar.randint(1, 3)) for c in sorted(elegidos)]
+                try:
+                    ventas.vender(local, items, azar.choices(medios, pesos_medio)[0], None, del_local[local],
+                                  fecha=momento)
+                    cargadas += 1
+                except StockInsuficiente:
+                    pass            # si un producto se agotó en ese local, ese ticket no se hace
+    return cargadas
 
 
 def reiniciar():

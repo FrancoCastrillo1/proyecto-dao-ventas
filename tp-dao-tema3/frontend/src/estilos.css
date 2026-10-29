@@ -509,9 +509,73 @@ button.ficha:hover { background: var(--tarjeta); border-color: var(--borde-fuert
 .tarjeta.destacada { background: var(--acento, var(--primario-suave)); border-color: transparent; }
 .tarjeta.destacada strong { color: var(--acento-tinta, var(--primario-oscuro)); }
 
+/* Resumen de un reporte: las frases que arma el back, arriba de las tarjetas */
+.resumen-reporte {
+  display: flex; gap: 12px; align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--borde);
+  border-left: 4px solid var(--miel); border-radius: var(--radio); padding: 12px 16px; margin: 0 0 14px; box-shadow: var(--sombra);
+}
+.resumen-reporte .tarea-icono { width: 34px; height: 34px; border-radius: 10px; }
+.resumen-reporte ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 0.93rem; }
+.resumen-reporte strong { display: block; font-size: 0.84rem; color: var(--texto-suave); margin-bottom: 3px; }
+
+/* Atajos de período de los reportes ("Este mes", "Mes pasado"...) */
+.atajos { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: -6px 0 16px; }
+.atajos span { font-size: 0.82rem; color: var(--texto-suave); margin-right: 2px; }
+.atajos .chip { padding: 5px 11px; font-size: 0.84rem; font-weight: 700; }
+
+/* Tableros: indicadores con su variación, dos gráficos por fila y mapa de calor */
+.tarjetas.indicadores { grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); }
+.cambio { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82rem; font-weight: 700; margin-top: 2px; flex-wrap: wrap; }
+.cambio.mejor { color: var(--exito); }
+.cambio.peor { color: var(--alerta); }
+.cambio.neutro { color: var(--texto-tenue); font-weight: 600; }
+.cambio .contra { color: var(--texto-tenue); font-weight: 600; }
+.periodo-tablero { margin: -6px 0 14px; font-size: 0.86rem; }
+.grilla-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 0 18px; }
+.encabezado-grafico { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.tarjeta-grafico figcaption small { font-weight: 600; color: var(--texto-tenue); }
+.tarjeta-grafico.con-clic .recharts-bar-rectangle { cursor: pointer; }
+.globito-serie { display: flex; align-items: center; gap: 6px; color: var(--texto-suave) !important; }
+.globito-serie i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.globito-serie strong { font-size: 0.9rem !important; color: var(--texto); }
+
+.mapa-calor { display: flex; flex-direction: column; gap: 3px; overflow-x: auto; }
+.mapa-fila { display: grid; grid-template-columns: 76px repeat(7, minmax(30px, 1fr)); gap: 3px; }
+.mapa-dia { text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--texto-suave); }
+.mapa-franja { font-size: 0.78rem; color: var(--texto-suave); align-self: center; font-variant-numeric: tabular-nums; }
+.mapa-celda {
+  height: 32px; border-radius: 6px; background: var(--fondo-hundido); display: grid; place-items: center;
+  font-size: 0.78rem; font-weight: 700; color: var(--miel-tinta); font-variant-numeric: tabular-nums; cursor: default;
+}
+.mapa-leyenda { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.8rem; color: var(--texto-suave); flex-wrap: wrap; }
+.mapa-leyenda i { width: 90px; height: 10px; border-radius: 5px; display: inline-block; }
+.mapa-nota { margin-left: auto; color: var(--texto-tenue); }
+
+.leyenda-cuadrantes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 8px 16px; margin: -6px 0 18px; font-size: 0.86rem; }
+.leyenda-cuadrantes div { display: flex; flex-direction: column; padding-left: 16px; position: relative; }
+.leyenda-cuadrantes i { position: absolute; left: 0; top: 6px; width: 10px; height: 10px; border-radius: 50%; }
+.leyenda-cuadrantes span { color: var(--texto-suave); }
+.leyenda-cuadrantes .nota { grid-column: 1 / -1; font-size: 0.82rem; }
+
 /* Gráficos de los reportes (componentes/Graficos.jsx) */
 .tarjeta-grafico { margin: 0 0 18px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); padding: 16px 18px 10px; }
-.tarjeta-grafico figcaption { font-size: 0.9rem; font-weight: 800; color: var(--texto-suave); margin-bottom: 8px; }
+.tarjeta-grafico figcaption {
+  font-size: 0.9rem; font-weight: 800; color: var(--texto-suave); margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+
+/* "Ver detalle" de cada gráfico de un tablero, y las migas del detalle */
+button.ver-detalle {
+  background: none; border: 1px solid var(--borde); color: var(--primario); padding: 3px 10px; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;
+}
+button.ver-detalle:hover { background: var(--primario-suave); border-color: var(--primario-borde); }
+.migas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; color: var(--texto-suave); font-size: 0.9rem; }
+.migas strong { color: var(--texto); }
+.lista-ranking { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
+.lista-ranking li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--borde); }
+.lista-ranking li:last-child { border-bottom: none; }
+.lista-ranking small { display: block; color: var(--texto-tenue); font-size: 0.78rem; }
 .tarjeta-grafico .recharts-cartesian-axis-tick-value { font-variant-numeric: tabular-nums; }
 .globito-grafico { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; box-shadow: var(--sombra-media); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; font-size: 0.86rem; }
 .globito-grafico span { color: var(--texto-suave); font-weight: 700; }

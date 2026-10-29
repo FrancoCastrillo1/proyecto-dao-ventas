@@ -167,6 +167,24 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - El gráfico de más vendidos pasa a unidades (el "top 10"); la ganancia queda en el globito y en la tabla.
 - Observer para el stock bajo: no por ahora (opcional).
 
+### Paso 9d: Reportes y tableros unificados (decidido el 29/10)
+- Una sola entrada **Reportes**: arriba los 4 tableros; cada gráfico tiene "Ver detalle", que abre uno de los 7 reportes en la misma pantalla (migas + Volver, mismos filtros). Cada tablero lista además sus reportes de detalle.
+- Fusionados: el ranking de productos (va en Productos) y el stock (Existencias suma "días sin salir"). Los tableros reusan `ReportesService`.
+- PDF del tablero con todos sus gráficos (`/tableros/...?formato=pdf`, `informes_tableros.py`); el detalle mantiene su PDF.
+
+### Paso 9c: tableros por perfil (decidido el 29/10, rama `feature/reportes-singleton`)
+- 4 tableros (`GET /tableros/ejecutivo|ventas|productos|abastecimiento`). Inicio sigue con la bandeja; se abre el primero que el perfil puede ver (admin Ejecutivo, local Ventas, CD Abastecimiento).
+- Capacidad nueva `ve_resultados_empresa` (solo admin) para el Ejecutivo; la matriz volumen × margen solo con `ve_ventas`; un local ve solo lo suyo.
+- Comparación elegible (período anterior o año anterior) con `Periodo` en `dominio/periodo.py`; variación "sin datos" si antes fue 0; margen en puntos.
+- Todos los gráficos de ventas salen de una sola consulta de líneas de venta (`dao_tableros.py`).
+- Seed con 60 días de ventas de prueba (`fecha` opcional en `VentasService.vender`, solo para el seed).
+- Detalle en `docs/plan_mejoras.md` (paso 9c).
+
+### Paso 9b: reportes más profesionales (decidido el 29/10, rama `feature/reportes-singleton`)
+- **Resumen automático** de cada reporte (2 o 3 frases), armado en el back por `servicios/resumenes.py` (una función por reporte) y devuelto en `resumen`; lo muestran la pantalla y el PDF.
+- **Atajos de período** (Hoy, Últimos 7 días, Este mes, Mes pasado, Todo) solo en el front.
+- PDF sin membrete nuevo y sin Excel. Pendiente: comparar con el período anterior y fila de totales.
+
 ### Paso 1e del plan: arreglos de la prueba del 26/10 (decidido el 26/10)
 - Capacidad `ve_ventas` (admin y local sí, CD no): rutas de ventas, caja, comprobantes y reportes de ventas/más vendidos; el front esconde lo mismo.
 - Remito en PDF (`GET /remitos/{id}/remito.pdf`) con el mismo Template Method: `RemitoDocumento` y los ganchos `columnas()` y `etiqueta_responsable()`. Solo despachado.

@@ -40,12 +40,13 @@ def test_usuario_es_abstracto():
 
 
 CAPACIDADES = ["puede_gestionar_maestros", "puede_comprar", "puede_preparar_envios",
-               "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red", "ve_ventas"]
-VER = {"ve_toda_la_red", "ve_ventas"}   # lo que se puede ver lo comparten varios perfiles
+               "puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_toda_la_red", "ve_ventas",
+               "ve_resultados_empresa"]
+VER = {"ve_toda_la_red", "ve_ventas", "ve_resultados_empresa"}   # lo que se puede ver no es una tarea
 
 
 @pytest.mark.parametrize("usuario, permitidas", [
-    (un_admin(), {"puede_gestionar_maestros", "ve_toda_la_red", "ve_ventas"}),
+    (un_admin(), {"puede_gestionar_maestros", "ve_toda_la_red", "ve_ventas", "ve_resultados_empresa"}),
     (un_cd(), {"puede_comprar", "puede_preparar_envios", "ve_toda_la_red"}),     # el CD no ve ventas
     (una_sucursal(), {"puede_pedir_reposicion", "puede_recibir", "puede_vender", "ve_ventas"}),
 ])

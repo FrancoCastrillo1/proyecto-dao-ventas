@@ -100,17 +100,19 @@ class Stock:
     def faltante_para_el_minimo(self):
         return max(0, self._stock_minimo - self._cantidad)
 
-    def ingresar(self, cantidad, tipo, referencia=""):
+    # fecha: la de la operación que causa el movimiento (ej. la venta); si no
+    # se dice, ahora. Así el libro de stock y la venta dicen la misma fecha.
+    def ingresar(self, cantidad, tipo, referencia="", fecha=None):
         self._validar_movimiento(cantidad, tipo, TIPOS_DE_INGRESO, "ingreso")
-        self._registrar(cantidad, tipo, referencia)
+        self._registrar(cantidad, tipo, referencia, fecha)
 
-    def egresar(self, cantidad, tipo, referencia=""):
+    def egresar(self, cantidad, tipo, referencia="", fecha=None):
         self._validar_movimiento(cantidad, tipo, TIPOS_DE_EGRESO, "egreso")
         if cantidad > self._cantidad:
             raise StockInsuficiente(
                 f"Stock insuficiente: hay {self._cantidad} y se piden {cantidad}"
             )
-        self._registrar(-cantidad, tipo, referencia)
+        self._registrar(-cantidad, tipo, referencia, fecha)
 
     def _validar_movimiento(self, cantidad, tipo, tipos_validos, sentido):
         # Primero se valida todo, después se modifica el stock
@@ -120,9 +122,9 @@ class Stock:
         if tipo not in tipos_validos:
             raise DatoInvalido(f"El tipo {tipo.value} no corresponde a un {sentido}")
 
-    def _registrar(self, cantidad_con_signo, tipo, referencia):
+    def _registrar(self, cantidad_con_signo, tipo, referencia, fecha=None):
         self._movimientos.append(MovimientoStock(
-            datetime.now(), cantidad_con_signo, tipo, (referencia or "").strip()
+            fecha or datetime.now(), cantidad_con_signo, tipo, (referencia or "").strip()
         ))
         self._cantidad += cantidad_con_signo
 

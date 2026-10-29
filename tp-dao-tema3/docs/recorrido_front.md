@@ -315,6 +315,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 ## 11. Reportes (Operación → Reportes)
 
 > Como `admin` o `cd.central` se ve toda la red; como un local, solo lo tuyo (no aparece el filtro de local).
+>
+> **Desde el 29/10 los reportes no son pestañas:** Reportes abre con los tableros (sección 11b) y cada reporte se abre con "Ver detalle" de un gráfico o con la fila "Reportes de detalle" del tablero. Donde abajo dice "pestaña X", abrí ese reporte así (Ventas y Más vendidos desde Ventas del local; Devoluciones desde Ventas del local; Más pedidos, Mermas y Tiempos desde Abastecimiento; Existencias desde Productos e inventario).
 
 - [ S] **11.1 Hacé:** recorré las 5 pestañas.
   **Debería:** cambiar el subtítulo con la pregunta que responde cada reporte, y verse tarjetas con totales y una tabla.
@@ -336,6 +338,26 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** verse qué productos se devolvieron, qué parte de lo vendido y el motivo principal, y abajo "Por qué se devuelve" con cada motivo y lo reintegrado. Como local no aparece "Más pedidos".
 - [ ] **11.11 Hacé:** en cualquier reporte, tocá "Descargar PDF" (probá con filtros puestos).
   **Debería:** bajarse `reporte-<nombre>-<fecha>.pdf` con el título, los filtros, las tarjetas, el gráfico de barras y la tabla, y abajo "Generado el … por <tu nombre>".
+- [ ] **11.12 Hacé:** como `centro` → Reportes → "Más vendidos". Mirá el recuadro "Resumen" de arriba y después descargá el PDF.
+  **Debería:** decir cuál es el más vendido y qué parte de las unidades es, cuál deja más ganancia y si alguno se vende a pérdida (el Yogur en promo). El PDF trae las mismas frases debajo del encabezado.
+- [ ] **11.13 Hacé:** tocá los atajos "Este mes", "Mes pasado", "Hoy" y "Todo".
+  **Debería:** completarse solos "Desde" y "Hasta", quedar marcado el atajo elegido y cambiar el reporte y el resumen (sin datos dice, por ejemplo, "No hubo ventas con estos filtros."). Si cambiás una fecha a mano, ningún atajo queda marcado.
+
+### 11b. Tableros y "Ver detalle" (con el seed recién cargado: `seed --reiniciar`)
+- [ ] **11b.0 Hacé:** en el Ejecutivo, tocá "Ver detalle" del gráfico de ventas; después "← Volver al tablero". Probá también "Descargar PDF" en el tablero y en el detalle.
+  **Debería:** abrir el reporte Ventas con "Reportes › Ejecutivo › Ventas" arriba y las mismas fechas; Volver regresa al tablero. El PDF del tablero trae todos los gráficos (líneas, barras, mapa de calor o matriz); el del detalle, su tabla.
+- [ ] **11b.1 Hacé:** como `admin` → Reportes.
+  **Debería:** abrir en "Ejecutivo" con los últimos 30 días: cuatro tarjetas con su variación (flecha verde si subió, naranja si bajó), la línea de ventas con el período anterior punteado, el ranking de locales y las categorías.
+- [ ] **11b.2 Hacé:** cambiá "Comparar con" a "Mismo período del año pasado".
+  **Debería:** las tarjetas dicen "Sin datos para comparar" (no hay ventas de hace un año) y la línea punteada queda en 0.
+- [ ] **11b.3 Hacé:** en el ranking de locales, tocá la barra de "Sucursal Norte".
+  **Debería:** pasar a "Ventas del local" con Sucursal Norte elegida.
+- [ ] **11b.4 Hacé:** en "Ventas del local", alterná "En pesos" / "En unidades" y pasá el mouse por el mapa de calor.
+  **Debería:** la línea cambia de medida; cada celda dice el día, la franja, la plata y los tickets.
+- [ ] **11b.5 Hacé:** como `cd.central` → Reportes.
+  **Debería:** abrir en "Abastecimiento" y ver solo ese y "Productos e inventario"; en este último, sin ranking ni matriz de márgenes (solo el stock). Sus detalles: Más pedidos, Tiempos de envío, Mermas y Existencias (nada de ventas).
+- [ ] **11b.6 Hacé:** como `centro` → Reportes → "Productos e inventario" → "Ver detalle" del stock.
+  **Debería:** abrir primero en "Ventas del local" (sin "Ejecutivo"); el detalle es Existencias de Sucursal Centro, con la columna "Días sin salir" (el Aceite, unos 40 días, en naranja).
 - [S ] **11.5 Hacé:** "📦 Existencias" con "Solo lo que falta reponer".
   **Debería:** aparecer los faltantes de los locales, con la columna "Falta".
 

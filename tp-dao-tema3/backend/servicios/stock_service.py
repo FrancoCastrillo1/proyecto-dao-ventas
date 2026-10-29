@@ -43,13 +43,14 @@ class StockService:
     # cx: la conexión de una transacción ya abierta por otro service. Si no
     # viene, la operación abre y cierra la suya.
     # usuario_id: quién hizo la operación, queda en el libro de movimientos.
-    def ingresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None, usuario_id=None):
-        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, ingreso=True)
+    # fecha: la de la operación que causa el movimiento (la venta); si no, ahora.
+    def ingresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None, usuario_id=None, fecha=None):
+        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, True, fecha)
 
-    def egresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None, usuario_id=None):
-        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, ingreso=False)
+    def egresar(self, ubicacion_id, producto_id, cantidad, tipo, referencia="", cx=None, usuario_id=None, fecha=None):
+        return self._mover(ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, False, fecha)
 
-    def _mover(self, ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, ingreso):
+    def _mover(self, ubicacion_id, producto_id, cantidad, tipo, referencia, cx, usuario_id, ingreso, fecha=None):
         # Primero se valida todo lo que no depende de la cantidad actual
         producto = self.obtener_producto(producto_id)
         if tipo == TipoMovimiento.COMPRA and not producto.activo:
@@ -58,15 +59,15 @@ class StockService:
 
         if cx is None:
             with self.dao.transaccion() as cx:
-                return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso)
-        return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso)
+                return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso, fecha)
+        return self._mover_en(cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso, fecha)
 
-    def _mover_en(self, cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso):
+    def _mover_en(self, cx, ubicacion_id, producto_id, cantidad, tipo, referencia, usuario_id, ingreso, fecha=None):
         # La cantidad se lee dentro de la transacción, y la regla de "no
         # egresar más de lo que hay" la aplica el dominio (StockInsuficiente)
         stock = self.dao.obtener(producto_id, ubicacion_id, cx)
         if ingreso:
-            stock.ingresar(cantidad, tipo, referencia)
+            stock.ingresar(cantidad, tipo, referencia, fecha)
         else:
-            stock.egresar(cantidad, tipo, referencia)
+            stock.egresar(cantidad, tipo, referencia, fecha)
         return self.dao.guardar(cx, stock, usuario_id)

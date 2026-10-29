@@ -41,14 +41,14 @@ class VentasService:
             raise NoEncontrado(f"No se encontro la venta {venta_id}")
         return venta
 
-    def armar_venta(self, sucursal_id, items, medio_pago):
+    def armar_venta(self, sucursal_id, items, medio_pago, fecha=None):
         """Arma la venta en memoria con todas las reglas del dominio, sin
         cobrarla ni guardarla. La usan vender() y cotizar(), así las dos
         calculan exactamente igual. Devuelve (venta, medio, nombres)."""
         # Solo se vende en una sucursal activa: la misma regla que usa el stock
         validar_ubicacion_para(TipoMovimiento.VENTA, self.obtener_ubicacion(sucursal_id))
         medio = crear_medio_pago(medio_pago)
-        venta = Venta(sucursal_id)
+        venta = Venta(sucursal_id, fecha)
         nombres = {}
         for producto_id, cantidad in items:
             producto = self.obtener_producto(producto_id)
@@ -75,12 +75,14 @@ class VentasService:
         }
         return venta, disponible, alcanza_pago
 
-    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None, usuario_id=None):
+    def vender(self, sucursal_id, items, medio_pago, monto_entregado=None, usuario_id=None, fecha=None):
         """items: pares (producto_id, cantidad). Primero se arma y se cobra la
         venta en memoria (el dominio valida todo); recién después se abre la
         transacción que guarda la venta, descuenta el stock y registra la caja.
-        Si un producto no alcanza, no se guarda nada."""
-        venta, medio, nombres = self.armar_venta(sucursal_id, items, medio_pago)
+        Si un producto no alcanza, no se guarda nada.
+        fecha: solo para cargar ventas de prueba con historial (el seed). La api
+        nunca la recibe: una venta real lleva la fecha y hora en que se hace."""
+        venta, medio, nombres = self.armar_venta(sucursal_id, items, medio_pago, fecha)
         venta.cobrar(medio, monto_entregado)
 
         with self.dao.transaccion() as cx:
@@ -89,7 +91,8 @@ class VentasService:
             for detalle in venta.detalles:
                 try:
                     self.stock_service.egresar(sucursal_id, detalle.producto_id, detalle.cantidad,
-                                               TipoMovimiento.VENTA, venta.referencia(), cx=cx, usuario_id=usuario_id)
+                                               TipoMovimiento.VENTA, venta.referencia(), cx=cx, usuario_id=usuario_id,
+                                               fecha=venta.fecha)
                 except StockInsuficiente as error:
                     # En una venta con varios productos hay que decir cuál no alcanza
                     raise StockInsuficiente(f"{nombres[detalle.producto_id]}: {error}") from error

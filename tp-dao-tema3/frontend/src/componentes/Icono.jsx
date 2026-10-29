@@ -3,9 +3,10 @@
 // el dibujo. Así cambiar un ícono, o la librería, se hace en un solo lugar.
 // Acá NO va lógica de ninguna entidad.
 import {
-  BadgeCheck, ChartColumn, Circle, CircleCheck, ClipboardList, Download, Handshake, House, Lock, LogOut,
-  Package, PackageOpen, PartyPopper, Plug, Receipt, Search, ShieldCheck, ShoppingBasket, ShoppingCart, Sparkles,
-  Sprout, Store, Tag, Timer, TriangleAlert, Trophy, Truck, Undo2, User, Wallet, Warehouse,
+  ArrowLeft, ArrowRight, BadgeCheck, ChartColumn, Circle, CircleCheck, ClipboardList, Download, Handshake, House, LayoutDashboard, Lightbulb,
+  Lock, LogOut, Minus, Package, PackageOpen, PartyPopper, Plug, Receipt, Search, ShieldCheck, ShoppingBasket,
+  ShoppingCart, Sparkles, Sprout, Store, Tag, Timer, TrendingDown, TrendingUp, TriangleAlert, Trophy, Truck, Undo2,
+  User, Wallet, Warehouse,
 } from "lucide-react";
 
 const ICONOS = {
@@ -39,6 +40,13 @@ const ICONOS = {
   trofeo: Trophy,
   reloj: Timer,
   devolucion: Undo2,
+  idea: Lightbulb,
+  tablero: LayoutDashboard,
+  sube: TrendingUp,
+  baja: TrendingDown,
+  igual: Minus,
+  flecha: ArrowRight,
+  volver: ArrowLeft,
 };
 
 export default function Icono({ nombre, tamano = 20, className }) {
