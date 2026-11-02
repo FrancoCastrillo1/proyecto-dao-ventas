@@ -120,7 +120,7 @@ export default function Inicio({ irA, puedeIr, usuario }) {
           {puedeIr("usuarios") && <Acceso tema="tema-lino" icono="usuario" titulo="Usuarios" texto="Quién entra y qué puede hacer" alTocar={() => irA("usuarios")} />}
           {puedeIr("productos") && <Acceso tema="tema-lino" icono="producto" titulo="Productos y precios" texto="Catálogo, costos y mínimos" alTocar={() => irA("productos")} />}
           <Acceso tema="tema-ciruela" icono="grafico" titulo="Ver reportes"
-            texto={puede(usuario, "ve_ventas") ? "Ventas, márgenes y mermas" : "Existencias, mermas y tiempos de envío"}
+            texto={puede(usuario, "ve_ventas") ? "Ventas, márgenes y devoluciones" : "Pedidos, stock y lo más pedido"}
             alTocar={() => irA("reportes")} />
         </div>
       </>)}

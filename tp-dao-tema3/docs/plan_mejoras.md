@@ -87,6 +87,20 @@ Del 1 al 7 son para la entrega del **29/10/2026**; del 8 al 11, para después.
 - El local de las ventas, los pedidos, la recepción y los reportes sale del usuario logueado, nunca del formulario.
 - Un usuario de local trabaja solo con su local.
 
+### Datos de prueba hasta hoy (decidido el 1/11)
+- El seed pasa a **90 días hasta hoy** (nada a futuro; lo de hoy, hasta la hora actual), con **devoluciones** repartidas (~4 % de las ventas, unos días después, 5 motivos) y **pedidos de reposición a lo largo del tiempo**: cada local pide cada 4 a 6 días lo que tiene por debajo del 70 % de su nivel; el CD consolida a las 14, arma un bulto por familia de productos, precinta y despacha a las 17 con llegada estimada al otro día a las 12; el local recibe y verifica a la mañana. ~12 % de los envíos llega un día tarde y ~5 % de los bultos con el precinto roto. Así el tiempo de reposición, los estados de los pedidos y el reporte de devoluciones tienen datos reales.
+- **Reloj del dominio** (`dominio/reloj.py`, con `ahora()` y `a_las(momento)`): el pedido, la orden, el remito, el historial del bulto, los movimientos de stock y las devoluciones toman la hora de ahí. El seed la atrasa mientras carga; la api nunca. Descartados: `fecha` en cada operación (tocaba el State y muchas firmas) e INSERT directos (rompían la regla de cargar todo por los services).
+
+### Paso 9e: 5 reportes y 3 tableros (decidido el 1/11)
+- **5 reportes** (la consigna pide al menos 4 no triviales): Ventas, Más vendidos, Existencias, Devoluciones y Más pedidos. Se borraron **Mermas** y **Tiempos de envío**: ruta, consulta del DAO, resumen, armado del PDF, pantalla y tests. Descartado: esconderlos solo del front (quedaban 7 en la API).
+- **3 tableros, uno por perfil:** Ejecutivo (admin), Ventas del local (local) y Abastecimiento (CD). Se fue **Productos e inventario**: el stock parado por última salida y lo que falta reponer pasó a Abastecimiento (con sus indicadores "Productos para reponer" y "Valor parado"). El stock es el de hoy, del local elegido o de toda la red.
+- Al principio la matriz volumen × margen y el top de más vendidos pasaron al Ejecutivo (y el top también a Ventas del local), pero al verlo se decidió **sacarlos**:
+  - la **matriz** se borró de todos lados (service, PDF, dibujo de dispersión del PDF y del front, tests): no se entendía y no respondía nada que no respondan las categorías y el reporte de más vendidos;
+  - **"Los más vendidos"** salió de los dos tableros: su "Ver detalle" abría el mismo reporte que el de "ventas por categoría". El ranking está en el reporte Más vendidos.
+- Abastecimiento **conserva el tiempo de reposición** (del pedido a la mercadería verificada: sale de su propia consulta de pedidos y del historial del bulto) y pierde lo de mermas.
+- Qué abre cada tablero: Ejecutivo → Ventas, Más vendidos; Ventas del local → Ventas, Más vendidos, Devoluciones; Abastecimiento → Más pedidos, Existencias.
+- Quién ve qué sigue por capacidades (no "uno por perfil" estricto): el admin ve los 3; el local, Ventas del local y Abastecimiento (sus pedidos y su stock); el CD, Abastecimiento.
+
 ### Paso 9d: Reportes y tableros unificados (decidido el 29/10)
 - **Una sola entrada "Reportes"** (la palabra de la consigna) con los 4 tableros arriba. Cada gráfico tiene **"Ver detalle"**, que abre uno de los 7 reportes en la misma pantalla (migas "Reportes › Tablero › Reporte" y "← Volver al tablero"), con los mismos filtros. Además, cada tablero lista sus reportes de detalle, así ninguno queda sin acceso aunque su gráfico no se dibuje. Descartados: una página larga por área (opción 1) y que los 7 reportes absorbieran los tableros (opción 2).
 - Qué abre cada tablero: Ejecutivo → Ventas, Más vendidos; Ventas del local → Ventas, Más vendidos, Devoluciones; Abastecimiento → Más pedidos, Tiempos de envío, Mermas; Productos e inventario → Más vendidos, Existencias.

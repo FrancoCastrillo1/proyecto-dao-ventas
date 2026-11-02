@@ -1,5 +1,5 @@
-# Los reportes que pide el TP (ventas por período, stock por ubicación, etc.).
-# Arma los datos para mostrar, apoyándose en los DAO.
+# Los 5 reportes del TP: ventas por período, más vendidos, existencias, más
+# pedidos y devoluciones. Arma los datos para mostrar, apoyándose en los DAO.
 # Acá NO se modifica nada: los reportes solo leen.
 #
 # El DAO hace las cuentas pesadas en SQL (SUM, GROUP BY); acá se validan los
@@ -110,7 +110,7 @@ class ReportesService:
     def existencias(self, ubicacion_id=None, solo_bajo_minimo=False, hoy=None):
         """Stock de cada producto en cada ubicación: si falta para el mínimo,
         cuánto vale y hace cuántos días no sale (stock parado). Es el detalle
-        de "Stock" en el tablero de productos e inventario."""
+        de "Stock" en el tablero de abastecimiento."""
         self.validar_ubicacion(ubicacion_id)
         hoy = hoy or date.today()
         filas = self.dao.existencias(ubicacion_id)
@@ -131,45 +131,7 @@ class ReportesService:
             "valorizado_total": sum(valorizado.values(), CERO),
         })
 
-    # ---------------------------------------- 4. Bultos rechazados y mermas
-    def mermas(self, desde=None, hasta=None, sucursal_id=None):
-        self.validar_ubicacion(sucursal_id)
-        inicio, fin = self.rango(desde, hasta)
-        filas = self.dao.bultos_rechazados(inicio, fin, sucursal_id)
-        resumen = {}
-        for conteo in self.dao.bultos_verificados_y_rechazados(inicio, fin, sucursal_id):
-            total = conteo["verificados"] + conteo["rechazados"]
-            resumen[conteo["sucursal_id"]] = {
-                "sucursal_id": conteo["sucursal_id"], "sucursal": conteo["sucursal"],
-                "bultos_verificados": conteo["verificados"], "bultos_rechazados": conteo["rechazados"],
-                "tasa_rechazo": porcentaje(conteo["rechazados"], total),
-                "unidades_perdidas": 0, "valor_perdido": CERO,
-            }
-        for fila in filas:
-            if fila["sucursal_id"] in resumen:
-                resumen[fila["sucursal_id"]]["unidades_perdidas"] += fila["cantidad"]
-                resumen[fila["sucursal_id"]]["valor_perdido"] += fila["valor_perdido"]
-        return self.con_resumen("mermas", {
-            "filas": filas,
-            "por_sucursal": list(resumen.values()),
-            "valor_perdido_total": sum((f["valor_perdido"] for f in filas), CERO),
-        })
-
-    # ---------------------------------- 5. Tiempo de tránsito CD → locales
-    def tiempos_transito(self, desde=None, hasta=None, sucursal_id=None):
-        self.validar_ubicacion(sucursal_id)
-        filas = self.dao.tiempos_transito(*self.rango(desde, hasta), sucursal_id)
-        for fila in filas:
-            for campo in ("horas_promedio", "horas_minimo", "horas_maximo"):
-                fila[campo] = round(fila[campo], 2)
-        total_bultos = sum(f["bultos"] for f in filas)
-        promedio_general = (
-            round(sum(f["horas_promedio"] * f["bultos"] for f in filas) / total_bultos, 2) if total_bultos else None
-        )
-        return self.con_resumen("tiempos-transito",
-                                {"filas": filas, "bultos": total_bultos, "horas_promedio_general": promedio_general})
-
-    # ------------------------- 6. Productos más pedidos por los locales (CD)
+    # ------------------------- 4. Productos más pedidos por los locales (CD)
     def productos_mas_pedidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
         """Lo que más piden los locales: le sirve al CD para saber qué comprar.
         falta_en_cd = lo que está pedido y sin preparar menos lo que hay en el CD
@@ -187,7 +149,7 @@ class ReportesService:
             "productos_que_faltan": sum(1 for f in filas if f["falta_en_cd"] > 0),
         })
 
-    # --------------------------------- 7. Devoluciones por producto y motivo
+    # --------------------------------- 5. Devoluciones por producto y motivo
     def devoluciones(self, desde=None, hasta=None, sucursal_id=None):
         """Qué se devuelve, cuánto y por qué. Por producto: unidades devueltas,
         lo reintegrado, qué parte de lo vendido en el período se devolvió y el

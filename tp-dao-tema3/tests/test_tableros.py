@@ -24,7 +24,7 @@ from backend.servicios.reportes_service import ReportesService
 from backend.servicios.reposicion_service import ReposicionService
 from backend.servicios.stock_service import StockService
 from backend.servicios.tableros_service import (
-    TablerosService, cuadrante, estado_del_pedido, tramo_de,
+    TablerosService, estado_del_pedido, tramo_de,
 )
 from backend.servicios.ventas_service import VentasService
 
@@ -82,14 +82,6 @@ def test_margen_proporcion_y_diferencia_en_puntos():
 ])
 def test_tramo_de_la_ultima_salida(dias, tramo):
     assert tramo_de(dias) == tramo
-
-
-@pytest.mark.parametrize("unidades, margen_producto, esperado", [
-    (10, 40, "Estrellas"), (10, 10, "Mucho volumen, poco margen"),
-    (2, 40, "Buen margen, poca venta"), (2, 10, "A revisar"), (10, None, "Mucho volumen, poco margen"),
-])
-def test_cuadrante_de_la_matriz(unidades, margen_producto, esperado):
-    assert cuadrante(unidades, margen_producto, corte_unidades=5, corte_margen=30) == esperado
 
 
 @pytest.mark.parametrize("pedido, estado", [
@@ -241,34 +233,18 @@ def test_ventas_por_dia_categorias_y_devoluciones(t):
     devoluciones = t.service.ventas_local(sucursal_id=t.centro.id)["devoluciones"]
     assert (devoluciones["cantidad"], devoluciones["unidades"], devoluciones["reintegrado"]) == (1, 1, D("500.00"))
     assert [p["codigo"] for p in devoluciones["productos"]] == ["ALM-1"]
-    assert "productos" not in datos          # el ranking está en el tablero de productos
 
 
-# ------------------------------------------------------ Productos e inventario
-
-def test_matriz_volumen_por_margen(t):
-    matriz = del_periodo(t, "productos")["matriz"]
-    puntos = {p["codigo"]: p for p in matriz["puntos"]}
-    assert (puntos["BEB-1"]["unidades"], puntos["BEB-1"]["margen"]) == (6, 40.0)
-    assert (puntos["ALM-1"]["unidades"], puntos["ALM-1"]["margen"]) == (3, 20.0)
-    assert (matriz["corte_unidades"], matriz["corte_margen"]) == (4.5, 36.0)
-    assert (puntos["BEB-1"]["cuadrante"], puntos["ALM-1"]["cuadrante"]) == ("Estrellas", "A revisar")
+def test_los_tableros_no_repiten_el_ranking_de_productos(t):
+    # El ranking de productos está en el reporte de más vendidos (el "Ver detalle" de las categorías)
+    for datos in (del_periodo(t, "ejecutivo"), del_periodo(t, "ventas_local")):
+        assert "ranking" not in datos and "matriz" not in datos
 
 
-def test_ranking_de_los_mas_vendidos_con_margen(t):
-    ranking = del_periodo(t, "productos")["ranking"]
-    assert [(f["codigo"], f["unidades"], f["margen"]) for f in ranking] == [
-        ("BEB-1", 6, D("2400.00")), ("ALM-1", 3, D("300.00"))]
-
-
-def test_sin_rentabilidad_no_hay_matriz_ni_ranking(t):
-    datos = del_periodo(t, "productos", con_rentabilidad=False)
-    assert datos["matriz"] is None and datos["ranking"] is None
-    assert "Margen bruto" not in por_titulo(datos)
-
+# ------------------------------------------- Stock (en abastecimiento)
 
 def test_stock_parado_por_la_ultima_salida(t):
-    stock = del_periodo(t, "productos", hoy=HOY + timedelta(days=40))["stock"]
+    stock = t.service.abastecimiento(hoy=HOY + timedelta(days=40))["stock"]
     tramos = {t_["tramo"]: t_ for t_ in stock["tramos"]}
     assert (tramos["Nunca salió"]["productos"], tramos["Nunca salió"]["valor"]) == (1, D("4000.00"))  # 10 fideos de Norte
     assert tramos["0 a 30 días"]["productos"] == 0
@@ -282,10 +258,13 @@ def test_el_detalle_del_stock_es_el_reporte_de_existencias(t):
     assert filas[("Local Norte", "ALM-1")]["dias_sin_salir"] is None            # nunca salió
 
 
-def test_inventario_de_una_sola_ubicacion(t):
-    indicadores = por_titulo(del_periodo(t, "productos", ubicacion_id=t.cd.id))
-    assert indicadores["Inventario valorizado"]["valor"] == D("34000.00")       # 30 cocas x 600 + 40 fideos x 400
+def test_el_stock_es_el_del_local_elegido(t):
+    datos = t.service.abastecimiento(sucursal_id=t.norte.id, hoy=HOY + timedelta(days=40))
+    indicadores = por_titulo(datos)
+    # Norte: 17 cocas (vendió 3 hace 53 días) y 10 fideos que nunca salieron
+    assert indicadores["Valor parado (más de 30 días)"]["valor"] == D("14200.00")      # 17 x 600 + 10 x 400
     assert indicadores["Productos para reponer"]["valor"] == 0
+    assert sum(t_["productos"] for t_ in datos["stock"]["tramos"]) == 2
 
 
 # ------------------------------------------------------------- Abastecimiento
@@ -296,8 +275,7 @@ def test_abastecimiento_estados_y_tiempos(t):
     assert {f["sucursal"] for f in datos["tiempos"]} == {"Local Centro", "Local Norte"}
     assert all(p["horas"] is not None and p["horas"] >= 0 for p in datos["pedidos"])
     assert por_titulo(datos)["Pedidos"]["valor"] == 2
-    assert por_titulo(datos)["Perdido en bultos rechazados"]["valor"] == D("0.00")
-    assert {m["sucursal"] for m in datos["mermas"]} == {"Local Centro", "Local Norte"}
+    assert "mermas" not in datos                           # el reporte de mermas ya no existe
     assert datos["demanda"] is None                        # lo más pedido de la red, solo si se pide
 
 
@@ -311,8 +289,8 @@ def test_abastecimiento_con_lo_mas_pedido_de_la_red(t):
 @pytest.mark.parametrize("clave, metodo, textos", [
     ("ejecutivo", "ejecutivo", [b"Tablero ejecutivo", b"vs. $ 1.000,00", b"Ranking de locales"]),
     ("ventas", "ventas_local", [b"Tablero de ventas", b"Ventas netas por d", b"Ticket promedio por d", b"Lun"]),
-    ("productos", "productos", [b"Matriz volumen x margen", b"Valor del stock"]),
-    ("abastecimiento", "abastecimiento", [b"Tablero de abastecimiento", b"Pedidos por estado y local"]),
+    ("abastecimiento", "abastecimiento", [b"Tablero de abastecimiento", b"Pedidos por estado y local",
+                                          b"Valor del stock", b"Para reponer"]),
 ])
 def test_cada_tablero_sale_en_pdf_con_sus_graficos(t, clave, metodo, textos):
     # Los pedidos del fixture son de hoy: abastecimiento mira los últimos 30 días

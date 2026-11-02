@@ -7,8 +7,8 @@
 // salen de SERIES (validados para que se distingan también con daltonismo).
 // Grilla y ejes tenues para que resalten los datos.
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter,
-  ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
+  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer,
+  Tooltip, XAxis, YAxis,
 } from "recharts";
 
 const COLORES = { serie: "#c98a1b", negativo: "#b23a3a", grilla: "#ece3d3", eje: "#d6c9b3", rotulo: "#8a7862" };
@@ -166,46 +166,6 @@ export function GraficoBarrasDobles({ titulo, datos, series, formato = String, a
         </BarChart>
       </ResponsiveContainer>
     </figure>
-  );
-}
-
-// Dispersión: cada punto es un producto (x unidades, y margen %, tamaño la
-// ganancia). Las dos líneas de corte separan los cuatro cuadrantes.
-export function GraficoDispersion({ titulo, puntos, corteX, corteY, colorDe, formatoX = String, formatoY = String, detalle, accion }) {
-  if (puntos.length === 0) return null;
-  const mayor = Math.max(...puntos.map((p) => Math.abs(p.tamano)), 1);
-  return (
-    <figure className="tarjeta-grafico">
-      <figcaption><span>{titulo}</span>{accion}</figcaption>
-      <ResponsiveContainer width="100%" height={340}>
-        <ScatterChart margin={{ top: 16, right: 24, bottom: 18, left: 0 }}>
-          <CartesianGrid stroke={COLORES.grilla} />
-          <XAxis type="number" dataKey="x" name="Unidades" tick={ROTULOS} tickFormatter={formatoX} axisLine={{ stroke: COLORES.eje }}
-            tickLine={false} label={{ value: "Unidades vendidas →", position: "insideBottom", offset: -10, fill: COLORES.rotulo, fontSize: 12 }} />
-          <YAxis type="number" dataKey="y" name="Margen" width={64} tick={ROTULOS} tickFormatter={formatoY} axisLine={false}
-            tickLine={false} label={{ value: "Margen ↑", angle: -90, position: "insideLeft", fill: COLORES.rotulo, fontSize: 12, dy: 30 }} />
-          <ZAxis type="number" dataKey="tamano" range={[60, 600]} domain={[0, mayor]} />
-          <ReferenceLine x={corteX} stroke={COLORES.eje} strokeDasharray="4 4" />
-          <ReferenceLine y={corteY} stroke={COLORES.eje} strokeDasharray="4 4" />
-          <ReferenceLine y={0} stroke={COLORES.negativo} strokeOpacity={0.35} />
-          <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<GlobitoPunto detalle={detalle} />} />
-          <Scatter data={puntos.map((p) => ({ ...p, tamano: Math.abs(p.tamano) }))} isAnimationActive={false}>
-            {puntos.map((p) => <Cell key={p.nombre} fill={colorDe(p)} fillOpacity={0.8} stroke="#fffdf9" strokeWidth={2} />)}
-          </Scatter>
-        </ScatterChart>
-      </ResponsiveContainer>
-    </figure>
-  );
-}
-
-function GlobitoPunto({ active, payload, detalle }) {
-  if (!active || !payload?.length) return null;
-  const punto = payload[0].payload;
-  return (
-    <div className="globito-grafico">
-      <span>{punto.nombre}</span>
-      {detalle(punto).map((linea) => <small key={linea}>{linea}</small>)}
-    </div>
   );
 }
 

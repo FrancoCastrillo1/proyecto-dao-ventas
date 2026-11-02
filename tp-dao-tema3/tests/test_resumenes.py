@@ -156,51 +156,11 @@ def test_existencias_de_una_ubicacion_sin_faltantes():
                                              "Ningún producto está por debajo del mínimo."]
 
 
-# ------------------------------------------------------------------ Mermas
-
-def local_merma(nombre, verificados, rechazados, perdido):
-    return {"sucursal": nombre, "bultos_verificados": verificados, "bultos_rechazados": rechazados,
-            "valor_perdido": D(perdido)}
-
-
-def test_mermas_dice_la_tasa_y_el_local_con_mas_perdida():
-    datos = {"por_sucursal": [local_merma("Centro", 3, 1, 200), local_merma("Sur", 4, 0, 0)],
-             "valor_perdido_total": D(200)}
-    assert resumir("mermas", datos) == [
-        "De 8 bultos revisados, 1 llegó con el precinto roto (13 %): se perdieron $ 200,00.",
-        "El local con más pérdida es Centro ($ 200,00).",
-    ]
-
-
-def test_sin_bultos_rechazados():
-    datos = {"por_sucursal": [local_merma("Centro", 2, 0, 0)], "valor_perdido_total": D(0)}
-    assert resumir("mermas", datos) == ["Se revisaron 2 bultos y ninguno llegó con el precinto roto: no hubo mermas."]
-
-
-# ---------------------------------------------------------- Tiempos de envío
-
-def test_tiempos_dice_el_promedio_el_mas_rapido_y_el_mas_lento():
-    datos = {"filas": [{"sucursal": "Centro", "horas_promedio": 0.5}, {"sucursal": "Sur", "horas_promedio": 6.0}],
-             "bultos": 4, "horas_promedio_general": 3.25}
-    assert resumir("tiempos-transito", datos) == [
-        "En promedio, un bulto tarda 3,25 h del CD al local (4 bultos recibidos).",
-        "El más rápido es Centro (30 min) y el más lento, Sur (6,00 h).",
-    ]
-
-
-def test_tiempos_si_todos_tardan_lo_mismo_no_compara():
-    datos = {"filas": [{"sucursal": "Centro", "horas_promedio": 2.0}, {"sucursal": "Sur", "horas_promedio": 2.0}],
-             "bultos": 2, "horas_promedio_general": 2.0}
-    assert resumir("tiempos-transito", datos) == ["En promedio, un bulto tarda 2,00 h del CD al local (2 bultos recibidos)."]
-
-
 @pytest.mark.parametrize("clave, datos, frase", [
     ("productos-mas-vendidos", {"filas": []}, "No se vendió nada con estos filtros."),
     ("devoluciones", {"filas": []}, "No hubo devoluciones con estos filtros."),
     ("productos-mas-pedidos", {"filas": []}, "Los locales no hicieron pedidos con estos filtros."),
     ("existencias", {"filas": [], "valorizado_por_ubicacion": {}}, "No hay stock cargado con estos filtros."),
-    ("mermas", {"por_sucursal": []}, "No hubo bultos verificados ni rechazados con estos filtros."),
-    ("tiempos-transito", {"filas": []}, "Todavía no se recibió ningún bulto con estos filtros."),
 ])
 def test_sin_datos_lo_dice_en_una_frase(clave, datos, frase):
     assert resumir(clave, datos) == [frase]

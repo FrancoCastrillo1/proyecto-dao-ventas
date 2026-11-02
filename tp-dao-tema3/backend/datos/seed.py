@@ -9,20 +9,24 @@
 # Trae un usuario de cada perfil (ver USUARIOS), todos con la contraseña
 # CLAVE_DE_PRUEBA, y cada operación queda hecha por quien corresponde.
 #
-# Para que los tableros tengan algo que mostrar (mapa de calor, comparación con
-# el período anterior, stock parado), se cargan además DIAS_DE_HISTORIAL días
-# de ventas DE PRUEBA, fechadas hacia atrás a distintas horas. Son inventadas
-# (con una semilla fija: siempre salen iguales) y solo existen en la base de
-# desarrollo; la api no permite fechar una venta.
+# Para que los reportes y los tableros tengan qué mostrar, se cargan además
+# DIAS_DE_HISTORIAL días de operación DE PRUEBA, hasta hoy (nunca a futuro):
+# ventas a distintas horas, devoluciones, y los pedidos de reposición de cada
+# local con su envío (el CD los consolida, arma los bultos, los despacha y el
+# local los recibe al otro día; alguno llega demorado o con el precinto roto).
+# Son inventados (con una semilla fija: siempre salen iguales) y solo existen
+# en la base de desarrollo. Para fecharlos se atrasa el reloj del dominio
+# (dominio/reloj.py) mientras se cargan; la api nunca lo hace.
 #
 # Uso (desde tp-dao-tema3):
 #   .venv\Scripts\python -m backend.datos.seed              carga solo si la base está vacía
 #   .venv\Scripts\python -m backend.datos.seed --reiniciar  BORRA la base local y la vuelve a cargar
 import random
 import sys
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
 from backend.dominio.excepciones import StockInsuficiente
+from backend.dominio.reloj import a_las
 from backend.dominio.stock import TipoMovimiento
 from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_maestros import ProductoDAO
@@ -70,14 +74,11 @@ USUARIOS = [
     ("SUCURSAL", "sur", "Sofía de Sur", "Sucursal Sur"),
 ]
 
-
-# Llegada estimada de los envíos del seed: mañana a las 12
-MANANA_AL_MEDIODIA = (datetime.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
-
-# ------------------------------------------------- Historial de ventas de prueba
-DIAS_DE_HISTORIAL = 60
+# ------------------------------------------------------- Historial de prueba
+DIAS_DE_HISTORIAL = 90
 SEMILLA = 2026                   # misma semilla → mismo historial cada vez
-ENVIO_PARA_EL_HISTORIAL = 300    # unidades de cada producto que se le mandan a cada local
+COMPRA_INICIAL = 1500            # unidades de cada producto que compra el CD antes de empezar
+
 # Cuánto se elige cada producto en un ticket (lo más vendido, más seguido)
 POPULARIDAD = {"BEB-001": 5, "BEB-002": 4, "LAC-001": 4, "ALM-001": 3, "BEB-003": 2, "ALM-002": 2,
                "LAC-002": 2, "LIM-001": 1.5, "ALM-003": 1, "LIM-002": 1}
@@ -92,9 +93,45 @@ MEDIOS = {"EFECTIVO": 4, "DEBITO": 3, "TRANSFERENCIA": 2, "CREDITO": 1}
 DEJO_DE_VENDERSE = {("Sucursal Centro", "ALM-003"): 35, ("Sucursal Norte", "LIM-002"): 40,
                     ("Sucursal Sur", "ALM-003"): 50, ("Sucursal Norte", "LIM-001"): DIAS_DE_HISTORIAL + 1}
 
+# Reposición: hasta cuántas unidades de cada producto quiere tener cada local,
+# cada cuántos días pide y desde qué nivel pide (por debajo del 70 % de su nivel)
+NIVEL_DEL_LOCAL = {"Sucursal Centro": 60, "Sucursal Norte": 45, "Sucursal Sur": 35}
+PIDE_CADA = {"Sucursal Centro": 4, "Sucursal Norte": 5, "Sucursal Sur": 6}
+PIDE_POR_DEBAJO_DE = 0.7
+# Horarios del circuito: el local pide a la mañana, el CD prepara y despacha a
+# la tarde, y llega al otro día (estimado al mediodía)
+HORA_DEL_PEDIDO, HORA_DE_LA_ORDEN, HORA_DEL_DESPACHO, HORA_ESTIMADA = time(8, 30), time(14, 0), time(17, 0), time(12, 0)
+DEMORADOS = 0.12                 # parte de los envíos que llega un día tarde
+RECHAZADOS = 0.05                # parte de los bultos que llega con el precinto roto
+# Devoluciones: parte de las ventas que se devuelve unos días después, y por qué
+DEVUELTAS = 0.04
+MOTIVOS = {"Producto vencido": 3, "Envase dañado": 3, "No era lo que buscaba": 2, "Se cobró de más": 1,
+           "Falla de fábrica": 1}
+
 
 def base_vacia():
     return not ProductoDAO().listar(solo_activos=False)
+
+
+def a_la_hora(dia, hora, minutos=0):
+    return datetime.combine(dia, hora) + timedelta(minutes=minutos)
+
+
+class Escenario:
+    """Lo que se va armando y los services con que se carga (para no pasar diez
+    parámetros entre los pasos)."""
+
+    def __init__(self):
+        self.reposicion = ReposicionService()
+        self.recepcion = RecepcionService()
+        self.ventas = VentasService()
+        self.stock = StockService()
+        self.p = {}               # código → id del producto
+        self.u = {}               # nombre de usuario → id
+        self.locales = {}         # nombre del local → id
+        self.del_local = {}       # id del local → id de su usuario
+        self.cd = None
+        self.precintos = 0        # para que cada precinto sea único
 
 
 def cargar_datos_prueba():
@@ -103,178 +140,253 @@ def cargar_datos_prueba():
         print("La base ya tiene datos: no se cargó nada. Para empezar de cero usá --reiniciar.")
         return
 
-    # ------------------------------------------------------------ Maestros
-    categorias = CategoriaService()
-    ids_categoria = {nombre: categorias.crear(nombre).id for nombre in ("Bebidas", "Almacén", "Limpieza", "Lácteos")}
+    ahora = datetime.now().replace(microsecond=0)
+    inicio = ahora.date() - timedelta(days=DIAS_DE_HISTORIAL)
+    e = Escenario()
 
-    productos_service = ProductoService()
-    p = {}  # código → id
-    for codigo, nombre, categoria, precio, costo, minimo in PRODUCTOS:
-        p[codigo] = productos_service.crear(codigo, nombre, ids_categoria[categoria], precio, costo, minimo).id
+    # Los maestros, las compras y el envío inicial, el día antes del historial
+    with a_las(a_la_hora(inicio - timedelta(days=1), time(7, 0))):
+        cargar_maestros(e)
+        for codigo, producto_id in e.p.items():
+            e.stock.ingresar(e.cd, producto_id, COMPRA_INICIAL, TipoMovimiento.COMPRA,
+                             f"Factura compra inicial {codigo}", usuario_id=e.u["cd.central"])
+    envio_inicial(e, inicio - timedelta(days=1))
 
-    proveedores = ProveedorService()
-    for cuit, razon_social, telefono, email, prefijos in PROVEEDORES:
-        proveedor = proveedores.crear(cuit, razon_social, telefono, email)
-        for codigo, producto_id in p.items():
-            if codigo.startswith(prefijos):
-                proveedores.asignar_producto(proveedor.id, producto_id)
-
-    ubicaciones = UbicacionService()
-    cd = ubicaciones.crear("CD", "CD Central", "Av. Colón 1000").id
-    centro = ubicaciones.crear("SUCURSAL", "Sucursal Centro", "San Martín 250").id
-    norte = ubicaciones.crear("SUCURSAL", "Sucursal Norte", "Belgrano 1800").id
-    sur = ubicaciones.crear("SUCURSAL", "Sucursal Sur", "Mitre 75").id
-
-    # ------------------------------------------------------------- Usuarios
-    ids_ubicacion = {"CD Central": cd, "Sucursal Centro": centro, "Sucursal Norte": norte, "Sucursal Sur": sur}
-    usuarios = UsuarioService()
-    u = {}  # usuario → id
-    for perfil, nombre_usuario, nombre_completo, ubicacion in USUARIOS:
-        u[nombre_usuario] = usuarios.crear(perfil, nombre_usuario, nombre_completo, ids_ubicacion.get(ubicacion),
-                                           CLAVE_DE_PRUEBA).id
-    del_local = {centro: u["centro"], norte: u["norte"], sur: u["sur"]}
-
-    # --------------------------------------------------- Compras al CD
-    stock = StockService()
-    for codigo, producto_id in p.items():
-        stock.ingresar(cd, producto_id, 300, TipoMovimiento.COMPRA, f"Factura compra inicial {codigo}",
-                       usuario_id=u["cd.central"])
-        # La mercadería que después se manda a los locales para el historial
-        stock.ingresar(cd, producto_id, 3 * ENVIO_PARA_EL_HISTORIAL, TipoMovimiento.COMPRA,
-                       f"Factura compra de temporada {codigo}", usuario_id=u["cd.central"])
-
-    # ------------------------------------------------------- Reposición
-    reposicion = ReposicionService()
-    recepcion = RecepcionService()
-    pedido_centro = reposicion.crear_pedido(centro, [
-        (p["BEB-001"], 60), (p["BEB-002"], 40), (p["ALM-001"], 50), (p["ALM-002"], 30),
-        (p["LIM-001"], 20), (p["LAC-001"], 50), (p["LAC-002"], 20),
-    ], u["centro"])
-    pedido_norte = reposicion.crear_pedido(norte, [
-        (p["BEB-001"], 30), (p["BEB-003"], 20), (p["ALM-003"], 15), (p["LIM-002"], 15),
-    ], u["norte"])
-    pedido_sur = reposicion.crear_pedido(sur, [(p["BEB-002"], 25), (p["LAC-001"], 40)], u["sur"])
-    orden = reposicion.crear_orden([pedido_centro.id_pedido, pedido_norte.id_pedido, pedido_sur.id_pedido], u["cd.central"])
-
-    def armar(destino, bultos, prefijo):
-        remito = reposicion.crear_remito(orden.id_orden, destino, u["cd.central"])
-        ids = []
-        for i, items in enumerate(bultos, start=1):
-            bulto = reposicion.agregar_bulto(remito.id_remito, [(p[codigo], cantidad) for codigo, cantidad in items],
-                                             u["cd.central"])
-            reposicion.precintar(bulto.id_bulto, f"{prefijo}-{i:03d}", u["cd.central"])
-            ids.append((bulto.id_bulto, f"{prefijo}-{i:03d}"))
-        reposicion.despachar(remito.id_remito, MANANA_AL_MEDIODIA, u["cd.central"])
-        return ids
-
-    # Centro: todo llega bien
-    for bulto_id, precinto in armar(centro, [
-        [("BEB-001", 60), ("BEB-002", 40)],
-        [("ALM-001", 50), ("ALM-002", 30), ("LIM-001", 20)],
-        [("LAC-001", 50), ("LAC-002", 20)],
-    ], "PC"):
-        recepcion.recibir(bulto_id, u["centro"])
-        recepcion.verificar(bulto_id, precinto, True, u["centro"])
-
-    # Norte: un bulto llega con el precinto roto → rechazo logístico (merma)
-    norte_bultos = armar(norte, [
-        [("BEB-001", 30), ("BEB-003", 20)],
-        [("ALM-003", 15), ("LIM-002", 15)],
-    ], "PN")
-    (bueno, precinto_bueno), (roto, precinto_roto) = norte_bultos
-    recepcion.recibir(bueno, u["norte"])
-    recepcion.verificar(bueno, precinto_bueno, True, u["norte"])
-    recepcion.recibir(roto, u["norte"])
-    recepcion.verificar(roto, precinto_roto, False, u["norte"])
-
-    # Sur: despachado y todavía en camino (para ver un remito En tránsito)
-    armar(sur, [[("BEB-002", 25), ("LAC-001", 40)]], "PS")
-
-    # Envío grande a los tres locales, con todo verificado: el stock que
-    # consume el historial de ventas
-    todo = [(producto_id, ENVIO_PARA_EL_HISTORIAL) for producto_id in p.values()]
-    pedidos_grandes = [reposicion.crear_pedido(local, todo, del_local[local]).id_pedido for local in (centro, norte, sur)]
-    orden_grande = reposicion.crear_orden(pedidos_grandes, u["cd.central"])
-    for local, prefijo in ((centro, "HC"), (norte, "HN"), (sur, "HS")):
-        remito = reposicion.crear_remito(orden_grande.id_orden, local, u["cd.central"])
-        bulto = reposicion.agregar_bulto(remito.id_remito, todo, u["cd.central"])
-        reposicion.precintar(bulto.id_bulto, f"{prefijo}-001", u["cd.central"])
-        reposicion.despachar(remito.id_remito, MANANA_AL_MEDIODIA, u["cd.central"])
-        recepcion.recibir(bulto.id_bulto, del_local[local])
-        recepcion.verificar(bulto.id_bulto, f"{prefijo}-001", True, del_local[local])
-
-    # ------------------------------------------------------------- Ventas
-    ventas = VentasService()
-    nombres_local = {centro: "Sucursal Centro", norte: "Sucursal Norte", sur: "Sucursal Sur"}
-    cantidad_historial = cargar_historial(ventas, p, nombres_local, del_local)
-
-    def vender(local, items, medio, entregado=None):
-        return ventas.vender(local, items, medio, entregado, del_local[local])
-
-    ventas_hechas = [
-        vender(centro, [(p["BEB-001"], 6), (p["ALM-001"], 10)], "DEBITO"),
-        vender(centro, [(p["LAC-001"], 12), (p["LAC-002"], 8)], "EFECTIVO", 40000),
-        vender(centro, [(p["ALM-002"], 5), (p["LIM-001"], 3)], "CREDITO"),
-        vender(centro, [(p["BEB-002"], 15), (p["BEB-001"], 20)], "TRANSFERENCIA"),
-        vender(centro, [(p["LAC-001"], 30)], "EFECTIVO"),
-        vender(norte, [(p["BEB-001"], 10), (p["BEB-003"], 4)], "DEBITO"),
-        vender(norte, [(p["BEB-003"], 12)], "CREDITO"),
-        vender(norte, [(p["BEB-001"], 8)], "EFECTIVO", 20000),
-    ]
-    # Devoluciones: solo de ventas registradas y de lo que se vendió
-    ventas.devolver(ventas_hechas[1].id, [(p["LAC-002"], 2)], "Producto vencido", u["centro"])
-    ventas.devolver(ventas_hechas[5].id, [(p["BEB-003"], 1)], "Envase dañado", u["norte"])
-
-    # Pedidos en curso, para ver todos los estados en Abastecimiento: uno de Sur
-    # sin preparar y uno de Norte que el CD está armando (remito sin despachar)
-    reposicion.crear_pedido(sur, [(p["ALM-001"], 20), (p["LIM-001"], 10)], u["sur"])
-    pedido_en_preparacion = reposicion.crear_pedido(norte, [(p["LAC-001"], 30), (p["BEB-002"], 20)], u["norte"])
-    orden_en_curso = reposicion.crear_orden([pedido_en_preparacion.id_pedido], u["cd.central"])
-    reposicion.crear_remito(orden_en_curso.id_orden, norte, u["cd.central"])
+    historial = cargar_historial(e, inicio, ahora)
+    hoy = cargar_hoy(e)
 
     print("Datos de prueba cargados:")
     print(f"  {len(PRODUCTOS)} productos, {len(PROVEEDORES)} proveedores, CD + 3 sucursales")
-    print("  Reposición: Centro verificado, Norte con un bulto rechazado, Sur en tránsito,")
-    print("  un envío grande verificado, un pedido sin preparar y uno en preparación")
-    print(f"  {len(ventas_hechas)} ventas de hoy y 2 devoluciones")
-    print(f"  {cantidad_historial} ventas DE PRUEBA de los últimos {DIAS_DE_HISTORIAL} días (para los tableros)")
+    print(f"  {historial['ventas']} ventas DE PRUEBA de los últimos {DIAS_DE_HISTORIAL} días, hasta hoy (para los tableros)")
+    print(f"  {historial['devoluciones']} devoluciones y {historial['pedidos']} pedidos de reposición en ese tiempo "
+          f"({historial['rechazados']} bultos rechazados, {historial['demorados']} envíos demorados)")
+    print(f"  Hoy: {hoy['ventas']} ventas, 2 devoluciones, un envío a Sur en camino, un pedido de Sur sin preparar")
+    print("  y uno de Norte que el CD está armando")
     print(f"Usuarios (contraseña de todos: {CLAVE_DE_PRUEBA}):")
     for perfil, nombre_usuario, nombre_completo, ubicacion in USUARIOS:
         print(f"  {nombre_usuario:<11} {perfil:<9} {ubicacion or 'toda la red':<16} {nombre_completo}")
 
 
-def cargar_historial(ventas, p, nombres_local, del_local, hoy=None):
-    """Ventas de prueba de los últimos DIAS_DE_HISTORIAL días (hasta ayer), a
-    distintas horas, por el mismo service que las ventas reales (descuentan
-    stock y pasan por la caja). Venden un poco más a medida que pasan los días
-    (para ver crecimiento contra el período anterior). Devuelve cuántas cargó."""
+def cargar_maestros(e):
+    categorias = CategoriaService()
+    ids_categoria = {nombre: categorias.crear(nombre).id for nombre in ("Bebidas", "Almacén", "Limpieza", "Lácteos")}
+    productos_service = ProductoService()
+    for codigo, nombre, categoria, precio, costo, minimo in PRODUCTOS:
+        e.p[codigo] = productos_service.crear(codigo, nombre, ids_categoria[categoria], precio, costo, minimo).id
+
+    proveedores = ProveedorService()
+    for cuit, razon_social, telefono, email, prefijos in PROVEEDORES:
+        proveedor = proveedores.crear(cuit, razon_social, telefono, email)
+        for codigo, producto_id in e.p.items():
+            if codigo.startswith(prefijos):
+                proveedores.asignar_producto(proveedor.id, producto_id)
+
+    ubicaciones = UbicacionService()
+    e.cd = ubicaciones.crear("CD", "CD Central", "Av. Colón 1000").id
+    e.locales = {"Sucursal Centro": ubicaciones.crear("SUCURSAL", "Sucursal Centro", "San Martín 250").id,
+                 "Sucursal Norte": ubicaciones.crear("SUCURSAL", "Sucursal Norte", "Belgrano 1800").id,
+                 "Sucursal Sur": ubicaciones.crear("SUCURSAL", "Sucursal Sur", "Mitre 75").id}
+
+    ids_ubicacion = {"CD Central": e.cd, **e.locales}
+    usuarios = UsuarioService()
+    for perfil, nombre_usuario, nombre_completo, ubicacion in USUARIOS:
+        e.u[nombre_usuario] = usuarios.crear(perfil, nombre_usuario, nombre_completo, ids_ubicacion.get(ubicacion),
+                                             CLAVE_DE_PRUEBA).id
+    e.del_local = {e.locales["Sucursal Centro"]: e.u["centro"], e.locales["Sucursal Norte"]: e.u["norte"],
+                   e.locales["Sucursal Sur"]: e.u["sur"]}
+
+
+# ------------------------------------------------------------ El circuito
+def bultos_por_categoria(items, e):
+    """Lo que va a un local, en un bulto por familia de productos (como se arma
+    en un depósito): bebidas, almacén y limpieza, lácteos."""
+    codigo_de = {producto_id: codigo for codigo, producto_id in e.p.items()}
+    grupos = {}
+    for producto_id, cantidad in items:
+        familia = {"BEB": 0, "ALM": 1, "LIM": 1, "LAC": 2}[codigo_de[producto_id][:3]]
+        grupos.setdefault(familia, []).append((producto_id, cantidad))
+    return [grupos[f] for f in sorted(grupos)]
+
+
+def preparar_y_despachar(e, pedidos, dia, llegada_estimada):
+    """El CD consolida los pedidos en una orden, arma un remito por local con sus
+    bultos precintados y lo despacha. Devuelve {remito: [(bulto, precinto)]}."""
+    cd = e.u["cd.central"]
+    with a_las(a_la_hora(dia, HORA_DE_LA_ORDEN)):
+        orden = e.reposicion.crear_orden([pedido.id_pedido for pedido in pedidos], cd)
+    remitos = {}
+    for minutos, pedido in enumerate(pedidos):
+        with a_las(a_la_hora(dia, HORA_DE_LA_ORDEN, 20 + 10 * minutos)):
+            remito = e.reposicion.crear_remito(orden.id_orden, pedido.local, cd)
+            bultos = []
+            for items in bultos_por_categoria([(d.producto, d.cantidad) for d in pedido.items], e):
+                bulto = e.reposicion.agregar_bulto(remito.id_remito, items, cd)
+                e.precintos += 1
+                precinto = f"PR-{e.precintos:05d}"
+                e.reposicion.precintar(bulto.id_bulto, precinto, cd)
+                bultos.append((bulto.id_bulto, precinto))
+        with a_las(a_la_hora(dia, HORA_DEL_DESPACHO, minutos)):
+            e.reposicion.despachar(remito.id_remito, llegada_estimada, cd)
+        remitos[(remito.id_remito, pedido.local)] = bultos
+    return remitos
+
+
+def recibir(e, local, bultos, momento, rotos=()):
+    """El local recibe y verifica cada bulto (los de rotos, con el precinto roto)."""
+    for i, (bulto_id, precinto) in enumerate(bultos):
+        with a_las(momento + timedelta(minutes=5 * i)):
+            e.recepcion.recibir(bulto_id, e.del_local[local])
+        with a_las(momento + timedelta(minutes=15 + 5 * i)):
+            e.recepcion.verificar(bulto_id, precinto, bulto_id not in rotos, e.del_local[local])
+
+
+def envio_inicial(e, dia):
+    """Cada local arranca con su nivel de todos los productos. A Norte le llega
+    un bulto con el precinto roto: esa mercadería no entra (merma) y la vuelve a
+    pedir en la próxima reposición."""
+    pedidos = []
+    for nombre, local in e.locales.items():
+        with a_las(a_la_hora(dia, time(8, 0))):
+            items = [(producto_id, NIVEL_DEL_LOCAL[nombre]) for producto_id in e.p.values()]
+            pedidos.append(e.reposicion.crear_pedido(local, items, e.del_local[local]))
+    remitos = preparar_y_despachar(e, pedidos, dia, a_la_hora(dia + timedelta(days=1), HORA_ESTIMADA))
+    for (_, local), bultos in remitos.items():
+        rotos = {bultos[1][0]} if local == e.locales["Sucursal Norte"] else set()
+        recibir(e, local, bultos, a_la_hora(dia, time(19, 0)), rotos)
+
+
+def pedido_de_reposicion(e, nombre, momento):
+    """Lo que le falta al local para volver a su nivel, de lo que está por debajo
+    del 70 %. Si no le falta nada, no pide."""
+    local = e.locales[nombre]
+    nivel = NIVEL_DEL_LOCAL[nombre]
+    hay = {producto.id: stock.cantidad for producto, stock in e.stock.listar_por_ubicacion(local)}
+    items = [(producto_id, nivel - hay.get(producto_id, 0)) for producto_id in e.p.values()
+             if hay.get(producto_id, 0) < nivel * PIDE_POR_DEBAJO_DE]
+    if not items:
+        return None
+    with a_las(momento):
+        return e.reposicion.crear_pedido(local, items, e.del_local[local])
+
+
+def cargar_historial(e, inicio, ahora):
+    """Día por día, desde inicio hasta hoy (lo de hoy, solo hasta la hora
+    actual): a la mañana llegan los envíos y los locales que les toca piden; se
+    vende todo el día; a la tarde el CD prepara y despacha lo pedido. Al final,
+    las devoluciones de algunas ventas. Las ventas venden un poco más a medida
+    que pasan los días (para ver crecimiento contra el período anterior)."""
     azar = random.Random(SEMILLA)
-    hoy = hoy or date.today()
     codigos, pesos = list(POPULARIDAD), list(POPULARIDAD.values())
     horas, pesos_hora = list(SEGUN_LA_HORA), list(SEGUN_LA_HORA.values())
     medios, pesos_medio = list(MEDIOS), list(MEDIOS.values())
-    cargadas = 0
-    for dias_atras in range(DIAS_DE_HISTORIAL, 0, -1):
-        dia = hoy - timedelta(days=dias_atras)
-        tendencia = 0.75 + 0.4 * (DIAS_DE_HISTORIAL - dias_atras) / DIAS_DE_HISTORIAL
-        for local, nombre in nombres_local.items():
+    motivos, pesos_motivo = list(MOTIVOS), list(MOTIVOS.values())
+    cuenta = {"ventas": 0, "devoluciones": 0, "pedidos": 0, "rechazados": 0, "demorados": 0}
+    en_camino = []                # (cuándo llega, local, bultos)
+    a_devolver = []               # (cuándo, venta, local, producto)
+
+    for numero in range(DIAS_DE_HISTORIAL + 1):
+        dia = inicio + timedelta(days=numero)
+
+        # A la mañana: llega lo despachado
+        for llegada, local, bultos in [envio for envio in en_camino if envio[0].date() == dia and envio[0] <= ahora]:
+            rotos = {bulto for bulto, _ in bultos if azar.random() < RECHAZADOS}
+            cuenta["rechazados"] += len(rotos)
+            recibir(e, local, bultos, llegada, rotos)
+            en_camino.remove((llegada, local, bultos))
+
+        # Los locales que les toca, piden
+        pedidos = []
+        for orden_local, nombre in enumerate(e.locales):
+            momento = a_la_hora(dia, HORA_DEL_PEDIDO, 10 * orden_local)
+            if numero % PIDE_CADA[nombre] == orden_local % PIDE_CADA[nombre] and momento <= ahora:
+                pedido = pedido_de_reposicion(e, nombre, momento)
+                if pedido:
+                    pedidos.append(pedido)
+        cuenta["pedidos"] += len(pedidos)
+
+        # Se vende todo el día
+        tendencia = 0.75 + 0.4 * numero / DIAS_DE_HISTORIAL
+        for nombre, local in e.locales.items():
             esperados = TICKETS_POR_DIA[nombre] * tendencia * SEGUN_EL_DIA[dia.weekday()]
             tickets = int(esperados) + (azar.random() < esperados % 1)
-            momentos = sorted(datetime.combine(dia, time(azar.choices(horas, pesos_hora)[0], azar.randrange(60)))
+            momentos = sorted(a_la_hora(dia, time(azar.choices(horas, pesos_hora)[0], azar.randrange(60)))
                               for _ in range(tickets))
             for momento in momentos:
+                dias_atras = (ahora.date() - dia).days
                 elegidos = {c for c in azar.choices(codigos, pesos, k=azar.choice((1, 1, 2, 2, 3)))
-                            if dias_atras > DEJO_DE_VENDERSE.get((nombre, c), 0)}
-                if not elegidos:
+                            if dias_atras >= DEJO_DE_VENDERSE.get((nombre, c), 0)}
+                if not elegidos or momento > ahora:
                     continue
-                items = [(p[c], azar.randint(1, 3)) for c in sorted(elegidos)]
+                items = [(e.p[c], azar.randint(1, 3)) for c in sorted(elegidos)]
                 try:
-                    ventas.vender(local, items, azar.choices(medios, pesos_medio)[0], None, del_local[local],
-                                  fecha=momento)
-                    cargadas += 1
+                    venta = e.ventas.vender(local, items, azar.choices(medios, pesos_medio)[0], None,
+                                            e.del_local[local], fecha=momento)
                 except StockInsuficiente:
-                    pass            # si un producto se agotó en ese local, ese ticket no se hace
-    return cargadas
+                    continue        # si un producto se agotó en ese local, ese ticket no se hace
+                cuenta["ventas"] += 1
+                if azar.random() < DEVUELTAS:
+                    cuando = momento + timedelta(days=azar.randint(0, 3), hours=azar.randint(1, 5))
+                    a_devolver.append((cuando, venta, local, azar.choice(items)[0],
+                                       azar.choices(motivos, pesos_motivo)[0]))
+
+        # A la tarde: el CD prepara y despacha lo que se pidió hoy
+        despacho = a_la_hora(dia, HORA_DEL_DESPACHO)
+        if pedidos and despacho <= ahora:
+            estimada = a_la_hora(dia + timedelta(days=1), HORA_ESTIMADA)
+            for (_, local), bultos in preparar_y_despachar(e, pedidos, dia, estimada).items():
+                demorado = azar.random() < DEMORADOS
+                cuenta["demorados"] += demorado
+                llega = a_la_hora(dia + timedelta(days=2 if demorado else 1), time(azar.randint(9, 11), azar.randrange(60)))
+                en_camino.append((llega, local, bultos))
+
+    # Las devoluciones, en orden (solo las que ya pasaron)
+    for cuando, venta, local, producto_id, motivo in sorted(a_devolver, key=lambda d: d[0]):
+        if cuando <= ahora:
+            with a_las(cuando):
+                e.ventas.devolver(venta.id, [(producto_id, 1)], motivo, e.del_local[local])
+            cuenta["devoluciones"] += 1
+    return cuenta
+
+
+def cargar_hoy(e):
+    """Lo de este momento (con la hora real), para ver cada estado en las
+    pantallas: ventas recién hechas, dos devoluciones, un envío a Sur en camino,
+    un pedido de Sur sin preparar y uno de Norte que el CD está armando."""
+    p, u = e.p, e.u
+    centro, norte, sur = e.locales["Sucursal Centro"], e.locales["Sucursal Norte"], e.locales["Sucursal Sur"]
+    manana_al_mediodia = (datetime.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # Sur: despachado y todavía en camino (para ver un remito En tránsito)
+    pedido_sur = e.reposicion.crear_pedido(sur, [(p["BEB-002"], 25), (p["LAC-001"], 30)], u["sur"])
+    orden = e.reposicion.crear_orden([pedido_sur.id_pedido], u["cd.central"])
+    remito = e.reposicion.crear_remito(orden.id_orden, sur, u["cd.central"])
+    bulto = e.reposicion.agregar_bulto(remito.id_remito, [(p["BEB-002"], 25), (p["LAC-001"], 30)], u["cd.central"])
+    e.reposicion.precintar(bulto.id_bulto, "PS-HOY-001", u["cd.central"])
+    e.reposicion.despachar(remito.id_remito, manana_al_mediodia, u["cd.central"])
+
+    def vender(local, items, medio, entregado=None):
+        return e.ventas.vender(local, items, medio, entregado, e.del_local[local])
+
+    ventas_hechas = [
+        vender(centro, [(p["BEB-001"], 3), (p["ALM-001"], 4)], "DEBITO"),
+        vender(centro, [(p["LAC-001"], 4), (p["LAC-002"], 3)], "EFECTIVO", 20000),
+        vender(centro, [(p["ALM-002"], 2), (p["LIM-001"], 1)], "CREDITO"),
+        vender(centro, [(p["BEB-002"], 4), (p["BEB-001"], 2)], "TRANSFERENCIA"),
+        vender(centro, [(p["LAC-001"], 3)], "EFECTIVO"),
+        vender(norte, [(p["BEB-001"], 3), (p["BEB-003"], 2)], "DEBITO"),
+        vender(norte, [(p["BEB-003"], 2)], "CREDITO"),
+        vender(norte, [(p["BEB-001"], 2)], "EFECTIVO", 10000),
+    ]
+    # Devoluciones: solo de ventas registradas y de lo que se vendió
+    e.ventas.devolver(ventas_hechas[1].id, [(p["LAC-002"], 2)], "Producto vencido", u["centro"])
+    e.ventas.devolver(ventas_hechas[5].id, [(p["BEB-003"], 1)], "Envase dañado", u["norte"])
+
+    # Pedidos en curso, para ver todos los estados en Abastecimiento
+    e.reposicion.crear_pedido(sur, [(p["ALM-001"], 20), (p["LIM-001"], 10)], u["sur"])
+    pedido_en_preparacion = e.reposicion.crear_pedido(norte, [(p["LAC-001"], 30), (p["BEB-002"], 20)], u["norte"])
+    orden_en_curso = e.reposicion.crear_orden([pedido_en_preparacion.id_pedido], u["cd.central"])
+    e.reposicion.crear_remito(orden_en_curso.id_orden, norte, u["cd.central"])
+    return {"ventas": len(ventas_hechas)}
 
 
 def reiniciar():

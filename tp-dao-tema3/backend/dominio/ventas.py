@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from backend.dominio.dinero import CERO, a_dinero, aplicar_porcentaje
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
+from backend.dominio.reloj import ahora as hora_actual
 
 # Regla del negocio definida por el grupo: pasado este plazo no se aceptan devoluciones
 PLAZO_DEVOLUCION_DIAS = 30
@@ -14,7 +15,7 @@ PLAZO_DEVOLUCION_DIAS = 30
 def ahora():
     # Sin microsegundos: es la precisión con la que se guarda en la base, así
     # una venta leída de la base es igual a la que se guardó
-    return datetime.now().replace(microsecond=0)
+    return hora_actual().replace(microsecond=0)
 
 
 def _validar_cantidad(cantidad):

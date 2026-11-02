@@ -551,11 +551,6 @@ button.ficha:hover { background: var(--tarjeta); border-color: var(--borde-fuert
 .mapa-leyenda i { width: 90px; height: 10px; border-radius: 5px; display: inline-block; }
 .mapa-nota { margin-left: auto; color: var(--texto-tenue); }
 
-.leyenda-cuadrantes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 8px 16px; margin: -6px 0 18px; font-size: 0.86rem; }
-.leyenda-cuadrantes div { display: flex; flex-direction: column; padding-left: 16px; position: relative; }
-.leyenda-cuadrantes i { position: absolute; left: 0; top: 6px; width: 10px; height: 10px; border-radius: 50%; }
-.leyenda-cuadrantes span { color: var(--texto-suave); }
-.leyenda-cuadrantes .nota { grid-column: 1 / -1; font-size: 0.82rem; }
 
 /* Gráficos de los reportes (componentes/Graficos.jsx) */
 .tarjeta-grafico { margin: 0 0 18px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); padding: 16px 18px 10px; }

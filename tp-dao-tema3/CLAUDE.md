@@ -77,12 +77,12 @@ docs/                  guia_oral.md, presentacion_preliminar.md
   (solo si nunca se usó).
 
 ## Reportes (`GET /reportes/...`)
-`ventas` (período, local, medio de pago), `productos-mas-vendidos` (con margen),
-`existencias` (bajo mínimo y valorización), `mermas` (bultos rechazados),
-`tiempos-transito` (CD → local según el historial), `productos-mas-pedidos`
-(CD y admin: demanda de los locales y si alcanza el stock del CD) y
-`devoluciones` (local y admin: por producto y motivo). Todos aceptan
-`formato=pdf` para descargarlos.
+Son 5: `ventas` (período, local, medio de pago), `productos-mas-vendidos` (con
+margen), `existencias` (bajo mínimo, valorización y días sin salir),
+`productos-mas-pedidos` (CD y admin: demanda de los locales y si alcanza el
+stock del CD) y `devoluciones` (local y admin: por producto y motivo). Todos
+aceptan `formato=pdf` para descargarlos. Arriba de ellos, 3 tableros
+(`GET /tableros/ejecutivo|ventas|abastecimiento`), uno por perfil.
 
 ## Cómo se levanta (desde `tp-dao-tema3/`)
 ```powershell
@@ -167,6 +167,17 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - El gráfico de más vendidos pasa a unidades (el "top 10"); la ganancia queda en el globito y en la tabla.
 - Observer para el stock bajo: no por ahora (opcional).
 
+### Datos de prueba hasta hoy (decidido el 1/11)
+- El seed carga **90 días hasta hoy** (lo de hoy, solo hasta la hora actual; nada a futuro): ventas, **devoluciones repartidas** (~4 % de las ventas, 5 motivos) y **pedidos de reposición a lo largo del tiempo** (cada local pide cada 4 a 6 días lo que le falta para volver a su nivel; el CD consolida y despacha a la tarde y llega al otro día; ~12 % demorados y ~5 % de bultos rechazados).
+- **Reloj del dominio** (`dominio/reloj.py`): el dominio pide la hora a `ahora()` en vez de `datetime.now()`; el seed la fija en el pasado con `a_las(momento)` mientras carga. La api nunca lo toca. Descartados: un parámetro `fecha` en cada operación (ensucia el State) e INSERT directos (se saltean las reglas). La `fecha` opcional de `VentasService.vender` (paso 9c) sigue y el seed la usa para las ventas.
+
+### Paso 9e: 5 reportes y 3 tableros (decidido el 1/11)
+- Quedan **5 reportes**: Ventas, Más vendidos, Existencias, Devoluciones y Más pedidos. Se borraron Mermas y Tiempos de envío (ruta, consulta, resumen, PDF, pantalla y tests).
+- Quedan **3 tableros**, uno por perfil: Ejecutivo (admin), Ventas del local (local) y Abastecimiento (CD). Se fue Productos e inventario: su stock (parado por última salida y lo que falta reponer) pasó a Abastecimiento.
+- **Sin matriz volumen × margen** (borrada de todos lados: service, PDF, gráfico de dispersión del front y del PDF, tests): no se entendía y sobraba. **Sin "Los más vendidos" en los tableros**: su "Ver detalle" abría lo mismo que el de categorías; el ranking queda en el reporte Más vendidos, que se abre desde las categorías.
+- Abastecimiento conserva el **tiempo de reposición** (del pedido a la mercadería verificada, sale de su propia consulta y del historial del bulto) y pierde lo de mermas.
+- Quién ve qué sigue por capacidades: el admin ve los 3; el local, Ventas del local y Abastecimiento (sus pedidos y su stock); el CD, Abastecimiento.
+
 ### Paso 9d: Reportes y tableros unificados (decidido el 29/10)
 - Una sola entrada **Reportes**: arriba los 4 tableros; cada gráfico tiene "Ver detalle", que abre uno de los 7 reportes en la misma pantalla (migas + Volver, mismos filtros). Cada tablero lista además sus reportes de detalle.
 - Fusionados: el ranking de productos (va en Productos) y el stock (Existencias suma "días sin salir"). Los tableros reusan `ReportesService`.
@@ -174,7 +185,7 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 
 ### Paso 9c: tableros por perfil (decidido el 29/10, rama `feature/reportes-singleton`)
 - 4 tableros (`GET /tableros/ejecutivo|ventas|productos|abastecimiento`). Inicio sigue con la bandeja; se abre el primero que el perfil puede ver (admin Ejecutivo, local Ventas, CD Abastecimiento).
-- Capacidad nueva `ve_resultados_empresa` (solo admin) para el Ejecutivo; la matriz volumen × margen solo con `ve_ventas`; un local ve solo lo suyo.
+- Capacidad nueva `ve_resultados_empresa` (solo admin) para el Ejecutivo; un local ve solo lo suyo. (La matriz volumen × margen se borró el 1/11: paso 9e.)
 - Comparación elegible (período anterior o año anterior) con `Periodo` en `dominio/periodo.py`; variación "sin datos" si antes fue 0; margen en puntos.
 - Todos los gráficos de ventas salen de una sola consulta de líneas de venta (`dao_tableros.py`).
 - Seed con 60 días de ventas de prueba (`fecha` opcional en `VentasService.vender`, solo para el seed).

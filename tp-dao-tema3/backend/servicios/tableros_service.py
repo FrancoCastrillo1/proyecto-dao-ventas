@@ -1,18 +1,18 @@
-# Los cuatro tableros de la pantalla Reportes: Ejecutivo, Ventas del local,
-# Productos e inventario, y Abastecimiento. Cada uno junta indicadores con su
-# comparación y los datos de sus gráficos, ya calculados; cada gráfico tiene
-# un "Ver detalle" que abre uno de los 7 reportes (ReportesService).
+# Los tres tableros de la pantalla Reportes, uno por perfil: Ejecutivo
+# (administrador), Ventas del local (local) y Abastecimiento (CD). Cada uno
+# junta indicadores con su comparación y los datos de sus gráficos, ya
+# calculados; cada gráfico tiene un "Ver detalle" que abre uno de los 5
+# reportes (ReportesService).
 # Los gráficos de ventas salen de las MISMAS líneas de venta (una consulta),
 # agrupadas acá de distintas formas: así los números cierran entre sí. Lo que
-# ya calcula un reporte (más vendidos, existencias, devoluciones, mermas, más
-# pedidos) se le pide a ReportesService, no se vuelve a calcular.
+# ya calcula un reporte (más vendidos, existencias, devoluciones, más pedidos)
+# se le pide a ReportesService, no se vuelve a calcular.
 # El período y las cuentas de los indicadores son del dominio (Periodo,
 # variacion, margen...).
 # Acá NO se decide quién ve qué (eso lo controla la api con las capacidades)
 # ni se dibuja nada.
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from statistics import median
 
 from backend.dominio.excepciones import NoEncontrado
 from backend.dominio.periodo import Periodo, diferencia, margen, proporcion, variacion
@@ -100,19 +100,6 @@ def tramo_de(dias):
     if dias is None:
         return SIN_SALIDAS
     return next(nombre for limite, nombre in TRAMOS_SIN_MOVIMIENTO if limite is None or dias <= limite)
-
-
-def cuadrante(unidades, margen_producto, corte_unidades, corte_margen):
-    """Matriz volumen × margen: de qué lado de los dos cortes cae un producto."""
-    vende_mucho = unidades >= corte_unidades
-    deja_mucho = margen_producto is not None and margen_producto >= corte_margen
-    if vende_mucho and deja_mucho:
-        return "Estrellas"
-    if vende_mucho:
-        return "Mucho volumen, poco margen"
-    if deja_mucho:
-        return "Buen margen, poca venta"
-    return "A revisar"
 
 
 class TablerosService:
@@ -229,8 +216,7 @@ class TablerosService:
     # ------------------------------------------- 2. Ventas del local (admin y local)
     def ventas_local(self, desde=None, hasta=None, comparar="anterior", sucursal_id=None):
         """Cómo vende un local (o todos): tickets, ticket promedio, cuándo se
-        vende más (día y hora), qué categorías y qué se devuelve. El ranking de
-        productos está en el tablero de productos (no se repite acá)."""
+        vende más (día y hora), qué categorías y qué se devuelve."""
         self.validar_ubicacion(sucursal_id)
         periodo = Periodo.elegido(desde, hasta)
         comparado = periodo.comparado(comparar)
@@ -286,64 +272,7 @@ class TablerosService:
                           "tickets": [tickets.get((franja, dia), 0) for dia in range(7)]})
         return {"dias": DIAS_DE_LA_SEMANA, "filas": filas, "maximo": max(ventas.values(), default=CERO)}
 
-    # ---------------------------------- 3 y 4. Productos e inventario (todos)
-    def productos(self, desde=None, hasta=None, ubicacion_id=None, con_rentabilidad=True, hoy=None):
-        """Productos: el ranking de los más vendidos (con margen) y la matriz
-        volumen × margen, si quien mira ve ventas. Stock (todos): qué falta
-        reponer y cuánto está parado según su última salida; las dos cosas
-        salen del reporte de existencias, que es su detalle.
-        con_rentabilidad: lo decide la api según la capacidad ve_ventas."""
-        self.validar_ubicacion(ubicacion_id)
-        periodo = Periodo.elegido(desde, hasta)
-        hoy = hoy or date.today()
-        respuesta = {"periodo": self.describir(periodo), "matriz": None, "ranking": None}
-        indicadores = []
-        if con_rentabilidad:
-            lineas = self.lineas(periodo, ubicacion_id)
-            suma = totales(lineas)
-            respuesta["matriz"] = self.matriz(lineas)
-            respuesta["ranking"] = self.reportes.productos_mas_vendidos(
-                periodo.desde, periodo.hasta, ubicacion_id, limite=EN_EL_TABLERO + 2)["filas"]
-            indicadores += [
-                indicador("Productos con ventas", "numero", len(respuesta["matriz"]["puntos"]), None),
-                indicador("Ganancia bruta", "pesos", suma["ganancia"], None),
-                indicador("Margen bruto", "porcentaje", suma["margen"], None, en_puntos=True),
-            ]
-        existencias = self.reportes.existencias(ubicacion_id, hoy=hoy)
-        con_stock = [f for f in existencias["filas"] if f["cantidad"] > 0]
-        parado = self.sin_movimiento(con_stock, hoy)
-        mas_de_30 = [t for t in parado["tramos"] if t["tramo"] != TRAMOS_SIN_MOVIMIENTO[0][1]]
-        para_reponer = sorted((f for f in existencias["filas"] if f["bajo_minimo"]),
-                              key=lambda f: (-f["faltante"], f["nombre"]))
-        respuesta["stock"] = {"tramos": parado["tramos"], "para_reponer": para_reponer[:EN_EL_TABLERO]}
-        indicadores += [
-            indicador("Inventario valorizado", "pesos", existencias["valorizado_total"], None),
-            indicador("Productos para reponer", "numero", existencias["productos_bajo_minimo"], None),
-            indicador("Valor parado (más de 30 días)", "pesos", sum((t["valor"] for t in mas_de_30), CERO), None),
-        ]
-        respuesta["indicadores"] = indicadores
-        return respuesta
-
-    @staticmethod
-    def matriz(lineas):
-        """Cada producto vendido como un punto: unidades (x), margen % (y) y
-        ganancia (tamaño). Los cortes son la mediana de unidades y el margen de
-        todo lo vendido: separan los cuatro cuadrantes."""
-        puntos = []
-        for (producto_id, codigo, nombre), grupo in agrupar_por(
-                lineas, lambda l: (l["producto_id"], l["codigo"], l["nombre"])).items():
-            suma = totales(grupo)
-            if suma["unidades"] <= 0:
-                continue            # todo lo vendido se devolvió: no hay margen que mirar
-            puntos.append({"producto_id": producto_id, "codigo": codigo, "nombre": nombre, "unidades": suma["unidades"],
-                           "ventas": suma["ventas"], "ganancia": suma["ganancia"], "margen": suma["margen"]})
-        corte_unidades = median([p["unidades"] for p in puntos]) if puntos else 0
-        corte_margen = totales(lineas)["margen"] or 0
-        for punto in puntos:
-            punto["cuadrante"] = cuadrante(punto["unidades"], punto["margen"], corte_unidades, corte_margen)
-        return {"puntos": sorted(puntos, key=lambda p: -p["ganancia"]),
-                "corte_unidades": corte_unidades, "corte_margen": corte_margen}
-
+    # --------------------------------------------- Stock (para abastecimiento)
     @staticmethod
     def sin_movimiento(filas, hoy):
         """Cuánto stock lleva tiempo sin salir, por tramo de antigüedad de su
@@ -362,13 +291,28 @@ class TablerosService:
         filas.sort(key=lambda f: (f["dias"] is not None, -(f["dias"] or 0), -f["valorizado"]))
         return {"tramos": list(tramos.values()), "filas": filas}
 
-    # ------------------------------------------------ 5. Abastecimiento (todos)
-    def abastecimiento(self, desde=None, hasta=None, sucursal_id=None, con_demanda=False):
-        """Los pedidos de reposición del período: en qué estado está cada uno,
+    def stock(self, ubicacion_id, hoy):
+        """Qué falta reponer y cuánto stock está parado según su última salida.
+        Sale del reporte de existencias, que es su detalle."""
+        existencias = self.reportes.existencias(ubicacion_id, hoy=hoy)
+        parado = self.sin_movimiento([f for f in existencias["filas"] if f["cantidad"] > 0], hoy)
+        para_reponer = sorted((f for f in existencias["filas"] if f["bajo_minimo"]),
+                              key=lambda f: (-f["faltante"], f["nombre"]))
+        mas_de_30 = [t for t in parado["tramos"] if t["tramo"] != TRAMOS_SIN_MOVIMIENTO[0][1]]
+        return {
+            "tramos": parado["tramos"], "para_reponer": para_reponer[:EN_EL_TABLERO],
+            "productos_para_reponer": existencias["productos_bajo_minimo"],
+            "valor_parado": sum((t["valor"] for t in mas_de_30), CERO),
+        }
+
+    # ------------------------------------------------ 3. Abastecimiento (todos)
+    def abastecimiento(self, desde=None, hasta=None, sucursal_id=None, con_demanda=False, hoy=None):
+        """Los pedidos de reposición del período: en qué estado está cada uno y
         cuánto tardó cada local desde que pidió hasta que terminó de verificar
-        (recién ahí la mercadería se puede vender) y cuánto se perdió en bultos
-        rechazados. con_demanda: lo más pedido de toda la red (CD y
-        administrador; lo decide la api según ve_toda_la_red)."""
+        (recién ahí la mercadería se puede vender, según el historial de los
+        bultos). Y el stock de hoy: qué falta reponer y qué está parado.
+        con_demanda: lo más pedido de toda la red (CD y administrador; lo
+        decide la api según ve_toda_la_red)."""
         self.validar_ubicacion(sucursal_id)
         periodo = Periodo.elegido(desde, hasta)
         pedidos = self.dao.pedidos(*self.rango(periodo), sucursal_id)
@@ -391,9 +335,10 @@ class TablerosService:
         def cuantos(*estados):
             return sum(1 for p in pedidos if p["estado"] in estados)
 
-        mermas = self.reportes.mermas(periodo.desde, periodo.hasta, sucursal_id)
         demanda = (self.reportes.productos_mas_pedidos(periodo.desde, periodo.hasta, sucursal_id,
                                                        limite=EN_EL_TABLERO)["filas"] if con_demanda else None)
+        # El stock es el de hoy (no depende del período), del local elegido o de toda la red
+        stock = self.stock(sucursal_id, hoy or date.today())
         return {
             "periodo": self.describir(periodo),
             "indicadores": [
@@ -401,12 +346,13 @@ class TablerosService:
                 indicador("Sin preparar", "numero", cuantos("Pendiente"), None),
                 indicador("En preparación o en camino", "numero", cuantos("En preparación", "En camino"), None),
                 indicador("Reposición promedio", "horas", round(sum(todas) / len(todas), 2) if todas else None, None),
-                indicador("Perdido en bultos rechazados", "pesos", mermas["valor_perdido_total"], None),
+                indicador("Productos para reponer", "numero", stock["productos_para_reponer"], None),
+                indicador("Valor parado (más de 30 días)", "pesos", stock["valor_parado"], None),
             ],
             "estados": ESTADOS_PEDIDO,
             "por_estado": sorted(por_estado, key=lambda f: f["sucursal"]),
             "tiempos": sorted(tiempos, key=lambda f: -f["horas_promedio"]),
-            "mermas": mermas["por_sucursal"],
             "demanda": demanda,
             "pedidos": pedidos,
+            "stock": {"tramos": stock["tramos"], "para_reponer": stock["para_reponer"]},
         }

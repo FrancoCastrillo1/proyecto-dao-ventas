@@ -1,10 +1,11 @@
-# Endpoints de reportes (ventas por período, más vendidos, existencias, etc.).
-# Llaman a reportes_service y nada más. Quien ve toda la red (administrador y
-# CD) puede filtrar por cualquier local; un local ve solo los suyos.
+# Endpoints de los 5 reportes: ventas por período, más vendidos, existencias,
+# más pedidos y devoluciones. Llaman a reportes_service y nada más. Quien ve
+# toda la red (administrador y CD) puede filtrar por cualquier local; un local
+# ve solo los suyos.
 # Cada perfil ve los reportes que le sirven, según sus capacidades:
 #   - ventas, más vendidos y devoluciones exigen ve_ventas (el CD no vende);
 #   - más pedidos exige ve_toda_la_red (es la demanda de toda la red: CD y admin);
-#   - existencias, mermas y tiempos de envío los ve cualquiera (filtrados).
+#   - existencias la ve cualquiera (un local, solo su stock).
 # Acá NO va lógica de negocio ni acceso a la base.
 #
 # Cada reporte se pide en JSON (para la pantalla) o con formato=pdf (para
@@ -67,26 +68,6 @@ def existencias(ubicacion_id: int | None = None, solo_bajo_minimo: bool = False,
     datos = service.existencias(ubicacion, solo_bajo_minimo)
     return responder("existencias", datos, formato, usuario,
                      service.describir_filtros(ubicacion_id=ubicacion, con_fechas=False))
-
-
-@router.get("/mermas")
-def mermas(desde: date | None = DESDE, hasta: date | None = HASTA, sucursal_id: int | None = None,
-           formato: Formato = FORMATO, usuario=Depends(usuario_actual)):
-    """Bultos rechazados por precinto (rechazo logístico): qué se perdió, cuánto
-    vale a costo y la tasa de rechazo de cada sucursal."""
-    sucursal = ubicacion_para_filtrar(usuario, sucursal_id)
-    datos = service.mermas(desde, hasta, sucursal)
-    return responder("mermas", datos, formato, usuario, service.describir_filtros(desde, hasta, sucursal))
-
-
-@router.get("/tiempos-transito")
-def tiempos_transito(desde: date | None = DESDE, hasta: date | None = HASTA, sucursal_id: int | None = None,
-                     formato: Formato = FORMATO, usuario=Depends(usuario_actual)):
-    """Horas entre que un bulto sale del CD y llega al local (promedio, mínimo
-    y máximo por sucursal), calculadas con el historial de estados."""
-    sucursal = ubicacion_para_filtrar(usuario, sucursal_id)
-    datos = service.tiempos_transito(desde, hasta, sucursal)
-    return responder("tiempos-transito", datos, formato, usuario, service.describir_filtros(desde, hasta, sucursal))
 
 
 @router.get("/productos-mas-pedidos")

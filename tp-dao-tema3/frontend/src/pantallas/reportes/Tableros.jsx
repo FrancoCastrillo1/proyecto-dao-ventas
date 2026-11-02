@@ -1,5 +1,5 @@
-// Los cuatro tableros de la pantalla Reportes (/tableros/...): indicadores
-// comparados y gráficos para ver la situación de un vistazo. Cada gráfico
+// Los tres tableros de la pantalla Reportes (/tableros/...), uno por perfil:
+// indicadores comparados y gráficos para ver la situación de un vistazo. Cada gráfico
 // tiene un "Ver detalle" que abre el reporte que lo explica con su tabla
 // (Detalles.jsx); así ningún reporte queda suelto y nada se muestra dos veces.
 // Las cuentas las hace el back; acá solo se muestran.
@@ -7,7 +7,7 @@
 import { useState } from "react";
 
 import { Segmentado, Vacio } from "../../componentes/Controles.jsx";
-import { GraficoBarras, GraficoBarrasDobles, GraficoDispersion, GraficoLineas, SERIES } from "../../componentes/Graficos.jsx";
+import { GraficoBarras, GraficoBarrasDobles, GraficoLineas, SERIES } from "../../componentes/Graficos.jsx";
 import Icono from "../../componentes/Icono.jsx";
 import Indicadores, { duracion } from "../../componentes/Indicadores.jsx";
 import MapaCalor from "../../componentes/MapaCalor.jsx";
@@ -15,7 +15,7 @@ import { fecha, pesos } from "../../formato.js";
 
 // requiere: la capacidad que hace falta. comparar: se elige contra qué se
 // compara. lugar: qué filtro de lugar tiene (solo para quien ve toda la red).
-// reportes: los de detalle que cuelgan de este tablero (así cada uno de los 7
+// reportes: los de detalle que cuelgan de este tablero (así cada uno de los 5
 // se puede abrir aunque su gráfico no se dibuje, ej. con una sola barra).
 // El orden decide cuál se abre primero: el administrador cae en Ejecutivo, el
 // local en Ventas y el CD en Abastecimiento.
@@ -27,11 +27,8 @@ export const TABLEROS = [
     pregunta: "¿Cuándo se vende más, cuánto deja cada ticket y qué se devuelve?", comparar: true, lugar: "sucursal",
     reportes: ["ventas", "productos-mas-vendidos", "devoluciones"] },
   { valor: "abastecimiento", titulo: "Abastecimiento", texto: <><Icono nombre="camion" tamano={16} /> Abastecimiento</>,
-    pregunta: "¿En qué estado están los pedidos, cuánto tardan y cuánto se pierde?", lugar: "sucursal",
-    reportes: ["productos-mas-pedidos", "tiempos-transito", "mermas"] },
-  { valor: "productos", titulo: "Productos e inventario", texto: <><Icono nombre="producto" tamano={16} /> Productos e inventario</>,
-    pregunta: "¿Qué productos rinden y qué stock falta o está parado?", lugar: "ubicacion",
-    reportes: ["productos-mas-vendidos", "existencias"] },
+    pregunta: "¿En qué estado están los pedidos, cuánto tardan y qué stock falta o está parado?", lugar: "sucursal",
+    reportes: ["productos-mas-pedidos", "existencias"] },
 ];
 
 export const COMPARACIONES = { anterior: "Período anterior", anio: "Mismo período del año pasado" };
@@ -49,8 +46,7 @@ function VerDetalle({ reporte, detalle }) {
 export default function Tablero({ clave, datos, detalle, alElegirLocal }) {
   if (clave === "ejecutivo") return <TableroEjecutivo datos={datos} detalle={detalle} alElegirLocal={alElegirLocal} />;
   if (clave === "ventas") return <TableroVentas datos={datos} detalle={detalle} />;
-  if (clave === "abastecimiento") return <TableroAbastecimiento datos={datos} detalle={detalle} />;
-  return <TableroProductos datos={datos} detalle={detalle} />;
+  return <TableroAbastecimiento datos={datos} detalle={detalle} />;
 }
 
 function Tabla({ children }) {
@@ -146,43 +142,10 @@ function TableroVentas({ datos, detalle }) {
   </>);
 }
 
-// --------------------------------------------------- Productos e inventario
-// Un color por cuadrante: verde lo bueno, naranja lo que hay que revisar
-const CUADRANTES = {
-  "Estrellas": { color: "#5c9e47", texto: "venden mucho y dejan buen margen" },
-  "Mucho volumen, poco margen": { color: "#e0a83a", texto: "se venden, pero dejan poco: revisar el precio" },
-  "Buen margen, poca venta": { color: "#0082a0", texto: "dejan bien pero salen poco: darles visibilidad" },
-  "A revisar": { color: "#b4521d", texto: "venden poco y dejan poco" },
-};
-
-function TableroProductos({ datos, detalle }) {
-  const { matriz, ranking, stock } = datos;
+// ------------------------------------------------- El stock (en abastecimiento)
+// El stock de hoy (en abastecimiento): cuánto está parado y qué falta reponer
+function Stock({ stock, detalle }) {
   return (<>
-    <Indicadores indicadores={datos.indicadores} />
-    {ranking && (ranking.length === 0 ? SIN_VENTAS : (<>
-      <div className="grilla-2">
-        <GraficoBarras titulo="Los más vendidos (unidades)" formato={unidades} horizontal
-          accion={<VerDetalle reporte="productos-mas-vendidos" detalle={detalle} />}
-          datos={ranking.map((f) => ({ nombre: f.nombre, valor: f.unidades, detalle: `Ganancia ${pesos(f.margen)}` }))} />
-        <GraficoDispersion titulo="Matriz volumen × margen (tamaño: ganancia)"
-          accion={<VerDetalle reporte="productos-mas-vendidos" detalle={detalle} />}
-          puntos={matriz.puntos.map((p) => ({ ...p, x: p.unidades, y: p.margen ?? 0, tamano: Number(p.ganancia) }))}
-          corteX={matriz.corte_unidades} corteY={matriz.corte_margen} formatoY={(v) => `${v} %`}
-          colorDe={(p) => (p.margen < 0 ? "#b23a3a" : CUADRANTES[p.cuadrante].color)}
-          detalle={(p) => [`${p.codigo} · ${p.cuadrante}`, `${unidades(p.unidades)} · margen ${porcentaje(p.margen)}`, `Ganancia ${pesos(p.ganancia)}`]} />
-      </div>
-      <div className="leyenda-cuadrantes">
-        {Object.entries(CUADRANTES).map(([nombre, { color, texto }]) => (
-          <div key={nombre}>
-            <i style={{ background: color }} />
-            <strong>{nombre} ({matriz.puntos.filter((p) => p.cuadrante === nombre).length})</strong>
-            <span>{texto}</span>
-          </div>
-        ))}
-        <p className="nota">Cortes de la matriz: la mitad de los productos vende más de {Number(matriz.corte_unidades).toLocaleString("es-AR")} unidades; el margen de todo lo vendido es {porcentaje(matriz.corte_margen)}. En rojo, los que se venden a pérdida.</p>
-      </div>
-    </>))}
-
     <h2 className="titulo-seccion espacio-arriba">Stock</h2>
     <div className="grilla-2">
       <GraficoBarras titulo="Valor del stock según su última salida ($)" formato={pesos}
@@ -196,7 +159,7 @@ function TableroProductos({ datos, detalle }) {
         : <Vacio icono="listo" titulo={stock.para_reponer.length ? `Falta reponer ${stock.para_reponer[0].nombre}` : "Nada para reponer"}
             texto="Todo lo demás está por encima de su stock mínimo." />}
     </div>
-    <p className="nota">La última salida es la última venta en un local o el último despacho en el CD. El detalle (cada producto en cada lugar, con lo que falta y los días sin salir) está en "Ver detalle".</p>
+    <p className="nota">Es el stock de hoy: no depende de las fechas. La última salida es la última venta en un local o el último despacho en el CD. El detalle (cada producto en cada lugar, con lo que falta y los días sin salir) está en "Ver detalle".</p>
   </>);
 }
 
@@ -220,7 +183,6 @@ function TableroAbastecimiento({ datos, detalle }) {
     ? <Vacio icono="reloj" titulo="Todos los pedidos llegaron en menos de un minuto"
         texto="No hay diferencias entre locales para graficar. Pasa con los datos de prueba, que arman y reciben los envíos en el momento." />
     : <GraficoBarras titulo="Tiempo de reposición: del pedido a la mercadería verificada" formato={duracion} formatoEje={duracion} horizontal
-        accion={<VerDetalle reporte="tiempos-transito" detalle={detalle} />}
         datos={datos.tiempos.map((t) => ({ nombre: t.sucursal, valor: t.horas_promedio,
           detalle: `${t.pedidos} pedidos · entre ${duracion(t.horas_minimo)} y ${duracion(t.horas_maximo)}` }))} />;
   return (<>
@@ -233,20 +195,13 @@ function TableroAbastecimiento({ datos, detalle }) {
           series={estados.map((e) => ({ clave: e, nombre: e, color: COLOR_ESTADO[e] }))} />
         {tiempos}
       </div>)}
-    <div className="grilla-2">
-      {datos.mermas.length > 0 && (
-        <GraficoBarras titulo="Perdido en bultos rechazados ($)" formato={pesos} horizontal
-          accion={<VerDetalle reporte="mermas" detalle={detalle} />}
-          datos={datos.mermas.map((m) => ({ nombre: m.sucursal, valor: Number(m.valor_perdido),
-            detalle: `${m.bultos_rechazados} de ${m.bultos_verificados + m.bultos_rechazados} bultos rechazados` }))} />
-      )}
-      {datos.demanda?.length > 0 && (
-        <GraficoBarras titulo="Lo que más piden los locales (unidades)" formato={unidades} horizontal
-          accion={<VerDetalle reporte="productos-mas-pedidos" detalle={detalle} />}
-          datos={datos.demanda.map((f) => ({ nombre: f.nombre, valor: f.unidades,
-            detalle: `${f.pedidos} pedidos · en el CD hay ${f.stock_cd}${f.falta_en_cd ? ` · faltan ${f.falta_en_cd}` : ""}` }))} />
-      )}
-    </div>
+    {datos.demanda?.length > 0 && (
+      <GraficoBarras titulo="Lo que más piden los locales (unidades)" formato={unidades} horizontal
+        accion={<VerDetalle reporte="productos-mas-pedidos" detalle={detalle} />}
+        datos={datos.demanda.map((f) => ({ nombre: f.nombre, valor: f.unidades,
+          detalle: `${f.pedidos} pedidos · en el CD hay ${f.stock_cd}${f.falta_en_cd ? ` · faltan ${f.falta_en_cd}` : ""}` }))} />
+    )}
+    <Stock stock={datos.stock} detalle={detalle} />
     {datos.pedidos.length > 0 && (<>
       <h2 className="titulo-seccion espacio-arriba">Pedidos del período</h2>
       <Tabla>

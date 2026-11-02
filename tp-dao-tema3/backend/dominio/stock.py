@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 
 from backend.dominio.excepciones import DatoInvalido, StockInsuficiente
+from backend.dominio.reloj import ahora
 
 
 class TipoMovimiento(Enum):
@@ -124,7 +125,7 @@ class Stock:
 
     def _registrar(self, cantidad_con_signo, tipo, referencia, fecha=None):
         self._movimientos.append(MovimientoStock(
-            fecha or datetime.now(), cantidad_con_signo, tipo, (referencia or "").strip()
+            fecha or ahora(), cantidad_con_signo, tipo, (referencia or "").strip()
         ))
         self._cantidad += cantidad_con_signo
 

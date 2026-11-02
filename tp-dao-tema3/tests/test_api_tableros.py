@@ -70,13 +70,18 @@ def pedir(red, quien, ruta):
 @pytest.mark.parametrize("ruta, quienes_pueden", [
     ("/tableros/ejecutivo", {"admin"}),
     ("/tableros/ventas", {"admin", "a"}),
-    ("/tableros/productos", {"admin", "cd", "a"}),
     ("/tableros/abastecimiento", {"admin", "cd", "a"}),
 ])
 def test_cada_perfil_ve_sus_tableros(red, ruta, quienes_pueden):
     for quien in ("admin", "cd", "a"):
         respuesta = pedir(red, quien, ruta)
         assert respuesta.status_code == (200 if quien in quienes_pueden else 403), (quien, respuesta.text)
+
+
+@pytest.mark.parametrize("ruta", ["/tableros/productos", "/reportes/mermas", "/reportes/tiempos-transito"])
+def test_lo_que_se_saco_ya_no_existe(red, ruta):
+    # Quedaron tres tableros (uno por perfil) y cinco reportes
+    assert pedir(red, "admin", ruta).status_code == 404
 
 
 def test_el_ejecutivo_explica_quien_lo_ve(red):
@@ -89,8 +94,7 @@ def test_solo_el_administrador_aparece_con_la_capacidad(red):
 
 
 def test_un_local_no_ve_los_tableros_de_otro(red):
-    for ruta in (f"/tableros/ventas?sucursal_id={red['b']}", f"/tableros/productos?ubicacion_id={red['b']}",
-                 f"/tableros/abastecimiento?sucursal_id={red['b']}"):
+    for ruta in (f"/tableros/ventas?sucursal_id={red['b']}", f"/tableros/abastecimiento?sucursal_id={red['b']}"):
         respuesta = pedir(red, "a", ruta)
         assert respuesta.status_code == 403, ruta
         assert "no es de tu local" in respuesta.json()["detail"]
@@ -100,24 +104,21 @@ def test_un_local_ve_solo_lo_suyo_sin_pedirlo(red):
     ventas = pedir(red, "a", "/tableros/ventas").json()
     assert [c["categoria"] for c in ventas["categorias"]] == ["Categoría Tableros"]
     assert ventas["indicadores"][1]["valor"] == 1                     # un ticket: el de su local
-    ranking = pedir(red, "a", "/tableros/productos").json()["ranking"]
-    assert [f["codigo"] for f in ranking] == ["TAB-001"]
     abastecimiento = pedir(red, "a", "/tableros/abastecimiento").json()
     assert {p["sucursal"] for p in abastecimiento["pedidos"]} == {"Local Tableros A"}
     assert pedir(red, "a", "/tableros/abastecimiento").json()["demanda"] is None   # lo de toda la red, no
 
 
-def test_el_cd_ve_el_inventario_pero_no_los_margenes(red):
-    datos = pedir(red, "cd", "/tableros/productos").json()
-    assert datos["matriz"] is None and datos["ranking"] is None
+def test_el_cd_ve_el_stock_y_la_demanda_pero_no_los_margenes(red):
+    datos = pedir(red, "cd", "/tableros/abastecimiento").json()
+    assert datos["demanda"] is not None and datos["stock"]["tramos"]
+    assert "Productos para reponer" in {i["titulo"] for i in datos["indicadores"]}
     assert all("Margen" not in i["titulo"] for i in datos["indicadores"])
-    assert pedir(red, "admin", "/tableros/productos").json()["matriz"] is not None
-    assert pedir(red, "cd", "/tableros/abastecimiento").json()["demanda"] is not None
 
 
 @pytest.mark.parametrize("ruta, quien", [
     ("/tableros/ejecutivo", "admin"), ("/tableros/ventas", "a"),
-    ("/tableros/productos", "cd"), ("/tableros/abastecimiento", "a"),
+    ("/tableros/abastecimiento", "cd"), ("/tableros/abastecimiento", "a"),
 ])
 def test_cada_tablero_se_descarga_en_pdf(red, ruta, quien):
     respuesta = pedir(red, quien, f"{ruta}?formato=pdf")

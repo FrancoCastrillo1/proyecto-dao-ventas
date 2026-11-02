@@ -1,6 +1,6 @@
 // Pantalla de Reportes: arriba, los tableros (/tableros/...) para ver la
 // situación de un vistazo; cada gráfico tiene un "Ver detalle" que abre uno de
-// los 7 reportes (/reportes/...) con su resumen y su tabla, en la misma
+// los 5 reportes (/reportes/...) con su resumen y su tabla, en la misma
 // pantalla y con los mismos filtros, y "Volver" regresa al tablero.
 // Cada perfil ve lo suyo según sus capacidades: se abre el primer tablero que
 // puede ver (administrador → Ejecutivo, local → Ventas, CD → Abastecimiento) y

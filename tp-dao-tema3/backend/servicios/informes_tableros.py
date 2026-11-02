@@ -1,23 +1,21 @@
-# El contenido del PDF de cada tablero: los indicadores con su comparación y
-# TODOS sus gráficos (líneas, barras de varias series, mapa de calor,
-# dispersión), más las tablas chicas. Toma lo que ya devolvió TablerosService
+# El contenido del PDF de cada uno de los tres tableros (ejecutivo, ventas del
+# local y abastecimiento): los indicadores con su comparación y
+# TODOS sus gráficos (líneas, barras de varias series, mapa de calor), más
+# las tablas chicas. Toma lo que ya devolvió TablerosService
 # y decide qué se muestra y cómo se escribe; los colores son los de la
 # pantalla. Hay una función por tablero, elegida por su clave.
 # Acá NO se dibuja (eso es informes_pdf.py, el mismo que dibuja los reportes)
 # ni se consulta la base.
 from backend.servicios.documentos_pdf import pesos
 from backend.servicios.informes import (
-    Barras, Dispersion, Lineas, MapaDeCalor, Tabla, grafico, horas, porcentaje,
+    Barras, Lineas, MapaDeCalor, Tabla, grafico, horas, porcentaje,
 )
 
 MIEL = (201, 138, 27)
 PETROLEO = (0, 130, 160)
 GRIS = (179, 165, 143)
-ROJO = (178, 58, 58)
 COLOR_ESTADO = {"Pendiente": (180, 82, 29), "En preparación": (224, 168, 58), "En camino": (0, 130, 160),
                 "Recibido": (92, 158, 71), "Recibido con rechazos": (147, 57, 58)}
-COLOR_CUADRANTE = {"Estrellas": (92, 158, 71), "Mucho volumen, poco margen": (224, 168, 58),
-                   "Buen margen, poca venta": (0, 130, 160), "A revisar": (180, 82, 29)}
 COMPARACIONES = {"anterior": "el período anterior", "anio": "el mismo período del año pasado"}
 
 
@@ -59,6 +57,25 @@ def tarjetas_de(indicadores):
 
 def unidades(n):
     return f"{numero(n)} u."
+
+
+# ------------------------------------------------- El stock (en abastecimiento)
+def partes_del_stock(stock):
+    """El stock por antigüedad de su última salida y lo que falta reponer."""
+    graficos = (
+        grafico("Valor del stock según su última salida", stock["tramos"], lambda t: t["tramo"],
+                lambda t: t["valor"], lambda t: pesos(t["valor"]), ordenar=False),
+        grafico("Lo que más falta reponer (unidades)", stock["para_reponer"],
+                lambda f: f"{f['nombre']} ({f['ubicacion']})", lambda f: f["faltante"],
+                lambda f: unidades(f["faltante"])),
+    )
+    tabla = Tabla("Para reponer", (("Ubicación", 3, "L"), ("Producto", 5, "L"), ("Hay", 1.3, "R"),
+                                   ("Mínimo", 1.5, "R"), ("Falta", 1.3, "R")),
+                  tuple((f["ubicacion"], f["nombre"], str(f["cantidad"]), str(f["stock_minimo"]), str(f["faltante"]))
+                        for f in stock["para_reponer"]))
+    nota = ("Stock de hoy. Última salida: la última venta en un local o el último despacho en el CD. El detalle "
+            "completo está en el reporte de existencias.")
+    return graficos, (tabla,), (nota,)
 
 
 # --------------------------------------------------------------- Un tablero cada uno
@@ -130,44 +147,6 @@ def tablero_ventas(datos):
     )
 
 
-def tablero_productos(datos):
-    graficos, tablas, notas = [], [], []
-    matriz = datos["matriz"]
-    if datos["ranking"] is not None:
-        graficos.append(grafico("Los más vendidos (unidades)", datos["ranking"], lambda f: f["nombre"],
-                                lambda f: f["unidades"], lambda f: unidades(f["unidades"])))
-    if matriz and matriz["puntos"]:
-        graficos.append(Dispersion(
-            "Matriz volumen x margen (tamaño: ganancia)",
-            tuple((p["codigo"], p["unidades"], p["margen"] or 0, abs(float(p["ganancia"])),
-                   ROJO if (p["margen"] or 0) < 0 else COLOR_CUADRANTE[p["cuadrante"]]) for p in matriz["puntos"]),
-            float(matriz["corte_unidades"]), float(matriz["corte_margen"]), "Unidades vendidas", "Margen %"))
-        tablas.append(Tabla("Productos en la matriz", (("Código", 2, "L"), ("Producto", 4.5, "L"), ("Unidades", 1.7, "R"),
-                                                       ("Margen", 1.6, "R"), ("Ganancia", 2.3, "R"), ("Cuadrante", 4, "L")),
-                            tuple((p["codigo"], p["nombre"], str(p["unidades"]), porcentaje(p["margen"]),
-                                   pesos(p["ganancia"]), p["cuadrante"]) for p in matriz["puntos"])))
-        notas.append(f"Cortes de la matriz: {numero(matriz['corte_unidades'])} unidades (la mitad de los productos vende "
-                     f"más) y {porcentaje(matriz['corte_margen'])} de margen (el de todo lo vendido). Verde: estrellas; "
-                     "amarillo: mucho volumen, poco margen; azul: buen margen, poca venta; naranja: a revisar; rojo: a pérdida.")
-    stock = datos["stock"]
-    graficos.append(grafico("Valor del stock según su última salida", stock["tramos"], lambda t: t["tramo"],
-                            lambda t: t["valor"], lambda t: pesos(t["valor"]), ordenar=False))
-    graficos.append(grafico("Lo que más falta reponer (unidades)", stock["para_reponer"],
-                            lambda f: f"{f['nombre']} ({f['ubicacion']})", lambda f: f["faltante"],
-                            lambda f: unidades(f["faltante"])))
-    tablas.append(Tabla("Para reponer", (("Ubicación", 3, "L"), ("Producto", 5, "L"), ("Hay", 1.3, "R"),
-                                         ("Mínimo", 1.5, "R"), ("Falta", 1.3, "R")),
-                        tuple((f["ubicacion"], f["nombre"], str(f["cantidad"]), str(f["stock_minimo"]), str(f["faltante"]))
-                              for f in stock["para_reponer"])))
-    notas.append("Última salida: la última venta en un local o el último despacho en el CD. El detalle completo está "
-                 "en el reporte de existencias.")
-    return dict(
-        titulo="Tablero de productos e inventario", pregunta="¿Qué productos rinden y qué stock falta o está parado?",
-        tarjetas=tarjetas_de(datos["indicadores"]), grafico=None,
-        graficos=tuple(g for g in graficos if g), tablas=tuple(tablas), notas=tuple(notas),
-    )
-
-
 def tablero_abastecimiento(datos):
     estados = [e for e in datos["estados"] if any(f[e] for f in datos["por_estado"])]
     graficos = [
@@ -179,26 +158,27 @@ def tablero_abastecimiento(datos):
     if any(t["horas_promedio"] >= 1 / 60 for t in datos["tiempos"]):
         graficos.append(grafico("Tiempo de reposición: del pedido a la mercadería verificada", datos["tiempos"],
                                 lambda t: t["sucursal"], lambda t: t["horas_promedio"], lambda t: horas(t["horas_promedio"])))
-    graficos.append(grafico("Perdido en bultos rechazados", datos["mermas"], lambda m: m["sucursal"],
-                            lambda m: m["valor_perdido"], lambda m: pesos(m["valor_perdido"])))
     if datos["demanda"]:
         graficos.append(grafico("Lo que más piden los locales (unidades)", datos["demanda"], lambda f: f["nombre"],
                                 lambda f: f["unidades"], lambda f: unidades(f["unidades"])))
+    graficos_stock, tablas_stock, notas_stock = partes_del_stock(datos["stock"])
     return dict(
-        titulo="Tablero de abastecimiento", pregunta="¿En qué estado están los pedidos y cuánto tarda en llegar la mercadería?",
-        tarjetas=tarjetas_de(datos["indicadores"]), grafico=None, graficos=tuple(g for g in graficos if g),
+        titulo="Tablero de abastecimiento",
+        pregunta="¿En qué estado están los pedidos, cuánto tarda en llegar la mercadería y qué stock falta o está parado?",
+        tarjetas=tarjetas_de(datos["indicadores"]), grafico=None,
+        graficos=tuple(g for g in (*graficos, *graficos_stock) if g),
         tablas=(Tabla("Pedidos", (("Pedido", 1.3, "L"), ("Fecha", 2.6, "L"), ("Local", 3, "L"), ("Unidades", 1.6, "R"),
                                   ("Estado", 3.2, "L"), ("Tardó", 1.6, "R")),
                       tuple((f"#{p['pedido_id']}", p["fecha"][:16], p["sucursal"], str(p["unidades"]), p["estado"],
-                             horas(p["horas"])) for p in datos["pedidos"])),),
+                             horas(p["horas"])) for p in datos["pedidos"])),
+                *tablas_stock),
         notas=("Tiempo de reposición: desde que el local hace el pedido hasta que termina de verificar los bultos "
-               "(recién ahí la mercadería se puede vender).",),
+               "(recién ahí la mercadería se puede vender).", *notas_stock),
     )
 
 
 ARMADOS_TABLEROS = {
     "tablero-ejecutivo": tablero_ejecutivo,
     "tablero-ventas": tablero_ventas,
-    "tablero-productos": tablero_productos,
     "tablero-abastecimiento": tablero_abastecimiento,
 }

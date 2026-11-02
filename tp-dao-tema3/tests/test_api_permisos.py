@@ -176,7 +176,7 @@ def test_las_ventas_las_ve_el_administrador_pero_no_el_cd(red):
         respuesta = pedir(red, "cd", "GET", ruta)
         assert respuesta.status_code == 403, ruta
         assert "no ve las ventas" in respuesta.json()["detail"]
-    assert pedir(red, "cd", "GET", "/reportes/mermas").status_code == 200   # los de logística, sí
+    assert pedir(red, "cd", "GET", "/reportes/existencias").status_code == 200   # el stock, sí
 
 
 def test_un_local_no_ve_reportes_ni_caja_de_otro(red):
@@ -201,8 +201,7 @@ def test_las_devoluciones_las_ven_el_local_y_el_administrador(red, quien, permit
 
 
 @pytest.mark.parametrize("ruta", [
-    "/reportes/ventas", "/reportes/productos-mas-vendidos", "/reportes/existencias", "/reportes/mermas",
-    "/reportes/tiempos-transito", "/reportes/devoluciones",
+    "/reportes/ventas", "/reportes/productos-mas-vendidos", "/reportes/existencias", "/reportes/devoluciones",
 ])
 def test_cada_reporte_se_descarga_en_pdf(red, ruta):
     respuesta = pedir(red, "a", "GET", f"{ruta}?formato=pdf")

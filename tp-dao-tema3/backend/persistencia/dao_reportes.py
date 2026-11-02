@@ -1,5 +1,5 @@
 # DAO de reportes: consultas agregadas (SUM, GROUP BY) de solo lectura sobre
-# ventas, caja, stock y logística. Devuelve filas simples (diccionarios): un
+# ventas, caja, stock y pedidos. Devuelve filas simples (diccionarios): un
 # reporte es una vista de los datos, no una entidad del dominio.
 # Acá NO se modifica nada ni se decide nada del negocio.
 # Los montos de ventas y caja están en centavos en la base (ver dao_ventas) y
@@ -138,78 +138,7 @@ class ReporteDAO:
             fila["costo"] = a_dinero(fila["costo"])
         return filas
 
-    # ----------------------------------- 4. Bultos rechazados y mermas
-    def bultos_rechazados(self, desde=None, hasta=None, sucursal_id=None):
-        """Una fila por producto de cada bulto rechazado (merma), con la fecha
-        y el motivo del rechazo tomados del historial."""
-        condiciones, parametros = ["b.estado = 'RECHAZADO'"], []
-        filtro_fechas("h.fecha_hora", desde, hasta, condiciones, parametros)
-        if sucursal_id is not None:
-            condiciones.append("r.destino_id = ?")
-            parametros.append(sucursal_id)
-        filas = self.consultar(
-            "SELECT b.id AS bulto_id, b.nro_precinto, r.id AS remito_id, r.destino_id AS sucursal_id, "
-            "u.nombre AS sucursal, h.fecha_hora AS fecha_rechazo, h.observacion, "
-            "db.producto_id, p.codigo, p.nombre, db.cantidad, p.costo "
-            "FROM bultos b "
-            "JOIN remitos r ON r.id = b.remito_id "
-            "JOIN ubicaciones u ON u.id = r.destino_id "
-            "JOIN historial_bultos h ON h.bulto_id = b.id AND h.estado_nuevo = 'RECHAZADO' "
-            "JOIN detalles_bulto db ON db.bulto_id = b.id "
-            "JOIN productos p ON p.id = db.producto_id"
-            f"{donde(condiciones)} "
-            "ORDER BY h.fecha_hora, b.id, p.nombre",
-            parametros,
-        )
-        for fila in filas:
-            fila["valor_perdido"] = a_dinero(fila["cantidad"] * fila["costo"])
-            fila["costo"] = a_dinero(fila["costo"])
-        return filas
-
-    def bultos_verificados_y_rechazados(self, desde=None, hasta=None, sucursal_id=None):
-        """Por sucursal: cuántos bultos terminaron verificados y cuántos rechazados."""
-        condiciones, parametros = ["h.estado_nuevo IN ('VERIFICADO', 'RECHAZADO')"], []
-        filtro_fechas("h.fecha_hora", desde, hasta, condiciones, parametros)
-        if sucursal_id is not None:
-            condiciones.append("r.destino_id = ?")
-            parametros.append(sucursal_id)
-        return self.consultar(
-            "SELECT r.destino_id AS sucursal_id, u.nombre AS sucursal, "
-            "SUM(h.estado_nuevo = 'VERIFICADO') AS verificados, SUM(h.estado_nuevo = 'RECHAZADO') AS rechazados "
-            "FROM historial_bultos h "
-            "JOIN bultos b ON b.id = h.bulto_id "
-            "JOIN remitos r ON r.id = b.remito_id "
-            "JOIN ubicaciones u ON u.id = r.destino_id"
-            f"{donde(condiciones)} "
-            "GROUP BY r.destino_id ORDER BY u.nombre",
-            parametros,
-        )
-
-    # ------------------------------ 5. Tiempo de tránsito CD → locales
-    def tiempos_transito(self, desde=None, hasta=None, sucursal_id=None):
-        """Horas entre que el bulto sale del CD (EN_TRANSITO) y llega al local
-        (RECIBIDO), según el historial, promediadas por sucursal destino."""
-        condiciones, parametros = [], []
-        filtro_fechas("sale.fecha_hora", desde, hasta, condiciones, parametros)
-        if sucursal_id is not None:
-            condiciones.append("r.destino_id = ?")
-            parametros.append(sucursal_id)
-        return self.consultar(
-            "SELECT r.destino_id AS sucursal_id, u.nombre AS sucursal, COUNT(*) AS bultos, "
-            "AVG((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) AS horas_promedio, "
-            "MIN((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) AS horas_minimo, "
-            "MAX((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) AS horas_maximo "
-            "FROM bultos b "
-            "JOIN remitos r ON r.id = b.remito_id "
-            "JOIN ubicaciones u ON u.id = r.destino_id "
-            "JOIN historial_bultos sale ON sale.bulto_id = b.id AND sale.estado_nuevo = 'EN_TRANSITO' "
-            "JOIN historial_bultos llega ON llega.bulto_id = b.id AND llega.estado_nuevo = 'RECIBIDO'"
-            f"{donde(condiciones)} "
-            "GROUP BY r.destino_id ORDER BY u.nombre",
-            parametros,
-        )
-
-    # ------------------------- 6. Productos más pedidos por los locales (CD)
+    # ------------------------- 4. Productos más pedidos por los locales (CD)
     def productos_mas_pedidos(self, desde=None, hasta=None, sucursal_id=None, limite=10):
         """Unidades que pidieron los locales de cada producto (según la fecha del
         pedido), en cuántos pedidos y de cuántos locales; cuánto de eso todavía
@@ -234,7 +163,7 @@ class ReporteDAO:
             parametros + [limite],
         )
 
-    # --------------------------------- 7. Devoluciones por producto y motivo
+    # --------------------------------- 5. Devoluciones por producto y motivo
     def filtro_devoluciones(self, desde, hasta, sucursal_id):
         # Las devoluciones se cuentan en el período en que se hicieron; el local
         # es el de la venta

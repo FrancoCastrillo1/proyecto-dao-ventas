@@ -3,7 +3,7 @@
 # de cada venta, ya neta de devoluciones (como una tabla de hechos de BI). El
 # service agrupa esas mismas filas por día, hora, local, categoría o producto,
 # así todos los gráficos de ventas suman lo mismo.
-# Acá NO se decide nada del negocio (estados, cuadrantes, variaciones).
+# Acá NO se decide nada del negocio (estados, variaciones).
 # Montos de ventas en centavos en la base → Decimal; el costo de productos es REAL.
 from backend.persistencia.conexion import BaseDeDatos
 from backend.persistencia.dao_reportes import donde, filtro_fechas

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from backend.dominio.estados_bulto import ESTADOS_FINALES, Preparado
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
+from backend.dominio.reloj import ahora as hora_actual
 from backend.dominio.stock import _validar_entero
 
 
@@ -62,7 +63,7 @@ class Bulto():
     def cambiar_estado(self, nuevo_estado, observacion=""):
         # Único lugar donde cambia el estado: siempre deja un registro en el historial
         self.registros_historial.append(
-            CambioEstadoBulto(datetime.now(), self.estado, nuevo_estado.nombre, observacion)
+            CambioEstadoBulto(hora_actual(), self.estado, nuevo_estado.nombre, observacion)
         )
         self.estado_actual = nuevo_estado
 
@@ -115,7 +116,7 @@ class PedidoReposicion:
         self.local = local
         self.items = []  # Lista de DetallePedido
         self.estado = self.PENDIENTE
-        self.fecha = datetime.now()
+        self.fecha = hora_actual()
         self.orden_id = None  # orden en la que se consolidó
 
     def _validar_pendiente(self, accion):
@@ -162,7 +163,7 @@ class OrdenReposicion:
         self.origen = origen
         self.pedidos = []  # Lista de PedidoReposicion
         self.estado = self.ABIERTA
-        self.fecha = datetime.now()
+        self.fecha = hora_actual()
 
     def _validar_abierta(self, accion):
         if self.estado != self.ABIERTA:
@@ -224,7 +225,7 @@ class Remito:
         self.orden_id = orden_id  # orden de reposición de la que sale
         self.bultos = []  # Lista de Bulto
         self.estado = self.ABIERTO
-        self.fecha = datetime.now()
+        self.fecha = hora_actual()
         self.llegada_estimada = None  # día y hora en que se espera que llegue al local
 
     def _validar_abierto(self, accion):
@@ -266,7 +267,7 @@ class Remito:
         los bultos estén precintados) y cada bulto pasa a EN_TRANSITO. Se
         registra cuándo se espera que llegue (lo informa el CD al despachar).
         Se valida todo antes de cambiar algo."""
-        self.validar_llegada_estimada(llegada_estimada, ahora or datetime.now())
+        self.validar_llegada_estimada(llegada_estimada, ahora or hora_actual())
         if self.estado == self.ABIERTO:
             self.cerrar()
         if self.estado != self.CERRADO:
@@ -279,7 +280,7 @@ class Remito:
     def esta_demorado(self, ahora=None):
         """Sigue en camino y ya pasó la hora en que tenía que llegar."""
         return (self.estado == self.EN_TRANSITO and self.llegada_estimada is not None
-                and (ahora or datetime.now()) > self.llegada_estimada)
+                and (ahora or hora_actual()) > self.llegada_estimada)
 
     def registrar_verificacion(self):
         """Se llama cada vez que se verifica un bulto. Si ya no queda ninguno

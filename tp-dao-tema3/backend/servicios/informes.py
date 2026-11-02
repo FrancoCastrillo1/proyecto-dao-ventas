@@ -50,16 +50,6 @@ class MapaDeCalor:
 
 
 @dataclass(frozen=True)
-class Dispersion:
-    titulo: str
-    puntos: tuple             # (rótulo, x, y, tamaño, color)
-    corte_x: float
-    corte_y: float
-    titulo_x: str
-    titulo_y: str
-
-
-@dataclass(frozen=True)
 class Tabla:
     titulo: str
     columnas: tuple           # (título, ancho relativo, "L" o "R")
@@ -79,7 +69,7 @@ class Informe:
     nombre_archivo: str
     notas: tuple = field(default_factory=tuple)
     resumen: tuple = field(default_factory=tuple)   # las frases de servicios/resumenes.py
-    graficos: tuple = field(default_factory=tuple)  # los de los tableros (Lineas, Barras, MapaDeCalor, Dispersion, Grafico)
+    graficos: tuple = field(default_factory=tuple)  # los de los tableros (Lineas, Barras, MapaDeCalor, Grafico)
 
 
 # ------------------------------------------------------------ Cómo se escribe
@@ -163,41 +153,6 @@ def informe_existencias(datos):
     )
 
 
-def informe_mermas(datos):
-    return dict(
-        titulo="Mermas", pregunta="¿Cuántos bultos llegaron con el precinto roto y cuánto se perdió?",
-        tarjetas=(("Bultos rechazados", str(sum(s["bultos_rechazados"] for s in datos["por_sucursal"]))),
-                  ("Valor perdido", pesos(datos["valor_perdido_total"]))),
-        grafico=grafico("Valor perdido por local", datos["por_sucursal"], lambda s: s["sucursal"],
-                        lambda s: s["valor_perdido"], lambda s: pesos(s["valor_perdido"])),
-        tablas=(
-            Tabla("Por local", (("Local", 4, "L"), ("Verificados", 2, "R"), ("Rechazados", 2, "R"), ("% rechazo", 2, "R"),
-                                ("Unidades perdidas", 2.5, "R"), ("Valor perdido", 2.5, "R")),
-                  tuple((s["sucursal"], str(s["bultos_verificados"]), str(s["bultos_rechazados"]),
-                         porcentaje(s["tasa_rechazo"]), str(s["unidades_perdidas"]), pesos(s["valor_perdido"]))
-                        for s in datos["por_sucursal"])),
-            Tabla("Qué se perdió", (("Fecha", 2.2, "L"), ("Local", 3, "L"), ("Bulto", 1.3, "R"), ("Producto", 4, "L"),
-                                    ("Cant.", 1.2, "R"), ("Valor", 2.2, "R"), ("Motivo", 3.5, "L")),
-                  tuple((f["fecha_rechazo"][:16], f["sucursal"], f"#{f['bulto_id']}", f["nombre"], str(f["cantidad"]),
-                         pesos(f["valor_perdido"]), f["observacion"] or "") for f in datos["filas"])),
-        ),
-    )
-
-
-def informe_tiempos_transito(datos):
-    return dict(
-        titulo="Tiempos de envío", pregunta="¿Cuánto tarda un bulto del CD a cada local?",
-        tarjetas=(("Bultos recibidos", str(datos["bultos"])), ("Promedio general", horas(datos["horas_promedio_general"]))),
-        grafico=grafico("Tiempo promedio del CD a cada local", datos["filas"], lambda f: f["sucursal"],
-                        lambda f: f["horas_promedio"], lambda f: horas(f["horas_promedio"])),
-        tablas=(Tabla("Por local", (("Local", 4, "L"), ("Bultos", 1.5, "R"), ("Promedio", 2, "R"),
-                                    ("Más rápido", 2, "R"), ("Más lento", 2, "R")),
-                      tuple((f["sucursal"], str(f["bultos"]), horas(f["horas_promedio"]), horas(f["horas_minimo"]),
-                             horas(f["horas_maximo"])) for f in datos["filas"])),),
-        notas=("Desde que el bulto sale del CD hasta que el local lo marca como recibido, según el historial del bulto.",),
-    )
-
-
 def informe_mas_pedidos(datos):
     return dict(
         titulo="Productos más pedidos", pregunta="¿Qué piden más los locales y alcanza lo que hay en el CD?",
@@ -239,8 +194,6 @@ ARMADOS = {
     "ventas": informe_ventas,
     "productos-mas-vendidos": informe_mas_vendidos,
     "existencias": informe_existencias,
-    "mermas": informe_mermas,
-    "tiempos-transito": informe_tiempos_transito,
     "productos-mas-pedidos": informe_mas_pedidos,
     "devoluciones": informe_devoluciones,
 }

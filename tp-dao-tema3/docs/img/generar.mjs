@@ -2,6 +2,9 @@
 // en la presentación. Abre Chrome sin ventana, dibuja cada diagrama con la
 // librería de Mermaid y le saca una captura. Si un diagrama tiene un error de
 // sintaxis, lo dice y termina con error.
+// Un diagrama puede pedir el motor ELK (`"layout": "elk"` en su init), que traza
+// las líneas en ángulo recto esquivando las cajas, y con la línea `%% pdf A3`
+// también se guarda en PDF (vectorial, en una hoja A3) para entregarlo.
 //
 // Uso (desde tp-dao-tema3, con Chrome instalado y conexión a internet):
 //   node docs/img/generar.mjs
@@ -14,8 +17,11 @@ import { fileURLToPath } from "node:url";
 
 const CARPETA = dirname(fileURLToPath(import.meta.url));
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
-const MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js";
+const MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+const ELK = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.7/dist/mermaid-layout-elk.esm.min.mjs";
+const A3 = { ancho: 11.69, alto: 16.54, margen: 0.4 }; // pulgadas
 const PUERTO = 9351;
+const ESCALA_SIMPLE_DESDE = 8_000_000; // píxeles (ancho × alto) a partir de los que no se duplica
 
 // Cada bloque ```mermaid, con el título "## N. ..." que lo precede como nombre
 const markdown = readFileSync(join(CARPETA, "..", "diagramas.md"), "utf-8");
@@ -50,7 +56,8 @@ const js = async (e) => (await cdp("Runtime.evaluate", { expression: e, awaitPro
 await cdp("Page.enable");
 await cdp("Emulation.setDeviceMetricsOverride", { width: 3000, height: 2000, deviceScaleFactor: 2, mobile: false });
 const pagina = `<html><body style="margin:0;background:white;font-family:Segoe UI,sans-serif"><div id="lienzo" style="display:inline-block;padding:24px"></div>
-<script src="${MERMAID}"></script><script>mermaid.initialize({ startOnLoad: false, theme: "default", fontFamily: "Segoe UI, sans-serif" });</script></body></html>`;
+<script type="module">import mermaid from "${MERMAID}"; import elk from "${ELK}"; mermaid.registerLayoutLoaders(elk);
+mermaid.initialize({ startOnLoad: false, theme: "default", fontFamily: "Segoe UI, sans-serif" }); window.mermaid = mermaid;</script></body></html>`;
 await cdp("Page.navigate", { url: `data:text/html;charset=utf-8,${encodeURIComponent(pagina)}` });
 for (let i = 0; i < 40 && !(await js("typeof mermaid !== 'undefined'")); i++) await esperar(250);
 
@@ -68,7 +75,7 @@ for (const [i, d] of diagramas.entries()) {
       dibujo.setAttribute("width", ancho);
       dibujo.setAttribute("height", alto);
       const caja = lienzo.getBoundingClientRect();
-      return { ancho: Math.ceil(caja.width), alto: Math.ceil(caja.height) };
+      return { ancho: Math.ceil(caja.width), alto: Math.ceil(caja.height), svg: dibujo.outerHTML };
     } catch (error) { return { error: String(error.message ?? error) }; }
   })()`);
   if (resultado.error) {
@@ -76,11 +83,28 @@ for (const [i, d] of diagramas.entries()) {
     fallas++;
     continue;
   }
-  await cdp("Emulation.setDeviceMetricsOverride", { width: Math.max(resultado.ancho, 400), height: resultado.alto, deviceScaleFactor: 2, mobile: false });
+  // Al doble de resolución, salvo los muy grandes (el diagrama completo):
+  // Chrome corta la captura si pasa de cierta cantidad de píxeles
+  const escala = resultado.ancho * resultado.alto > ESCALA_SIMPLE_DESDE ? 1 : 2;
+  await cdp("Emulation.setDeviceMetricsOverride", { width: Math.max(resultado.ancho, 400), height: resultado.alto, deviceScaleFactor: escala, mobile: false });
   await esperar(300);
   const { data } = await cdp("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: resultado.ancho, height: resultado.alto, scale: 1 } });
   writeFileSync(join(CARPETA, nombreArchivo(d.titulo)), Buffer.from(data, "base64"));
-  console.log(`✓ ${nombreArchivo(d.titulo)} (${resultado.ancho}×${resultado.alto})`);
+  // También en SVG: se amplía sin perder nitidez (se abre con el navegador)
+  writeFileSync(join(CARPETA, nombreArchivo(d.titulo).replace(/\.png$/, ".svg")), resultado.svg);
+  console.log(`✓ ${nombreArchivo(d.titulo)} (${resultado.ancho}×${resultado.alto}, escala ${escala})`);
+  if (/^%% pdf A3$/m.test(d.codigo)) {
+    // La hoja se acuesta si el diagrama es más ancho que alto; se achica para que entre entero
+    const apaisada = resultado.ancho > resultado.alto;
+    const [anchoHoja, altoHoja] = apaisada ? [A3.alto, A3.ancho] : [A3.ancho, A3.alto];
+    const achique = Math.min(((anchoHoja - 2 * A3.margen) * 96) / resultado.ancho, ((altoHoja - 2 * A3.margen) * 96) / resultado.alto);
+    const { data: pdf } = await cdp("Page.printToPDF", {
+      paperWidth: anchoHoja, paperHeight: altoHoja, marginTop: A3.margen, marginBottom: A3.margen,
+      marginLeft: A3.margen, marginRight: A3.margen, scale: achique, printBackground: true, pageRanges: "1",
+    });
+    writeFileSync(join(CARPETA, nombreArchivo(d.titulo).replace(/\.png$/, ".pdf")), Buffer.from(pdf, "base64"));
+    console.log(`  y en PDF A3 ${apaisada ? "apaisado" : "vertical"}`);
+  }
 }
 ws.close();
 chrome.kill();

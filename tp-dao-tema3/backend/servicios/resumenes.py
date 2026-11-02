@@ -6,7 +6,6 @@
 # reportes_service.py), ni se dibuja nada.
 from backend.dominio.documentos import nombre_del_medio
 from backend.servicios.documentos_pdf import pesos
-from backend.servicios.informes import horas
 
 
 def parte(valor, total):
@@ -153,44 +152,10 @@ def resumen_existencias(datos):
     return frases
 
 
-def resumen_mermas(datos):
-    locales = datos["por_sucursal"]
-    if not locales:
-        return ["No hubo bultos verificados ni rechazados con estos filtros."]
-    rechazados = sum(s["bultos_rechazados"] for s in locales)
-    revisados = sum(s["bultos_verificados"] + s["bultos_rechazados"] for s in locales)
-    if not rechazados:
-        return [f"{segun(revisados, 'Se revisó', 'Se revisaron')} {plural(revisados, 'bulto', 'bultos')} "
-                "y ninguno llegó con el precinto roto: no hubo mermas."]
-    frases = [f"De {plural(revisados, 'bulto revisado', 'bultos revisados')}, {rechazados} "
-              f"{segun(rechazados, 'llegó', 'llegaron')} con el precinto roto ({parte(rechazados, revisados)}): "
-              f"se perdieron {pesos(datos['valor_perdido_total'])}."]
-    if len(locales) > 1:
-        peor = max(locales, key=lambda s: (s["valor_perdido"], s["bultos_rechazados"]))
-        frases.append(f"El local con más pérdida es {peor['sucursal']} ({pesos(peor['valor_perdido'])}).")
-    return frases
-
-
-def resumen_tiempos_transito(datos):
-    filas = datos["filas"]
-    if not filas:
-        return ["Todavía no se recibió ningún bulto con estos filtros."]
-    frases = [f"En promedio, un bulto tarda {horas(datos['horas_promedio_general'])} del CD al local "
-              f"({plural(datos['bultos'], 'bulto recibido', 'bultos recibidos')})."]
-    rapido = min(filas, key=lambda f: f["horas_promedio"])
-    lento = max(filas, key=lambda f: f["horas_promedio"])
-    if horas(rapido["horas_promedio"]) != horas(lento["horas_promedio"]):   # si tardan lo mismo, no hay qué comparar
-        frases.append(f"El más rápido es {rapido['sucursal']} ({horas(rapido['horas_promedio'])}) "
-                      f"y el más lento, {lento['sucursal']} ({horas(lento['horas_promedio'])}).")
-    return frases
-
-
 RESUMENES = {
     "ventas": resumen_ventas,
     "productos-mas-vendidos": resumen_mas_vendidos,
     "existencias": resumen_existencias,
-    "mermas": resumen_mermas,
-    "tiempos-transito": resumen_tiempos_transito,
     "productos-mas-pedidos": resumen_mas_pedidos,
     "devoluciones": resumen_devoluciones,
 }

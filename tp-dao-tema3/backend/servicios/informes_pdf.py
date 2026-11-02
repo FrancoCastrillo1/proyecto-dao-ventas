@@ -1,6 +1,6 @@
 # Dibuja el PDF de un reporte o un tablero con fpdf2: encabezado, filtros, el
 # resumen, tarjetas (con su comparación, si la hay), los gráficos (barras de
-# una o varias series, líneas, mapa de calor y dispersión) y las tablas.
+# una o varias series, líneas y mapa de calor) y las tablas.
 # Recibe un Informe ya armado (servicios/informes.py o informes_tableros.py) y
 # no sabe de qué reporte es, así sirve para todos: cada tipo de gráfico tiene
 # su función de dibujo (DIBUJOS, al final).
@@ -11,7 +11,7 @@ import math
 from fpdf import FPDF
 
 from backend.servicios.documentos_pdf import texto_seguro
-from backend.servicios.informes import Barras, Dispersion, Grafico, Lineas, MapaDeCalor
+from backend.servicios.informes import Barras, Grafico, Lineas, MapaDeCalor
 
 MARGEN = 15
 ANCHO_UTIL = 180          # A4 (210 mm) menos los márgenes
@@ -334,55 +334,6 @@ def mapa_calor(pdf, datos):
     pdf.set_xy(MARGEN, y + 9)
 
 
-def dispersion(pdf, datos):
-    """Cada punto, un círculo (más grande cuanto más vale) con su rótulo; las
-    líneas de corte punteadas separan los cuadrantes."""
-    if not datos.puntos:
-        return
-    alto, ancho_eje = 68, 16
-    hacer_lugar(pdf, 7 + alto + 14)
-    titulo_de_seccion(pdf, datos.titulo)
-    xs = [p[1] for p in datos.puntos]
-    ys = [p[2] for p in datos.puntos]
-    escala_x = marcas(0, max(xs))
-    escala_y = marcas(min(ys), max(ys))
-    x0, x1 = MARGEN + ancho_eje, MARGEN + ANCHO_UTIL - 4
-    y0 = pdf.get_y() + 2
-    x_de = lambda v: x0 + (v - escala_x[0]) / (escala_x[-1] - escala_x[0]) * (x1 - x0)   # noqa: E731
-    y_de = lambda v: y0 + alto - (v - escala_y[0]) / (escala_y[-1] - escala_y[0]) * alto  # noqa: E731
-    pdf.set_font("Helvetica", "", 6.5)
-    pdf.set_text_color(*TINTA_SUAVE)
-    pdf.set_draw_color(*GRILLA)
-    for marca in escala_y:
-        pdf.line(x0, y_de(marca), x1, y_de(marca))
-        pdf.set_xy(MARGEN, y_de(marca) - 2)
-        pdf.cell(ancho_eje - 2, 4, f"{marca:g} %".replace(".", ","), align="R")
-    for marca in escala_x:
-        pdf.line(x_de(marca), y0, x_de(marca), y0 + alto)
-        pdf.set_xy(x_de(marca) - 8, y0 + alto + 1)
-        pdf.cell(16, 4, f"{marca:g}", align="C")
-    pdf.set_draw_color(*TINTA_SUAVE)
-    pdf.set_dash_pattern(dash=1.2, gap=1)
-    pdf.line(x_de(datos.corte_x), y0, x_de(datos.corte_x), y0 + alto)
-    pdf.line(x0, y_de(datos.corte_y), x1, y_de(datos.corte_y))
-    pdf.set_dash_pattern()
-    mayor = max((p[3] for p in datos.puntos), default=0) or 1
-    for rotulo, x, y, tamano, color in sorted(datos.puntos, key=lambda p: -p[3]):
-        radio = 1.1 + 3.2 * math.sqrt(tamano / mayor)
-        pdf.set_fill_color(*color)
-        pdf.set_draw_color(255, 253, 249)
-        pdf.ellipse(x_de(x) - radio, y_de(y) - radio, 2 * radio, 2 * radio, style="DF")
-        pdf.set_font("Helvetica", "", 5.8)
-        pdf.set_text_color(*TINTA)
-        pdf.set_xy(x_de(x) + radio + 0.4, y_de(y) - 2)
-        pdf.cell(20, 4, texto_seguro(rotulo))
-    pdf.set_font("Helvetica", "", 7)
-    pdf.set_text_color(*TINTA_SUAVE)
-    pdf.set_xy(x0, y0 + alto + 5)
-    pdf.cell(x1 - x0, 4, texto_seguro(f"{datos.titulo_x} ->   (eje vertical: {datos.titulo_y})"), align="C")
-    pdf.set_xy(MARGEN, y0 + alto + 12)
-
-
 def grafico(pdf, datos):
     """Barras acostadas: el nombre a la izquierda, la barra desde el 0 y el
     valor escrito en la punta. Si hay negativos, el 0 se corre a la derecha y
@@ -469,4 +420,4 @@ def tabla(pdf, datos):
 
 
 # Cómo se dibuja cada tipo de gráfico de un informe
-DIBUJOS = {Grafico: grafico, Lineas: lineas, Barras: barras, MapaDeCalor: mapa_calor, Dispersion: dispersion}
+DIBUJOS = {Grafico: grafico, Lineas: lineas, Barras: barras, MapaDeCalor: mapa_calor}

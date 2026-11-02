@@ -10,7 +10,7 @@ import pytest
 
 from backend.dominio.excepciones import DatoInvalido, NoEncontrado
 from backend.dominio.stock import TipoMovimiento
-from backend.persistencia.conexion import crear_tablas, get_conexion
+from backend.persistencia.conexion import crear_tablas
 from backend.persistencia.dao_logistica import BultoDAO, OrdenDAO, PedidoDAO, RemitoDAO
 from backend.persistencia.dao_maestros import CategoriaDAO, ProductoDAO, UbicacionDAO
 from backend.persistencia.dao_reportes import ReporteDAO
@@ -157,51 +157,7 @@ def test_valorizacion_del_cd_a_costo(r):
     assert reporte["valorizado_total"] == Decimal("63000.00")  # 90 x 600 + 45 x 200
 
 
-# ------------------------------------- 4. Bultos rechazados y mermas
-
-def test_mermas_por_bulto_rechazado(r):
-    reporte = r.service.mermas()
-    (fila,) = reporte["filas"]
-    assert (fila["codigo"], fila["cantidad"], fila["valor_perdido"]) == ("BEB-2", 5, Decimal("1000.00"))
-    assert "Precinto" in fila["observacion"]
-    (centro,) = reporte["por_sucursal"]
-    assert (centro["bultos_verificados"], centro["bultos_rechazados"], centro["tasa_rechazo"]) == (1, 1, 50.0)
-    assert reporte["valor_perdido_total"] == Decimal("1000.00")
-
-
-# ---------------------------------- 5. Tiempo de tránsito CD → locales
-
-def test_tiempos_de_transito_cuenta_los_bultos_recibidos(r):
-    reporte = r.service.tiempos_transito()
-    (centro,) = reporte["filas"]
-    assert centro["bultos"] == 2
-    assert centro["horas_promedio"] >= 0
-
-
-def test_tiempo_promedio_con_fechas_conocidas(tmp_path):
-    # Se insertan bultos con horarios fijos para controlar la cuenta exacta
-    db = tmp_path / "test.db"
-    crear_tablas(db)
-    with get_conexion(db) as cx:
-        cx.execute("INSERT INTO ubicaciones (id, tipo, nombre, nombre_normalizado, direccion) "
-                   "VALUES (1, 'CD', 'CD', 'cd', 'x'), (2, 'SUCURSAL', 'Local', 'local', 'x')")
-        cx.execute("INSERT INTO ordenes_reposicion (id, origen_id, fecha, estado) VALUES (1, 1, '2026-10-01 08:00:00', 'CERRADA')")
-        cx.execute("INSERT INTO remitos (id, orden_id, origen_id, destino_id, fecha, estado) "
-                   "VALUES (1, 1, 1, 2, '2026-10-01 08:00:00', 'VERIFICADO')")
-        for bulto_id, sale, llega in ((1, "2026-10-01 08:00:00", "2026-10-01 12:00:00"),
-                                      (2, "2026-10-01 08:00:00", "2026-10-01 16:00:00")):
-            cx.execute("INSERT INTO bultos (id, remito_id, nro_precinto, estado) VALUES (?, 1, ?, 'VERIFICADO')",
-                       (bulto_id, f"P-{bulto_id}"))
-            cx.execute("INSERT INTO historial_bultos (bulto_id, fecha_hora, estado_anterior, estado_nuevo) "
-                       "VALUES (?, ?, 'PRECINTADO', 'EN_TRANSITO'), (?, ?, 'EN_TRANSITO', 'RECIBIDO')",
-                       (bulto_id, sale, bulto_id, llega))
-    reporte = ReportesService(ReporteDAO(db), UbicacionDAO(db)).tiempos_transito()
-    (local,) = reporte["filas"]
-    assert (local["horas_promedio"], local["horas_minimo"], local["horas_maximo"]) == (6.0, 4.0, 8.0)
-    assert reporte["horas_promedio_general"] == 6.0
-
-
-# ---------------------------- 6. Productos más pedidos por los locales (CD)
+# ---------------------------- 4. Productos más pedidos por los locales (CD)
 
 def servicios_de(db):
     stock = StockService(StockDAO(db), ProductoDAO(db), UbicacionDAO(db))
@@ -235,7 +191,7 @@ def test_mas_pedidos_filtrado_por_local_y_con_limite(r):
         r.service.productos_mas_pedidos(limite=101)
 
 
-# --------------------------------- 7. Devoluciones por producto y motivo
+# --------------------------------- 5. Devoluciones por producto y motivo
 
 def test_devoluciones_por_producto(r):
     reporte = r.service.devoluciones()
@@ -266,8 +222,6 @@ def test_devoluciones_de_otro_local_o_de_otro_periodo(r):
     ("ventas", "ventas", b"Reporte: Ventas"),
     ("productos-mas-vendidos", "productos_mas_vendidos", b"Productos m"),
     ("existencias", "existencias", b"Reporte: Existencias"),
-    ("mermas", "mermas", b"Reporte: Mermas"),
-    ("tiempos-transito", "tiempos_transito", b"Tiempos de env"),
     ("productos-mas-pedidos", "productos_mas_pedidos", b"Productos m"),
     ("devoluciones", "devoluciones", b"Reporte: Devoluciones"),
 ])
@@ -289,8 +243,8 @@ def test_el_pdf_lleva_los_filtros_y_el_grafico(r):
     assert b"Unidades pedidas por producto" in contenido   # el gráfico: hay dos productos
 
 
-@pytest.mark.parametrize("metodo", ["ventas", "productos_mas_vendidos", "existencias", "mermas",
-                                    "tiempos_transito", "productos_mas_pedidos", "devoluciones"])
+@pytest.mark.parametrize("metodo", ["ventas", "productos_mas_vendidos", "existencias", "productos_mas_pedidos",
+                                    "devoluciones"])
 def test_cada_reporte_trae_su_resumen(r, metodo):
     resumen = getattr(r.service, metodo)()["resumen"]
     assert resumen and all(isinstance(frase, str) and frase.endswith(".") for frase in resumen)
@@ -301,8 +255,7 @@ def test_el_resumen_sale_de_los_datos_reales(r):
     assert r.service.ventas()["resumen"][0] == (
         "Se hicieron 3 ventas por $ 5.650,00; descontando lo devuelto ($ 850,00), el ingreso neto fue $ 4.800,00.")
     assert "Lo que más se cobró fue con Débito (42 % del ingreso neto)." in r.service.ventas()["resumen"]
-    assert r.service.mermas()["resumen"][0] == (
-        "De 2 bultos revisados, 1 llegó con el precinto roto (50 %): se perdieron $ 1.000,00.")
+    assert r.service.devoluciones()["resumen"][0] == "Se hizo 1 devolución (1 unidad) y se reintegraron $ 850,00."
 
 
 def test_el_pdf_lleva_el_resumen(r):

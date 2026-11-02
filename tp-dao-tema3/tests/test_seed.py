@@ -3,14 +3,14 @@
 # coherente. Se corre en otro proceso porque la ruta de la base se fija al
 # importar los módulos (variable de entorno TP_DAO_DB).
 #
-# El seed tarda (carga 60 días de ventas de prueba): se corre UNA vez por
+# El seed tarda (carga 90 días de operación de prueba): se corre UNA vez por
 # módulo (fixture "sembrada") y solo el test de --reiniciar lo vuelve a correr.
 import os
 import re
 import subprocess
 import sys
 from contextlib import closing
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -49,25 +49,50 @@ def sembrada(tmp_path_factory):
 def test_el_seed_carga_el_escenario_completo(sembrada):
     db, _, historial = sembrada
     assert len(ProductoDAO(db).listar()) == 10
-    estados = sorted(r.estado for r in RemitoDAO(db).listar())
-    # el de Centro, el envío grande a los tres locales, el de Norte con un
-    # rechazo, el de Sur en camino y el que el CD está armando para Norte
-    assert estados == ["ABIERTO", "EN_TRANSITO"] + ["VERIFICADO"] * 4 + ["VERIFICADO_CON_RECHAZOS"]
+    estados = [r.estado for r in RemitoDAO(db).listar()]
+    # los envíos de todo el historial, el de Norte con un bulto roto, el de Sur
+    # en camino y el que el CD está armando para Norte (los de hoy)
+    assert estados.count("VERIFICADO") > 30
+    assert {"ABIERTO", "EN_TRANSITO", "VERIFICADO_CON_RECHAZOS"} <= set(estados)
     ventas = VentaDAO(db).listar()
     assert len(ventas) == 8 + historial
-    assert sum(1 for v in ventas if v.fecha.date() == date.today()) == 8     # el historial termina ayer
+    assert sum(1 for v in ventas if v.fecha.date() == date.today()) >= 8     # el historial llega hasta hoy
     reportes = ReportesService(ReporteDAO(db))
-    assert reportes.mermas()["filas"]                                   # hay un bulto rechazado
     margenes = {f["codigo"]: f["margen"] for f in reportes.productos_mas_vendidos(limite=20)["filas"]}
     assert margenes["LAC-002"] < 0                                      # el producto en promo pierde plata
 
 
 def test_el_historial_alcanza_para_los_tableros(sembrada):
     db, _, historial = sembrada
-    assert historial > 300
+    assert historial > 600
     ventas = VentaDAO(db).listar()
     assert len({v.fecha.hour for v in ventas}) >= 10                   # a distintas horas: hay mapa de calor
-    assert len({v.fecha.date() for v in ventas}) > 50                  # casi todos los días de los 60
+    assert len({v.fecha.date() for v in ventas}) > 80                  # casi todos los días de los 90
+
+
+def test_nada_queda_con_fecha_futura(sembrada):
+    db, _, _ = sembrada
+    ahora = datetime.now().isoformat(sep=" ")
+    with closing(get_conexion(db)) as cx:
+        for tabla, columna in (("ventas", "fecha"), ("devoluciones", "fecha"), ("pedidos_reposicion", "fecha"),
+                               ("remitos", "fecha"), ("historial_bultos", "fecha_hora"),
+                               ("movimientos_stock", "fecha"), ("movimientos_caja", "fecha")):
+            assert cx.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {columna} > ?", (ahora,)).fetchone()[0] == 0, tabla
+
+
+def test_hay_devoluciones_y_pedidos_a_lo_largo_del_historial(sembrada):
+    db, _, _ = sembrada
+    with closing(get_conexion(db)) as cx:
+        devoluciones = cx.execute("SELECT COUNT(*), COUNT(DISTINCT motivo) FROM devoluciones").fetchone()
+        assert devoluciones[0] > 20 and devoluciones[1] >= 3              # varias, por distintos motivos
+        dias_con_pedidos = cx.execute("SELECT COUNT(DISTINCT substr(fecha, 1, 10)) FROM pedidos_reposicion").fetchone()[0]
+        assert dias_con_pedidos > 20                                    # cada local pide cada pocos días
+        # Del despacho a la recepción pasan horas (no se recibe en el acto)
+        horas = cx.execute(
+            "SELECT AVG((julianday(llega.fecha_hora) - julianday(sale.fecha_hora)) * 24) FROM historial_bultos sale "
+            "JOIN historial_bultos llega ON llega.bulto_id = sale.bulto_id AND llega.estado_nuevo = 'RECIBIDO' "
+            "WHERE sale.estado_nuevo = 'EN_TRANSITO'").fetchone()[0]
+        assert horas > 6
 
 
 def test_correr_el_seed_dos_veces_no_duplica(sembrada):

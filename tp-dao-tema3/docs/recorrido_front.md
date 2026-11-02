@@ -252,7 +252,7 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 - [ check] **8.6 Hacé:** Stock → *Sucursal Norte* → Lavandina → "Ver movimientos".
   **Debería:** aparecer **solo** la recepción del bulto bueno (6 o 4). La del rechazado **no entró**. (solo aparece el que entro el que fue rechazado ni aparece)
 - [check ] **8.7 Hacé:** Reportes → "Mermas".
-  **Debería:** aparecer el bulto rechazado en "Qué se perdió", con su valor.
+  **Debería:** aparecer el bulto rechazado en "Qué se perdió", con su valor. (Desde el 1/11 ese reporte no existe: el bulto rechazado se ve en Abastecimiento, con el pedido "Recibido con rechazos".)
 
 ## 9. Ventas, cobro, comprobante y devoluciones (Operación → Vender)
 
@@ -316,7 +316,9 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 > Como `admin` o `cd.central` se ve toda la red; como un local, solo lo tuyo (no aparece el filtro de local).
 >
-> **Desde el 29/10 los reportes no son pestañas:** Reportes abre con los tableros (sección 11b) y cada reporte se abre con "Ver detalle" de un gráfico o con la fila "Reportes de detalle" del tablero. Donde abajo dice "pestaña X", abrí ese reporte así (Ventas y Más vendidos desde Ventas del local; Devoluciones desde Ventas del local; Más pedidos, Mermas y Tiempos desde Abastecimiento; Existencias desde Productos e inventario).
+> **Desde el 29/10 los reportes no son pestañas:** Reportes abre con los tableros (sección 11b) y cada reporte se abre con "Ver detalle" de un gráfico o con la fila "Reportes de detalle" del tablero. Donde abajo dice "pestaña X", abrí ese reporte así (Ventas, Más vendidos y Devoluciones desde Ventas del local; Más pedidos y Existencias desde Abastecimiento).
+>
+> **Desde el 1/11 son 5 reportes y 3 tableros:** se fueron Mermas, Tiempos de envío y el tablero Productos e inventario (ver 11b.5 a 11b.8).
 
 - [ S] **11.1 Hacé:** recorré las 5 pestañas.
   **Debería:** cambiar el subtítulo con la pregunta que responde cada reporte, y verse tarjetas con totales y una tabla.
@@ -326,8 +328,8 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
   **Debería:** aparecer "No hay datos para estos filtros" y el botón "Limpiar filtros".
 - [S ] **11.4 Hacé:** "🏆 Más vendidos".
   **Debería:** verse el gráfico de unidades vendidas por producto (el ranking) y, en la tabla, el yogur con la ganancia en rojo. (Cambió el 28/10: antes el gráfico era de ganancia.)
-- [ ] **11.6 Hacé:** recorré las 7 pestañas como `admin` y pasá el mouse por las barras de cada gráfico.
-  **Debería:** arriba de cada tabla, un gráfico de barras: ingreso neto por día (con "Todo junto", por medio de pago), unidades vendidas por producto (en el globito, la ganancia), unidades devueltas, unidades pedidas, inventario por ubicación, valor perdido por local y tiempo promedio de envío. Al pasar el mouse aparece un globito con el valor exacto. (Nuevo el 26/10.)
+- [ ] **11.6 Hacé:** recorré los 5 reportes como `admin` y pasá el mouse por las barras de cada gráfico.
+  **Debería:** arriba de cada tabla, un gráfico de barras: ingreso neto por día (con "Todo junto", por medio de pago), unidades vendidas por producto (en el globito, la ganancia), unidades devueltas, unidades pedidas e inventario por ubicación. Al pasar el mouse aparece un globito con el valor exacto. (Nuevo el 26/10.)
 - [ ] **11.7 Hacé:** lo mismo como `norte`.
   **Debería:** ver solo los gráficos que comparan más de una cosa (por ejemplo "Más vendidos"); donde hay un solo dato (su local) alcanza con la tarjeta y no aparece gráfico.
 - [ ] **11.8 Hacé:** entrá como `cd.central` → Reportes. (Nuevo el 28/10.)
@@ -345,7 +347,7 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 
 ### 11b. Tableros y "Ver detalle" (con el seed recién cargado: `seed --reiniciar`)
 - [ ] **11b.0 Hacé:** en el Ejecutivo, tocá "Ver detalle" del gráfico de ventas; después "← Volver al tablero". Probá también "Descargar PDF" en el tablero y en el detalle.
-  **Debería:** abrir el reporte Ventas con "Reportes › Ejecutivo › Ventas" arriba y las mismas fechas; Volver regresa al tablero. El PDF del tablero trae todos los gráficos (líneas, barras, mapa de calor o matriz); el del detalle, su tabla.
+  **Debería:** abrir el reporte Ventas con "Reportes › Ejecutivo › Ventas" arriba y las mismas fechas; Volver regresa al tablero. El PDF del tablero trae todos los gráficos (líneas, barras o mapa de calor); el del detalle, su tabla.
 - [ ] **11b.1 Hacé:** como `admin` → Reportes.
   **Debería:** abrir en "Ejecutivo" con los últimos 30 días: cuatro tarjetas con su variación (flecha verde si subió, naranja si bajó), la línea de ventas con el período anterior punteado, el ranking de locales y las categorías.
 - [ ] **11b.2 Hacé:** cambiá "Comparar con" a "Mismo período del año pasado".
@@ -355,9 +357,13 @@ La pantalla es un tablero con 4 columnas, en el orden en que viaja la mercaderí
 - [ ] **11b.4 Hacé:** en "Ventas del local", alterná "En pesos" / "En unidades" y pasá el mouse por el mapa de calor.
   **Debería:** la línea cambia de medida; cada celda dice el día, la franja, la plata y los tickets.
 - [ ] **11b.5 Hacé:** como `cd.central` → Reportes.
-  **Debería:** abrir en "Abastecimiento" y ver solo ese y "Productos e inventario"; en este último, sin ranking ni matriz de márgenes (solo el stock). Sus detalles: Más pedidos, Tiempos de envío, Mermas y Existencias (nada de ventas).
-- [ ] **11b.6 Hacé:** como `centro` → Reportes → "Productos e inventario" → "Ver detalle" del stock.
+  **Debería:** abrir en "Abastecimiento" y ver solo ese tablero: pedidos por estado, tiempo de reposición, lo más pedido y, abajo, "Stock" (valor parado por última salida y lo que falta reponer). Sus detalles: Más pedidos y Existencias (nada de ventas). (Cambió el 1/11.)
+- [ ] **11b.6 Hacé:** como `centro` → Reportes → "Abastecimiento" → "Ver detalle" del stock.
   **Debería:** abrir primero en "Ventas del local" (sin "Ejecutivo"); el detalle es Existencias de Sucursal Centro, con la columna "Días sin salir" (el Aceite, unos 40 días, en naranja).
+- [ ] **11b.7 Hacé:** como `admin` → Ejecutivo, bajá hasta el final.
+  **Debería:** terminar en las categorías (gráfico y tabla): ya no hay sección "Productos", ni matriz volumen × margen, ni "Los más vendidos". (Cambió el 1/11.)
+- [ ] **11b.8 Hacé:** como `centro` → Ventas del local.
+  **Debería:** "Ventas netas por categoría" al lado de "Lo que más se devuelve", cada uno con su "Ver detalle" (Más vendidos y Devoluciones). Ya no hay tablero "Productos e inventario" ni reportes de Mermas o Tiempos de envío.
 - [S ] **11.5 Hacé:** "📦 Existencias" con "Solo lo que falta reponer".
   **Debería:** aparecer los faltantes de los locales, con la columna "Falta".
 
