@@ -185,6 +185,12 @@ class BultoDAO(DAOBase):
             filas = cx.execute("SELECT * FROM bultos WHERE remito_id = ? ORDER BY id", (remito_id,)).fetchall()
             return [self._a_objeto(cx, f) for f in filas]
 
+    def listar_por_estado(self, estado, cx=None):
+        # Ej: los RECHAZADO son los bultos en merma que el CD tiene que revisar
+        with self._conn(cx) as cx:
+            filas = cx.execute("SELECT * FROM bultos WHERE estado = ? ORDER BY id", (estado,)).fetchall()
+            return [self._a_objeto(cx, f) for f in filas]
+
     def obtener_por_precinto(self, nro_precinto, cx=None):
         with self._conn(cx) as cx:
             fila = cx.execute("SELECT * FROM bultos WHERE nro_precinto = ?", (nro_precinto,)).fetchone()

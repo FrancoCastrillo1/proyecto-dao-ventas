@@ -5,8 +5,8 @@
 # Regla de la consigna: el stock no queda disponible en la sucursal hasta que
 # "el remito y el contenedor" estén verificados. Por eso el stock se suma recién
 # cuando se termina de verificar el ÚLTIMO bulto del remito, y solo el de los
-# bultos verificados (habilita_venta). Los rechazados quedan como merma: su
-# mercadería ya salió del CD al despachar y no entra al local.
+# bultos verificados (habilita_venta). Los rechazados vuelven al CD como merma
+# (su mercadería no entra al local) y el CD los revisa en merma_service.py.
 from backend.dominio.excepciones import NoEncontrado
 from backend.dominio.stock import TipoMovimiento
 from backend.persistencia.dao_logistica import BultoDAO, RemitoDAO

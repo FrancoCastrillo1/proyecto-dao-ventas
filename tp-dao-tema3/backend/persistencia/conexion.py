@@ -101,6 +101,26 @@ def columnas_de(cx, tabla):
 
 TRIGGERS_DE_USUARIOS = ["usuarios_perfil_segun_ubicacion_alta", "usuarios_perfil_segun_ubicacion_cambio"]
 
+# Tablas cuyo CHECK se amplió con los bultos en merma (estados REINTEGRADO y
+# DESCARTADO, movimiento REINTEGRO). Para cada una: el valor nuevo que tiene
+# que aceptar y los triggers e índices que se mudan con ella al renombrarla
+# (se borran y el esquema los vuelve a crear sobre la tabla nueva).
+TABLAS_CON_CHECK_AMPLIADO = {
+    "bultos": ("REINTEGRADO", [], []),
+    "movimientos_stock": ("REINTEGRO", ["movimientos_stock_no_se_modifican", "movimientos_stock_no_se_borran"],
+                          ["movimientos_stock_por_stock"]),
+}
+
+
+def sql_de(cx, tabla):
+    fila = cx.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (tabla,)).fetchone()
+    return fila["sql"] if fila else ""
+
+
+def tablas_para_ampliar(cx):
+    return [tabla for tabla, (valor, _, _) in TABLAS_CON_CHECK_AMPLIADO.items()
+            if sql_de(cx, tabla) and valor not in sql_de(cx, tabla)]
+
 
 def migrar(cx):
     # La tabla usuarios de antes del login no admitía administradores (sin
@@ -115,6 +135,21 @@ def migrar(cx):
         cx.execute("ALTER TABLE usuarios RENAME TO usuarios_anterior")
         for trigger in TRIGGERS_DE_USUARIOS:          # se mudaron con la tabla; el esquema los recrea
             cx.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+    # Mismo truco para los CHECK de bultos y movimientos_stock: se aparta la
+    # tabla vieja, el esquema crea la nueva y completar_migracion copia todo
+    # con los mismos id (el historial y los detalles siguen apuntando bien)
+    ampliar = tablas_para_ampliar(cx)
+    if ampliar:
+        cx.execute("PRAGMA foreign_keys = OFF")
+        cx.execute("PRAGMA legacy_alter_table = ON")
+    for tabla in ampliar:
+        _, triggers, indices = TABLAS_CON_CHECK_AMPLIADO[tabla]
+        cx.execute(f"ALTER TABLE {tabla} RENAME TO {tabla}_anterior")
+        for trigger in triggers:
+            cx.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+        for indice in indices:
+            cx.execute(f"DROP INDEX IF EXISTS {indice}")
 
     for tabla in TABLAS_CON_USUARIO:
         columnas = columnas_de(cx, tabla)
@@ -174,5 +209,17 @@ def completar_migracion(cx):
             "SELECT id, perfil, nombre_usuario, nombre_completo, ubicacion_id, activo FROM usuarios_anterior"
         )
         cx.execute("DROP TABLE usuarios_anterior")
+        cx.commit()
+        cx.execute("PRAGMA foreign_keys = ON")
+
+    # Segunda mitad de la ampliación de los CHECK: se copian las filas tal cual
+    copiadas = False
+    for tabla in TABLAS_CON_CHECK_AMPLIADO:
+        if columnas_de(cx, f"{tabla}_anterior"):
+            columnas = ", ".join(columnas_de(cx, f"{tabla}_anterior"))
+            cx.execute(f"INSERT INTO {tabla} ({columnas}) SELECT {columnas} FROM {tabla}_anterior")
+            cx.execute(f"DROP TABLE {tabla}_anterior")
+            copiadas = True
+    if copiadas:
         cx.commit()
         cx.execute("PRAGMA foreign_keys = ON")

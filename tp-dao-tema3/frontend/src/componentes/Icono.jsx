@@ -4,8 +4,8 @@
 // Acá NO va lógica de ninguna entidad.
 import {
   ArrowLeft, ArrowRight, BadgeCheck, ChartColumn, Circle, CircleCheck, ClipboardList, Download, Handshake, House, LayoutDashboard, Lightbulb,
-  Lock, LogOut, Minus, Package, PackageOpen, PartyPopper, Plug, Receipt, Search, ShieldCheck, ShoppingBasket,
-  ShoppingCart, Sparkles, Sprout, Store, Tag, Timer, TrendingDown, TrendingUp, TriangleAlert, Trophy, Truck, Undo2,
+  Lock, LogOut, Minus, Package, PackageOpen, PackageX, PartyPopper, Plug, Receipt, Search, ShieldCheck, ShoppingBasket,
+  ShoppingCart, Sparkles, Sprout, Star, Store, Tag, Timer, Trash2, TrendingDown, TrendingUp, TriangleAlert, Trophy, Truck, Undo2,
   User, Wallet, Warehouse,
 } from "lucide-react";
 
@@ -14,6 +14,7 @@ const ICONOS = {
   carrito: ShoppingCart,
   camion: Truck,
   caja: Package,
+  estrella: Star,
   grafico: ChartColumn,
   producto: ShoppingBasket,
   etiqueta: Tag,
@@ -40,6 +41,8 @@ const ICONOS = {
   trofeo: Trophy,
   reloj: Timer,
   devolucion: Undo2,
+  merma: PackageX,
+  tirar: Trash2,
   idea: Lightbulb,
   tablero: LayoutDashboard,
   sube: TrendingUp,

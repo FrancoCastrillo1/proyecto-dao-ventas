@@ -6,6 +6,8 @@
 // inválida. Despachar y verificar no se pueden deshacer: piden confirmación.
 // Cada usuario ve los botones de lo que puede hacer: el local pide y recibe
 // (solo lo suyo, lo filtra el back); el CD prepara, arma, precinta y despacha.
+// Si un bulto llega con el precinto roto, vuelve al CD como merma: eso se
+// revisa en su propia pantalla (Mermas.jsx), no acá.
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
@@ -16,7 +18,7 @@ import Cajon from "../componentes/Cajon.jsx";
 import { useCatalogos } from "../componentes/Catalogos.js";
 import { Confirmacion, useConfirmacion } from "../componentes/Confirmacion.jsx";
 import { Cargando } from "../componentes/Controles.jsx";
-import Estado, { PasosBulto } from "../componentes/Estado.jsx";
+import Estado, { ESTADOS_MERMA, PasosBulto } from "../componentes/Estado.jsx";
 import { puede } from "../componentes/Permisos.js";
 import LineasProductos, { aItems, LINEA_VACIA } from "../componentes/LineasProductos.jsx";
 import { fecha } from "../formato.js";
@@ -148,7 +150,7 @@ export default function Logistica({ usuario, parametros }) {
           <div className="columna">
             <div className="columna-titulo"><Icono nombre="camion" tamano={17} /> En camino <span className="contador">{enCamino.length}</span></div>
             {enCamino.map((r) => {
-              const listos = r.bultos.filter((b) => ["VERIFICADO", "RECHAZADO"].includes(b.estado)).length;
+              const listos = r.bultos.filter((b) => b.estado === "VERIFICADO" || ESTADOS_MERMA.includes(b.estado)).length;
               const llegada = r.llegada_estimada ? `llega ${fecha(r.llegada_estimada)}` : "sin llegada estimada";
               return (
                 <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
@@ -163,7 +165,7 @@ export default function Logistica({ usuario, parametros }) {
           <div className="columna">
             <div className="columna-titulo"><Icono nombre="listo" tamano={17} /> Entregados <span className="contador">{entregados.length}</span></div>
             {(verTodosEntregados ? entregados : entregados.slice(0, 4)).map((r) => {
-              const rechazados = r.bultos.filter((b) => b.estado === "RECHAZADO").length;
+              const rechazados = r.bultos.filter((b) => ESTADOS_MERMA.includes(b.estado)).length;
               return (
                 <FichaRemito key={r.id} remito={r} catalogos={catalogos} alAbrir={() => setRemitoAbierto(r)}
                   accion="Ver detalle" detalle={rechazados ? `⚠ ${rechazados} bulto${rechazados === 1 ? "" : "s"} rechazado${rechazados === 1 ? "" : "s"}` : "Todo llegó bien"} />
@@ -374,14 +376,14 @@ function Bulto({ bulto, catalogos, accion, confirmacion, permisos }) {
       peligro: !sano,
       detalle: (<>
         <p>Precinto leído: <code>{leido.trim()}</code> · ¿Llegó sano?: <strong>{sano ? "Sí" : "No"}</strong></p>
-        <p>Si el número no es el que se puso en el CD o el precinto no llegó sano, el bulto queda <strong>Rechazado</strong> y
-          su mercadería no se vende. <strong>No se puede deshacer.</strong></p>
+        <p>Si el número no es el que se puso en el CD o el precinto no llegó sano, el bulto queda <strong>Rechazado</strong>:
+          no entra a tu stock y vuelve al CD como merma. <strong>No se puede deshacer.</strong></p>
       </>),
     // El mensaje anticipa lo que va a decidir el back (el State), solo para avisar bien
     }, () => accion(() => api.crear(`/bultos/${bulto.id}/verificar`, { nro_leido: leido, intacto: sano }),
       sano && leido.trim() === bulto.nro_precinto
         ? "Bulto verificado: su mercadería entra al local cuando se revisen todos los bultos del envío"
-        : "Bulto rechazado: su mercadería no entra al local (queda como merma)"));
+        : "Bulto rechazado: no entra al local y vuelve al CD como merma"));
   }
 
   return (
@@ -429,6 +431,10 @@ function Bulto({ bulto, catalogos, accion, confirmacion, permisos }) {
         </div>
       )}
 
+      {bulto.estado === "RECHAZADO" && (
+        <p className="nota nota-merma"><Icono nombre="merma" tamano={15} /> Volvió al CD como merma: el CD lo revisa en Mermas y decide si vuelve al stock o se tira.</p>
+      )}
+
       {verHistorial && (
         <ol className="historial">
           {bulto.historial.map((h, i) => (
@@ -441,3 +447,4 @@ function Bulto({ bulto, catalogos, accion, confirmacion, permisos }) {
     </div>
   );
 }
+

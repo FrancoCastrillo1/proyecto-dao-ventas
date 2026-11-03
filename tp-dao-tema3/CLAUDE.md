@@ -68,7 +68,7 @@ docs/                  guia_oral.md, presentacion_preliminar.md
 - **Ingreso al local:** cuando se termina de verificar el remito completo, solo
   de los bultos con `habilita_venta()` (el PDF del grupo decía bulto por bulto;
   se cambia en un método de `recepcion_service.py`).
-- **Bulto rechazado:** merma, no vuelve al CD (provisorio).
+- **Bulto rechazado:** vuelve directo al CD como merma; el CD lo revisa y lo reintegra o lo descarta (ver "Bultos en merma").
 - **Remito:** ABIERTO, CERRADO, EN_TRANSITO, VERIFICADO, VERIFICADO_CON_RECHAZOS
   (constantes: su ciclo es lineal).
 - **Logística:** no se manda más de lo pedido, precinto único, un remito por
@@ -214,3 +214,12 @@ cd frontend; npm install; npm run dev                        # http://localhost:
 - Íconos con `lucide-react`, pedidos por nombre en castellano a un solo componente (`componentes/Icono.jsx`); sin emojis en la interfaz.
 - Fuente Nunito Sans incluida con `@fontsource-variable/nunito-sans` (funciona sin internet).
 - Login en dos mitades (qué es el sistema + formulario) con los usuarios de prueba del seed a un clic. El usuario y "Salir" van abajo del menú lateral.
+
+### Bultos en merma (decidido el 3/11)
+- El bulto rechazado (precinto roto o que no coincide) **vuelve directo al CD como merma**, sin estados de viaje: `RECHAZADO` es "en merma, falta revisar". Automático al rechazar; el local no hace nada más.
+- **State:** `Rechazado` suma `reintegrar()` y `descartar()` → estados nuevos `REINTEGRADO` y `DESCARTADO` (finales). Se decide por el **bulto entero** y el CD tiene que escribir en qué estado llegó la mercadería (queda en el historial).
+- **Reintegrar:** movimiento nuevo `REINTEGRO`, solo válido en el CD, con la referencia del remito y el bulto. **Descartar** no mueve stock (ya salió al despachar).
+- El remito se da por verificado cuando el local revisó todos sus bultos (`ESTADOS_REVISADOS_POR_EL_LOCAL`), aunque el CD todavía no haya revisado la merma.
+- Api: `GET /mermas`, `POST /mermas/{id}/reintegrar|descartar` (capacidad `puede_preparar_envios`). Bandeja del CD: "Revisar N bultos en merma". Front: **pantalla propia "Mermas"** en el menú de Operación (solo con `puede_preparar_envios`), separada de Envíos.
+- Migración: se rehacen `bultos` y `movimientos_stock` para ampliar sus CHECK (con sus triggers e índice).
+- Descartados: estados de viaje de vuelta (`EN_DEVOLUCION`), entidad Merma aparte, decidir producto por producto y usar `AJUSTE`.

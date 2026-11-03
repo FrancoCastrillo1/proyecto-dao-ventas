@@ -19,7 +19,7 @@ function hoy() {
 }
 
 const ICONOS_TAREA = {
-  pedidos: "pedido", armar: "caja", precintar: "precinto", despachar: "camion", recibir: "recibir", verificar: "verificar", reponer: "carrito",
+  pedidos: "pedido", armar: "caja", precintar: "precinto", despachar: "camion", recibir: "recibir", verificar: "verificar", reponer: "carrito", merma: "merma",
 };
 
 export default function Inicio({ irA, puedeIr, usuario }) {

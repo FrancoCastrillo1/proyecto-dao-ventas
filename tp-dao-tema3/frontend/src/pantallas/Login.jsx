@@ -5,6 +5,7 @@
 import { useState } from "react";
 
 import { api } from "../api.js";
+import Estacion from "../componentes/Estacion.jsx";
 import Icono from "../componentes/Icono.jsx";
 
 // Los usuarios que carga el seed (backend/datos/seed.py), para que quien corrige
@@ -47,12 +48,23 @@ export default function Login({ alEntrar, motivo }) {
   return (
     <main className="pantalla-login">
       <section className="login-presentacion">
-        <div className="marca">
-          <span className="marca-logo"><Icono nombre="caja" tamano={20} /></span>
-          <div><strong>Ventas e Inventario</strong><span>TP DAO · Tema 3</span></div>
+        {/* Estrellitas de fondo: solo decoración */}
+        <div className="cielo" aria-hidden="true">
+          {[...Array(14)].map((_, i) => <span key={i} className={`destello d${i}`} />)}
+          <Estacion className="estacion" />
         </div>
+
+        <div className="emblema">
+          <span className="emblema-estrella"><Icono nombre="estrella" tamano={34} /></span>
+          <div className="emblema-texto">
+            <span className="emblema-pre">La Estrella</span>
+            <h1 className="emblema-nombre">de la Mercadería</h1>
+            <span className="emblema-sub">Ventas e Inventario · TP DAO Tema 3</span>
+          </div>
+        </div>
+
         <div className="login-lema">
-          <h2>La mercadería de tu red de locales, de punta a punta.</h2>
+          <h2>Tu red de locales, de punta a punta.</h2>
           <ul>
             <li><Icono nombre="cd" /> <span><strong>El Centro de Distribución</strong> compra y arma los envíos.</span></li>
             <li><Icono nombre="precinto" /> <span><strong>Los bultos viajan precintados</strong> y el local verifica el precinto al recibirlos.</span></li>
@@ -65,7 +77,7 @@ export default function Login({ alEntrar, motivo }) {
       <section className="login-formulario">
         <form className="tarjeta-login" onSubmit={entrar}>
           <div>
-            <h1>Bienvenido</h1>
+            <h2 className="titulo-bienvenida">Bienvenido</h2>
             <p className="nota">Entrá con tu usuario para empezar.</p>
           </div>
           {motivo && !error && <p className="aviso aviso-advertencia">{motivo}</p>}

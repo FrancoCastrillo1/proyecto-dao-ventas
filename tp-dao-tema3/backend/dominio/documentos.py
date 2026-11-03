@@ -273,6 +273,6 @@ class RemitoDocumento(DocumentoComercial):
         if self.remito.llegada_estimada:
             notas.append(f"Llegada estimada: {self.remito.llegada_estimada:%d/%m/%Y %H:%M}")
         notas.append("Al recibir, el local controla el precinto de cada bulto: si no coincide o llegó roto, "
-                     "el bulto se rechaza y su mercadería no entra al stock.")
+                     "el bulto se rechaza y vuelve al CD como merma.")
         return notas
 

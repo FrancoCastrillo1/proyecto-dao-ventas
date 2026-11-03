@@ -65,6 +65,7 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.86em; bac
 .tema-petroleo  { --acento: var(--petroleo);   --acento-tinta: var(--petroleo-tinta); }
 .tema-salvia    { --acento: var(--salvia);     --acento-tinta: var(--salvia-tinta); }
 .tema-ciruela   { --acento: var(--ciruela);    --acento-tinta: var(--ciruela-tinta); }
+.tema-arcilla   { --acento: var(--arcilla);    --acento-tinta: var(--arcilla-tinta); }
 .tema-lino      { --acento: var(--lino);       --acento-tinta: var(--lino-tinta); }
 
 .con-icono { display: inline-flex; align-items: center; gap: 8px; }
@@ -134,6 +135,66 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.86em; bac
   display: flex; flex-direction: column; justify-content: space-between; gap: 32px;
 }
 .login-presentacion .marca { padding: 0; }
+.login-presentacion > *:not(.cielo) { position: relative; z-index: 1; }
+
+/* Marca "La Estrella de la Mercadería" */
+.emblema { display: flex; align-items: center; gap: 20px; }
+.emblema-estrella {
+  width: 76px; height: 76px; border-radius: 22px; flex-shrink: 0; display: grid; place-items: center;
+  background: linear-gradient(140deg, #ffe39a 0%, var(--miel-clara) 35%, var(--miel) 70%, #b97a1c 100%);
+  color: var(--lateral-oscuro); transform: rotate(-6deg);
+  box-shadow: 0 0 0 6px rgba(246, 199, 104, 0.12), 0 12px 32px rgba(224, 168, 58, 0.45);
+  animation: brillo-emblema 4s ease-in-out infinite;
+}
+.emblema-estrella svg { fill: var(--lateral-oscuro); stroke: var(--lateral-oscuro); }
+.emblema-texto { display: flex; flex-direction: column; line-height: 1.02; }
+.emblema-pre {
+  font-family: "Fraunces", Georgia, serif; font-weight: 600; font-style: italic;
+  font-size: 1.35rem; color: var(--miel-clara); letter-spacing: 0.01em;
+}
+.emblema-nombre {
+  font-family: "Fraunces", Georgia, serif; font-weight: 800; font-size: clamp(2.1rem, 3.6vw, 3.1rem);
+  letter-spacing: -0.015em; margin: 2px 0 10px;
+  background: linear-gradient(100deg, #fff6e0 0%, var(--miel-clara) 45%, var(--miel) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.emblema-sub { font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lateral-tenue); }
+.titulo-bienvenida { font-family: "Fraunces", Georgia, serif; font-size: 1.75rem; font-weight: 800; margin-bottom: 4px; }
+
+/* Cielo con destellos */
+.cielo { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.destello {
+  position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--miel-clara);
+  box-shadow: 0 0 8px 2px rgba(246, 199, 104, 0.55); opacity: 0.2; animation: titilar 3.2s ease-in-out infinite;
+}
+.d0 { top: 8%; left: 62%; }               .d1 { top: 14%; left: 88%; animation-delay: .6s; }
+.d2 { top: 22%; left: 74%; width: 3px; height: 3px; animation-delay: 1.4s; }
+.d3 { top: 31%; left: 93%; animation-delay: 2.1s; }
+.d4 { top: 44%; left: 82%; width: 2px; height: 2px; animation-delay: .9s; }
+.d5 { top: 58%; left: 90%; animation-delay: 1.8s; }
+.d6 { top: 70%; left: 70%; width: 3px; height: 3px; animation-delay: 2.6s; }
+.d7 { top: 82%; left: 86%; animation-delay: .3s; }
+.d8 { top: 90%; left: 52%; width: 2px; height: 2px; animation-delay: 1.1s; }
+.d9 { top: 76%; left: 38%; animation-delay: 2.3s; }
+.d10 { top: 6%; left: 40%; width: 2px; height: 2px; animation-delay: 1.6s; }
+.d11 { top: 52%; left: 64%; width: 2px; height: 2px; animation-delay: .4s; }
+.d12 { top: 94%; left: 12%; width: 3px; height: 3px; animation-delay: 2.9s; }
+.d13 { top: 38%; left: 56%; width: 2px; height: 2px; animation-delay: 1.2s; }
+@keyframes titilar { 0%, 100% { opacity: 0.15; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.3); } }
+@keyframes brillo-emblema {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(246, 199, 104, 0.12), 0 12px 32px rgba(224, 168, 58, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(246, 199, 104, 0.08), 0 14px 44px rgba(224, 168, 58, 0.65); }
+}
+/* Estación espacial de fondo, asomando por la esquina */
+.estacion {
+  position: absolute; right: -90px; bottom: -70px; width: min(440px, 62%); height: auto;
+  opacity: 0.9; filter: drop-shadow(0 20px 50px rgba(0, 0, 0, 0.45));
+  animation: flotar 9s ease-in-out infinite;
+}
+.estacion-nucleo { transform-box: fill-box; transform-origin: center; animation: cargar 2.8s ease-in-out infinite; }
+@keyframes flotar { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(-2deg); } }
+@keyframes cargar { 0%, 100% { opacity: 0.7; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .destello, .emblema-estrella, .estacion, .estacion-nucleo { animation: none; } }
 .login-lema { max-width: 470px; }
 .login-lema h2 { font-size: 2.05rem; font-weight: 800; color: #fff; line-height: 1.18; margin-bottom: 26px; }
 .login-lema ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -168,6 +229,11 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.86em; bac
   .pantalla-login { grid-template-columns: 1fr; }
   .login-presentacion { padding: 24px 20px; gap: 18px; }
   .login-lema h2 { font-size: 1.4rem; margin-bottom: 14px; }
+  .emblema { gap: 14px; }
+  .emblema-estrella { width: 56px; height: 56px; border-radius: 16px; }
+  .emblema-pre { font-size: 1.05rem; }
+  .emblema-nombre { font-size: 1.8rem; margin-bottom: 6px; }
+  .estacion { width: 200px; right: -50px; bottom: -60px; opacity: 0.55; }
   .login-lema ul, .login-pie { display: none; }
 }
 
@@ -221,14 +287,14 @@ button.grande { padding: 13px 20px; font-size: 1.05rem; border-radius: 12px; }
 
 /* ========================================================== Formularios */
 label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; font-weight: 700; color: var(--texto); }
-input, select {
+input, select, textarea {
   font: inherit; font-weight: 400; color: var(--texto); padding: 9px 12px; width: 100%;
   border: 1px solid var(--borde-fuerte); border-radius: 10px; background: #fff;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-input:hover, select:hover { border-color: #cdbda4; }
-input:focus, select:focus { border-color: var(--miel); box-shadow: 0 0 0 3px rgba(224, 168, 58, 0.18); outline: none; }
-input::placeholder { color: var(--texto-tenue); }
+input:hover, select:hover, textarea:hover { border-color: #cdbda4; }
+input:focus, select:focus, textarea:focus { border-color: var(--miel); box-shadow: 0 0 0 3px rgba(224, 168, 58, 0.18); outline: none; }
+input::placeholder, textarea::placeholder { color: var(--texto-tenue); }
 input:disabled, select:disabled { background: var(--fondo-hundido); color: var(--texto-suave); cursor: not-allowed; }
 input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; accent-color: var(--primario); }
 .ayuda-campo { font-weight: 400; font-size: 0.82rem; color: var(--texto-tenue); }
@@ -422,6 +488,13 @@ button.ficha:hover { background: var(--tarjeta); border-color: var(--borde-fuert
 .columna-vacia { text-align: center; color: var(--texto-tenue); font-size: 0.86rem; padding: 16px 8px; }
 .ficha.demorada { border-color: #f0c9b0; border-left: 4px solid var(--alerta); }
 .ficha .estado { align-self: flex-start; }
+/* Pantalla de Mermas (CD) */
+.lista-merma { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.ficha-merma textarea { resize: vertical; }
+.ficha-merma .acciones-fila { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.ficha-merma .acciones-fila button { display: inline-flex; align-items: center; gap: 6px; }
+.nota-merma { display: flex; gap: 6px; align-items: flex-start; color: var(--alerta); }
+.nota-merma svg { flex-shrink: 0; margin-top: 2px; }
 .cajon-pie label.llegada { flex-direction: row; align-items: center; gap: 8px; margin-right: auto; font-size: 0.86rem; }
 .cajon-pie label.llegada input { width: auto; }
 

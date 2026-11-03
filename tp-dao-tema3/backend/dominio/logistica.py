@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from backend.dominio.estados_bulto import ESTADOS_FINALES, Preparado
+from backend.dominio.estados_bulto import ESTADOS_REVISADOS_POR_EL_LOCAL, Preparado
 from backend.dominio.excepciones import DatoInvalido, TransicionDeEstadoInvalida
 from backend.dominio.reloj import ahora as hora_actual
 from backend.dominio.stock import _validar_entero
@@ -78,6 +78,13 @@ class Bulto():
 
     def habilita_venta(self):
         return self.estado_actual.habilita_venta()
+
+    # Revisión en el CD de un bulto en merma (rechazado)
+    def reintegrar(self, observacion):
+        self.estado_actual.reintegrar(self, observacion)
+
+    def descartar(self, observacion):
+        self.estado_actual.descartar(self, observacion)
 
     @property
     def historial(self):
@@ -288,7 +295,7 @@ class Remito:
         momento de sumar el stock al local). Si quedan, devuelve False."""
         if self.estado != self.EN_TRANSITO:
             raise TransicionDeEstadoInvalida(f"No se puede verificar un remito en estado {self.estado}")
-        if any(bulto.estado not in ESTADOS_FINALES for bulto in self.bultos):
+        if any(bulto.estado not in ESTADOS_REVISADOS_POR_EL_LOCAL for bulto in self.bultos):
             return False
         if all(bulto.habilita_venta() for bulto in self.bultos):
             self.estado = self.VERIFICADO

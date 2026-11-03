@@ -150,7 +150,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 stock_id INTEGER NOT NULL REFERENCES stock(id),
 fecha TEXT NOT NULL,
 cantidad INTEGER NOT NULL CHECK (cantidad <> 0),
-tipo TEXT NOT NULL CHECK (tipo IN ('COMPRA', 'DESPACHO', 'RECEPCION', 'VENTA', 'DEVOLUCION', 'AJUSTE')),
+tipo TEXT NOT NULL CHECK (tipo IN ('COMPRA', 'DESPACHO', 'RECEPCION', 'VENTA', 'DEVOLUCION', 'AJUSTE', 'REINTEGRO')),
 referencia TEXT NOT NULL DEFAULT '',
 usuario_id INTEGER REFERENCES usuarios(id)
 );
@@ -296,13 +296,15 @@ BEGIN
 END;
 
 -- El estado se guarda como texto y el DAO vuelve a armar el objeto del
--- patrón State al leerlo. El precinto es único: dos bultos con el mismo
+-- patrón State al leerlo. RECHAZADO es un bulto en merma que volvió al CD;
+-- REINTEGRADO y DESCARTADO, lo que el CD decidió al revisarlo. El precinto es único: dos bultos con el mismo
 -- precinto harían inútil la verificación (los NULL, sin precintar, no chocan).
 CREATE TABLE IF NOT EXISTS bultos (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 remito_id INTEGER NOT NULL REFERENCES remitos(id),
 nro_precinto TEXT UNIQUE,
-estado TEXT NOT NULL CHECK (estado IN ('PREPARADO', 'PRECINTADO', 'EN_TRANSITO', 'RECIBIDO', 'VERIFICADO', 'RECHAZADO'))
+estado TEXT NOT NULL CHECK (estado IN ('PREPARADO', 'PRECINTADO', 'EN_TRANSITO', 'RECIBIDO', 'VERIFICADO', 'RECHAZADO',
+                                 'REINTEGRADO', 'DESCARTADO'))
 );
 
 CREATE TABLE IF NOT EXISTS detalles_bulto (

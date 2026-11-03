@@ -33,6 +33,13 @@ class EstadoBulto(ABC):
     def verificar(self, bulto, nro_leido, intacto):
         raise TransicionDeEstadoInvalida(f"No se puede verificar un bulto en estado {self.nombre}")
 
+    # Solo un bulto en merma (Rechazado) se revisa en el CD
+    def reintegrar(self, bulto, observacion):
+        raise TransicionDeEstadoInvalida(f"No se puede reintegrar al stock un bulto en estado {self.nombre}")
+
+    def descartar(self, bulto, observacion):
+        raise TransicionDeEstadoInvalida(f"No se puede descartar un bulto en estado {self.nombre}")
+
     # Por defecto un estado NO habilita la venta. Solo Verificado lo habilita:
     # el servicio de recepción suma stock al local únicamente si esto da True.
     def habilita_venta(self):
@@ -105,19 +112,55 @@ class Verificado(EstadoBulto):
     def habilita_venta(self):
         return True
 
+# Rechazado = bulto EN MERMA: el precinto llegó roto, el local no lo acepta y
+# el bulto vuelve directo al CD. Ahí el CD revisa en qué estado está la
+# mercadería y decide, por el bulto entero, si vuelve al stock o se tira.
 class Rechazado(EstadoBulto):
     @property
     def nombre(self):
         return "RECHAZADO"
 
+    def reintegrar(self, bulto, observacion):
+        bulto.cambiar_estado(Reintegrado(), f"Revisado en el CD: {validar_observacion(observacion)}")
+
+    def descartar(self, bulto, observacion):
+        bulto.cambiar_estado(Descartado(), f"Revisado en el CD: {validar_observacion(observacion)}")
+
+
+# La mercadería estaba bien: vuelve al stock del CD (lo hace el service con un
+# movimiento REINTEGRO). No habilita venta en el local: nunca llegó a él.
+class Reintegrado(EstadoBulto):
+    @property
+    def nombre(self):
+        return "REINTEGRADO"
+
+
+# La mercadería no sirve: se tira. No mueve stock (ya salió del CD al despachar).
+class Descartado(EstadoBulto):
+    @property
+    def nombre(self):
+        return "DESCARTADO"
+
+
+def validar_observacion(observacion):
+    # "Verificar el estado" de lo devuelto: el CD tiene que decir qué vio
+    if not observacion or not observacion.strip():
+        raise DatoInvalido("Contá en qué estado llegó la mercadería al revisarla")
+    return observacion.strip()
+
 
 # Fábrica simple, igual que TIPOS_UBICACION y MEDIOS_PAGO: el único lugar que
 # sabe qué clase corresponde a cada nombre. La usa el DAO para volver a armar
 # el estado de un bulto guardado en la base (ahí se guarda solo el texto).
-ESTADOS_BULTO = {clase().nombre: clase for clase in (Preparado, Precintado, EnTransito, Recibido, Verificado, Rechazado)}
+ESTADOS_BULTO = {clase().nombre: clase for clase in
+                 (Preparado, Precintado, EnTransito, Recibido, Verificado, Rechazado, Reintegrado, Descartado)}
 
 # Estados de los que el bulto ya no sale
-ESTADOS_FINALES = {"VERIFICADO", "RECHAZADO"}
+ESTADOS_FINALES = {"VERIFICADO", "REINTEGRADO", "DESCARTADO"}
+
+# Estados en los que el local ya terminó de revisar el bulto: el remito se da
+# por verificado aunque el CD todavía no haya revisado la merma
+ESTADOS_REVISADOS_POR_EL_LOCAL = {"VERIFICADO", "RECHAZADO", "REINTEGRADO", "DESCARTADO"}
 
 
 def crear_estado(nombre):

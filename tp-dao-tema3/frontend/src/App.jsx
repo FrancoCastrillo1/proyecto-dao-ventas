@@ -12,6 +12,7 @@ import Categorias from "./pantallas/Categorias.jsx";
 import Inicio from "./pantallas/Inicio.jsx";
 import Login from "./pantallas/Login.jsx";
 import Logistica from "./pantallas/Logistica.jsx";
+import Mermas from "./pantallas/Mermas.jsx";
 import Productos from "./pantallas/Productos.jsx";
 import Proveedores from "./pantallas/Proveedores.jsx";
 import Reportes from "./pantallas/Reportes.jsx";
@@ -30,6 +31,7 @@ const GRUPOS = [
       { clave: "ventas", icono: "carrito", titulo: "Vender", tema: "tema-terracota", Pantalla: Ventas, requiere: ["puede_vender"] },
       { clave: "logistica", icono: "camion", titulo: "Envíos", tema: "tema-petroleo", Pantalla: Logistica,
         requiere: ["puede_preparar_envios", "puede_pedir_reposicion", "puede_recibir"] },
+      { clave: "mermas", icono: "merma", titulo: "Mermas", tema: "tema-arcilla", Pantalla: Mermas, requiere: ["puede_preparar_envios"] },
       { clave: "stock", icono: "caja", titulo: "Stock", tema: "tema-salvia", Pantalla: Stock },
       { clave: "reportes", icono: "grafico", titulo: "Reportes", tema: "tema-ciruela", Pantalla: Reportes },
     ],
@@ -103,8 +105,8 @@ export default function App() {
     <div className="app">
       <nav className="lateral" aria-label="Secciones">
         <div className="marca">
-          <span className="marca-logo"><Icono nombre="caja" tamano={20} /></span>
-          <div><strong>Ventas e Inventario</strong><span>TP DAO · Tema 3</span></div>
+          <span className="marca-logo"><Icono nombre="estrella" tamano={20} /></span>
+          <div><strong>La Estrella de la Mercadería</strong><span>Ventas e Inventario</span></div>
         </div>
         <div className="menu">
           {grupos.map((grupo) => (

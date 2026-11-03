@@ -17,11 +17,12 @@ class TipoMovimiento(Enum):
     VENTA = "VENTA"              # egresa del local al vender
     DEVOLUCION = "DEVOLUCION"    # ingresa al local cuando el cliente devuelve
     AJUSTE = "AJUSTE"            # corrección manual, puede sumar o restar
+    REINTEGRO = "REINTEGRO"      # vuelve al CD lo de un bulto rechazado que se revisó y estaba bien
 
 
 # Qué tipos de movimiento tienen sentido en cada sentido
 TIPOS_DE_INGRESO = {TipoMovimiento.COMPRA, TipoMovimiento.RECEPCION,
-                    TipoMovimiento.DEVOLUCION, TipoMovimiento.AJUSTE}
+                    TipoMovimiento.DEVOLUCION, TipoMovimiento.AJUSTE, TipoMovimiento.REINTEGRO}
 TIPOS_DE_EGRESO = {TipoMovimiento.DESPACHO, TipoMovimiento.VENTA,
                    TipoMovimiento.AJUSTE}
 
@@ -34,7 +35,7 @@ def validar_ubicacion_para(tipo, ubicacion):
     El AJUSTE (corrección manual) vale en cualquier ubicación."""
     if not ubicacion.activo:
         raise DatoInvalido(f"La ubicación '{ubicacion.nombre}' está dada de baja")
-    if tipo in (TipoMovimiento.COMPRA, TipoMovimiento.DESPACHO) and not ubicacion.puede_despachar():
+    if tipo in (TipoMovimiento.COMPRA, TipoMovimiento.DESPACHO, TipoMovimiento.REINTEGRO) and not ubicacion.puede_despachar():
         raise DatoInvalido(f"El movimiento {tipo.value} solo puede hacerse en el Centro de Distribución")
     if tipo == TipoMovimiento.RECEPCION and not ubicacion.puede_recibir():
         raise DatoInvalido("Solo una sucursal puede recibir bultos")

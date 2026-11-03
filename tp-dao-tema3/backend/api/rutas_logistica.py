@@ -9,6 +9,8 @@
 #   POST /pedidos → POST /ordenes → POST /remitos → POST /remitos/{id}/bultos
 #   → POST /bultos/{id}/precintar → POST /remitos/{id}/despachar
 #   → POST /bultos/{id}/recibir → POST /bultos/{id}/verificar
+#   Si el precinto llegó roto el bulto vuelve al CD como merma:
+#   GET /mermas → POST /mermas/{id}/reintegrar o POST /mermas/{id}/descartar
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
@@ -17,12 +19,14 @@ from pydantic import BaseModel
 
 from backend.api.dependencias import exigir_que_sea_suyo, requiere, ubicacion_para_filtrar, usuario_actual
 from backend.servicios.comprobantes_service import ComprobantesService
+from backend.servicios.merma_service import MermaService
 from backend.servicios.recepcion_service import RecepcionService
 from backend.servicios.reposicion_service import ReposicionService
 
 reposicion = ReposicionService()
 recepcion = RecepcionService()
 documentos = ComprobantesService()
+mermas = MermaService()
 
 
 # ------------------------------------------------------------ Modelos comunes
@@ -277,3 +281,42 @@ def agregar_bulto(id: int, datos: BultoEntrada, usuario=Depends(requiere("puede_
 @router_remitos.post("/{id}/despachar", response_model=RemitoSalida)
 def despachar_remito(id: int, datos: DespachoEntrada, usuario=Depends(requiere("puede_preparar_envios"))):
     return remito_a_salida(reposicion.despachar(id, datos.llegada_estimada, usuario.id))
+
+
+# --------------------------------------------------------- Bultos en merma
+# Un bulto rechazado vuelve directo al CD: el CD revisa la mercadería y decide
+# si vuelve a su stock o se tira (el bulto entero).
+router_mermas = APIRouter(prefix="/mermas", tags=["Logística: bultos en merma"],
+                          dependencies=[Depends(requiere("puede_preparar_envios"))])
+
+
+class MermaSalida(BaseModel):
+    bulto: BultoSalida
+    remito_id: int
+    local_id: int                 # de qué local volvió
+    rechazado_el: datetime | None
+
+
+class RevisionEntrada(BaseModel):
+    observacion: str              # en qué estado llegó la mercadería
+
+
+def rechazado_el(bulto):
+    return next((r.fecha_hora for r in reversed(bulto.historial) if r.estado_nuevo == "RECHAZADO"), None)
+
+
+@router_mermas.get("", response_model=list[MermaSalida])
+def listar_mermas():
+    return [MermaSalida(bulto=bulto_a_salida(bulto), remito_id=remito.id_remito, local_id=remito.destino,
+                        rechazado_el=rechazado_el(bulto))
+            for bulto, remito in mermas.listar()]
+
+
+@router_mermas.post("/{id}/reintegrar", response_model=BultoSalida)
+def reintegrar_merma(id: int, datos: RevisionEntrada, usuario=Depends(usuario_actual)):
+    return bulto_a_salida(mermas.reintegrar(id, datos.observacion, usuario.id))
+
+
+@router_mermas.post("/{id}/descartar", response_model=BultoSalida)
+def descartar_merma(id: int, datos: RevisionEntrada, usuario=Depends(usuario_actual)):
+    return bulto_a_salida(mermas.descartar(id, datos.observacion, usuario.id))

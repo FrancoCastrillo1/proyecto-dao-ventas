@@ -2,7 +2,7 @@
 # grupo de tareas depende de una CAPACIDAD del usuario (polimorfismo de
 # Usuario), nunca de su perfil con un if:
 # - puede_preparar_envios (CD): pedidos sin preparar, remitos para armar,
-#   precintar o despachar.
+#   precintar o despachar, y bultos en merma (rechazados) para revisar.
 # - puede_recibir (local): envíos en camino a su local y bultos para verificar.
 # - puede_pedir_reposicion (local): productos bajo el mínimo que todavía no pidió.
 # Cada tarea dice a qué pantalla lleva; "reponer" trae lo que conviene pedir.
@@ -10,7 +10,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from backend.persistencia.dao_logistica import PedidoDAO, RemitoDAO
+from backend.persistencia.dao_logistica import BultoDAO, PedidoDAO, RemitoDAO
 from backend.persistencia.dao_maestros import UbicacionDAO
 from backend.persistencia.dao_stock import StockDAO
 
@@ -36,6 +36,7 @@ class TareasService:
         self.remito_dao = remito_dao or RemitoDAO(self.pedido_dao.db_path)
         self.stock_dao = stock_dao or StockDAO(self.pedido_dao.db_path)
         self.ubicacion_dao = ubicacion_dao or UbicacionDAO(self.pedido_dao.db_path)
+        self.bulto_dao = BultoDAO(self.pedido_dao.db_path)
         self.reloj = reloj   # los tests lo cambian para probar las demoras
 
     def para(self, usuario):
@@ -74,6 +75,11 @@ class TareasService:
                 tareas.append(Tarea("despachar", f"Despachar el remito #{remito.id_remito}",
                                     f"{destino} · {plural(len(remito.bultos), 'bulto', 'bultos')} precintados",
                                     "logistica", "Despachar"))
+        en_merma = self.bulto_dao.listar_por_estado("RECHAZADO")
+        if en_merma:
+            tareas.append(Tarea("merma", f"Revisar {plural(len(en_merma), 'bulto', 'bultos')} en merma",
+                                "Volvieron con el precinto roto: decidí si vuelven al stock o se tiran",
+                                "mermas", "Revisar"))
         return tareas
 
     # ----------------------------------------------------- Local: lo que llega
